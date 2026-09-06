@@ -1,0 +1,5 @@
+# .bat precisa de CRLF no destino: com LF o cmd erra em goto/labels
+*.bat text eol=crlf
+
+# os assets baixados do design system nao devem sofrer conversao
+webapp/static/vendor/** binary
