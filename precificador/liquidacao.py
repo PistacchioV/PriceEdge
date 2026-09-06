@@ -48,6 +48,11 @@ e uma ponta em moeda estrangeira multiplica tudo isso pela variação cambial,
 ``fixing_final / fixing_inicial``. As duas metades ficam guardadas separadas no
 resultado: dá para ver se o ajuste veio do índice ou do câmbio.
 
+**Equity é a exceção: ela é quanto.** Ação e índice liquidam em reais sem
+conversão — o retorno entra como número puro e o câmbio não participa. Quem
+compra S&P via swap quer o S&P, não o S&P mais dólar. A moeda que a ponta
+declara é de cotação, não de conversão, e o fator cambial dela é sempre 1.
+
 onde ``cap(i, τ)`` é ``(1+i)^τ`` no regime composto e ``1 + i·τ`` no simples.
 
 O acúmulo do CDI é a exceção que não se escolhe: ele é um produto de fatores
@@ -104,7 +109,20 @@ REALIZADOS = {CDI_PERCENTUAL, CDI_SPREAD, CAMBIO, SOFR, EURIBOR}
 # cambial some da conta e o ajuste sai no tamanho errado.
 # equity entra aqui porque um índice estrangeiro — S&P, Nasdaq, Euro Stoxx —
 # rende na moeda dele e só vira reais depois da conversão
-COM_MOEDA = {CAMBIO, SOFR, TERM_SOFR, EURIBOR, EQUITY}
+COM_MOEDA = {CAMBIO, SOFR, TERM_SOFR, EURIBOR}
+
+# **Quanto.** A ponta de equity é cotada em moeda estrangeira e liquida em reais
+# sem conversão: o retorno do índice entra como número puro, e a variação
+# cambial não participa. É o desenho padrão do swap de ação e de índice no
+# mercado local — quem compra S&P via swap quer o S&P, não o S&P mais dólar.
+#
+# Por isso equity **não** está em COM_MOEDA. A moeda dela é de cotação, para
+# dizer em que régua o preço está, e não entra em conta nenhuma. Uma ponta que
+# converte de verdade é a cambial, que existe ao lado justamente para isso.
+QUANTO = {EQUITY}
+
+# indexadores que declaram uma moeda na tela, convertendo ou não
+DECLARAM_MOEDA = COM_MOEDA | QUANTO
 
 # a moeda de cada índice, quando ele tem uma só
 MOEDA_DO_INDEXADOR = {SOFR: "USD", TERM_SOFR: "USD", EURIBOR: "EUR"}
@@ -206,6 +224,7 @@ class PontaLiquidada:
     dias_uteis: int = 0
     dias_corridos: int = 0
     moeda: Optional[str] = None
+    quanto: bool = False           # cotada em moeda estrangeira, liquida sem converter
     fator_cambial: float = 1.0     # (fixing final / fixing inicial)
     fator_do_indice: float = 1.0   # o que a ponta rendeu na moeda dela
     ptax_inicial: Optional[float] = None
@@ -269,6 +288,7 @@ def _fator_cambial(ponta: Ponta, d0: date, d1: date) -> tuple:
     fixings entram digitados ou vêm da PTAX do dia útil anterior a cada data.
     """
     if ponta.indexador not in COM_MOEDA or ponta.moeda == SEM_CONVERSAO:
+        # inclui o caso quanto: a moeda está declarada, mas não converte
         return 1.0, None, None, None, None
     p0, p1 = ponta.ptax_inicial, ponta.ptax_final
     data0 = data1 = None
@@ -303,7 +323,8 @@ def liquidar_ponta(ponta: Ponta, nocional: float, inicio, fim,
         dias_contados=contagem.dias(ponta.convencao, d0, d1, cal),
         fracao_de_ano=tau,
         dias_uteis=cal.dias_uteis(d0, d1), dias_corridos=(d1 - d0).days,
-        moeda=ponta.moeda if ponta.indexador in COM_MOEDA else None,
+        moeda=ponta.moeda if ponta.indexador in DECLARAM_MOEDA else None,
+        quanto=ponta.indexador in QUANTO and ponta.moeda != SEM_CONVERSAO,
         fator_cambial=fx, ptax_inicial=p0, ptax_final=p1,
         data_ptax_inicial=data_p0, data_ptax_final=data_p1,
     )
@@ -387,7 +408,7 @@ def liquidar_ponta(ponta: Ponta, nocional: float, inicio, fim,
         retorno = ponta.preco_final / ponta.preco_inicial
         return montar(
             retorno * capitalizar(ponta.taxa),
-            ("{ativo} variou {retorno}% mais spread de {taxa}%",
+            ("{ativo} variou {retorno}% mais spread de {taxa}%, sem conversão cambial",
              {"ativo": ponta.ativo or "equity",
               "retorno": _numero((retorno - 1) * 100),
               "taxa": _numero(ponta.taxa * 100)}),

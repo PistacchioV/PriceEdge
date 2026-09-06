@@ -1332,10 +1332,18 @@ TRADUCOES: Dict[str, str] = {
     "Preço inicial": "Opening price",
     "Preço final": "Closing price",
     "Preço": "Price",
-    "A ponta rende a variação de preço no período. Índice estrangeiro rende na moeda "
-    "dele e converte pelo fixing acima.":
-        "The leg earns the price move over the period. A foreign index accrues in its "
-        "own currency and converts at the fixing above.",
+    "Moeda de cotação": "Quotation currency",
+    "Quanto — sem conversão cambial": "Quanto — no currency conversion",
+    "A ponta rende a variação de preço no período e liquida em reais como número "
+    "puro. A moeda acima diz em que régua o preço está cotado; ela não entra na "
+    "conta. Quem quer a variação cambial usa a ponta cambial ao lado.":
+        "The leg earns the price move over the period and settles in reais as a plain "
+        "number. The currency above says which ruler the price is quoted against; it "
+        "never enters the arithmetic. For the currency move, use the currency leg.",
+    "Cotação em": "Quoted in",
+    "quanto · câmbio não entra": "quanto · no currency effect",
+    "{ativo} variou {retorno}% mais spread de {taxa}%, sem conversão cambial":
+        "{ativo} moved {retorno}% plus a {taxa}% spread, with no currency conversion",
 
     "Contagem de dias": "Day count",
     "Capitalização": "Compounding",

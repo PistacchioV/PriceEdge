@@ -1203,17 +1203,18 @@ def test_amortizacao_nao_entra_no_fator_do_proprio_fluxo():
 def test_ponta_em_moeda_separa_o_indice_do_cambio():
     """As duas metades do fator ficam guardadas separadas.
 
-    Um equity estrangeiro que sobe 9% com o dólar caindo 1,5% não rendeu 9% em
-    reais, e o resultado tem que deixar ver qual das duas explicou o número.
+    Uma ponta cambial que rende 3,25% de cupom com o dólar caindo 1,5% não
+    rendeu 3,25% em reais, e o resultado tem que deixar ver qual das duas
+    explicou o número.
     """
     from precificador import liquidacao as L
     r = L.liquidar("2025-09-08", "2025-09-08", "2026-09-04", 20e6,
-                   L.Ponta(L.EQUITY, ativo="S&P 500", preco_inicial=6400,
-                           preco_final=6980, moeda="USD",
-                           ptax_inicial=5.40, ptax_final=5.32),
+                   L.Ponta(L.CAMBIO, taxa=0.0325, moeda="USD",
+                           ptax_inicial=5.40, ptax_final=5.32,
+                           convencao="act_360", regime="simples"),
                    L.Ponta(L.PRE, 0.14), reter_ir=False)
     a = r.ativa
-    assert abs(a.fator_do_indice - 6980 / 6400) < 1e-12
+    assert abs(a.fator_do_indice - (1 + 0.0325 * a.dias_corridos / 360)) < 1e-12
     assert abs(a.fator_cambial - 5.32 / 5.40) < 1e-12
     assert abs(a.fator - a.fator_do_indice * a.fator_cambial) < 1e-12
 
@@ -1221,10 +1222,45 @@ def test_ponta_em_moeda_separa_o_indice_do_cambio():
 def test_fluxo_em_reais_nao_converte():
     from precificador import liquidacao as L
     r = L.liquidar("2025-09-08", "2025-09-08", "2026-09-04", 10e6,
+                   L.Ponta(L.CAMBIO, taxa=0.0325, moeda=L.SEM_CONVERSAO,
+                           convencao="act_360", regime="simples"),
+                   L.Ponta(L.PRE, 0.14), reter_ir=False)
+    assert r.ativa.fator_cambial == 1.0
+    assert abs(r.ativa.fator - r.ativa.fator_do_indice) < 1e-12
+
+
+def test_equity_e_quanto_e_ignora_a_variacao_cambial():
+    """Ação e índice liquidam em reais sem passar pelo câmbio.
+
+    Um swap de S&P entrega o S&P, não o S&P mais dólar. Se o fator cambial
+    entrasse, um índice que subiu 9,06% com o dólar caindo 1,53% viraria 7,45%
+    em reais — e o cliente que comprou o índice receberia outra coisa.
+
+    O teste enche os campos de fixing de propósito: mesmo preenchidos, eles não
+    podem mudar o número.
+    """
+    from precificador import liquidacao as L
+    r = L.liquidar("2025-09-08", "2025-09-08", "2026-09-04", 20e6,
+                   L.Ponta(L.EQUITY, ativo="S&P 500", preco_inicial=6400,
+                           preco_final=6980, moeda="USD",
+                           ptax_inicial=5.4012, ptax_final=5.3188),
+                   L.Ponta(L.PRE, 0.14), reter_ir=False)
+    a = r.ativa
+    assert a.quanto is True and a.moeda == "USD"
+    assert a.fator_cambial == 1.0
+    assert abs(a.fator - 6980 / 6400) < 1e-12          # o retorno puro do índice
+    assert a.ptax_inicial is None and a.ptax_final is None
+    assert L.EQUITY not in L.COM_MOEDA
+
+
+def test_equity_em_reais_tambem_rende_so_o_indice():
+    """Um índice local não tem moeda para declarar, e a conta é a mesma."""
+    from precificador import liquidacao as L
+    r = L.liquidar("2025-09-08", "2025-09-08", "2026-09-04", 10e6,
                    L.Ponta(L.EQUITY, ativo="IBOV", preco_inicial=140000,
                            preco_final=152000, moeda=L.SEM_CONVERSAO),
                    L.Ponta(L.PRE, 0.14), reter_ir=False)
-    assert r.ativa.fator_cambial == 1.0
+    assert r.ativa.quanto is False              # em reais não há o que "quantizar"
     assert abs(r.ativa.fator - 152000 / 140000) < 1e-12
 
 

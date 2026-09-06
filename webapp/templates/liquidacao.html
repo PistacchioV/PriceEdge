@@ -47,7 +47,7 @@
       </div>
     </div>
 
-    <div class="grid gap-4 sm:grid-cols-3" data-bloco="{{ lado }}" data-mostrar-em="cambio,sofr,term_sofr,euribor,equity">
+    <div class="grid gap-4 sm:grid-cols-3" data-bloco="{{ lado }}" data-mostrar-em="cambio,sofr,term_sofr,euribor">
       <div>
         <label class="rotulo" for="{{ lado }}_moeda">{{ t("Moeda do fluxo") }}</label>
         <select class="campo" id="{{ lado }}_moeda" name="{{ lado }}_moeda">
@@ -134,9 +134,20 @@
         <input class="campo" id="{{ lado }}_preco_final" name="{{ lado }}_preco_final"
                value="{{ f[lado ~ '_preco_final'] }}" inputmode="decimal"/>
       </div>
-      <p class="sm:col-span-3 text-xs leading-5 text-slate-600 font-geist">
-        {{ t("A ponta rende a variação de preço no período. Índice estrangeiro rende na moeda dele e converte pelo fixing acima.") }}
-      </p>
+      <div class="sm:col-span-3">
+        <label class="rotulo" for="{{ lado }}_moeda_equity">{{ t("Moeda de cotação") }}</label>
+        <select class="campo" id="{{ lado }}_moeda_equity" name="{{ lado }}_moeda">
+          {% for codigo, nome in moedas %}
+          <option value="{{ codigo }}" {{ 'selected' if f[lado ~ '_moeda'] == codigo }}>{{ codigo }} — {{ t(nome) }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="sm:col-span-3 rounded-xl border border-cyan-200/20 bg-cyan-400/[0.06] px-4 py-3">
+        <p class="text-xs font-medium text-cyan-100 font-geist">{{ t("Quanto — sem conversão cambial") }}</p>
+        <p class="mt-1.5 text-xs leading-5 text-cyan-100/75 font-geist">
+          {{ t("A ponta rende a variação de preço no período e liquida em reais como número puro. A moeda acima diz em que régua o preço está cotado; ela não entra na conta. Quem quer a variação cambial usa a ponta cambial ao lado.") }}
+        </p>
+      </div>
     </div>
 
     <div class="grid gap-4 sm:grid-cols-2" data-bloco="{{ lado }}" data-mostrar-em="ipca">
@@ -217,6 +228,12 @@
     <div class="flex justify-between gap-3 text-xs font-geist">
       <span class="text-slate-500">{{ p.ativo or t("Preço") }}</span>
       <span class="text-slate-300 tabular-nums">{{ p.preco_inicial | moeda(2) }} → {{ p.preco_final | moeda(2) }}</span>
+    </div>
+    {% endif %}
+    {% if p.quanto %}
+    <div class="flex justify-between gap-3 text-xs font-geist">
+      <span class="text-slate-500">{{ t("Cotação em") }} {{ p.moeda }}</span>
+      <span class="text-cyan-100/80">{{ t("quanto · câmbio não entra") }}</span>
     </div>
     {% endif %}
     {% if p.contagem_vale_para_spread %}
