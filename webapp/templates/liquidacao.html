@@ -47,12 +47,14 @@
       </div>
     </div>
 
-    <div class="grid gap-4 sm:grid-cols-3" data-bloco="{{ lado }}" data-mostrar-em="cambio,sofr,term_sofr,euribor">
+    <div class="grid gap-4 sm:grid-cols-3" data-bloco="{{ lado }}" data-mostrar-em="moeda,cambio,sofr,term_sofr,euribor">
       <div>
         <label class="rotulo" for="{{ lado }}_moeda">{{ t("Moeda do fluxo") }}</label>
         <select class="campo" id="{{ lado }}_moeda" name="{{ lado }}_moeda">
-          {% for codigo, nome in moedas %}
-          <option value="{{ codigo }}" {{ 'selected' if f[lado ~ '_moeda'] == codigo }}>{{ codigo }} — {{ t(nome) }}</option>
+          {% for m in moedas %}
+          <option value="{{ m.codigo }}" {{ 'selected' if f[lado ~ '_moeda'] == m.codigo }}>
+            {{ m.codigo }} — {{ t(m.nome) }}{{ ' · ' ~ t('fixing digitado') if not m.automatica }}
+          </option>
           {% endfor %}
         </select>
       </div>
@@ -68,6 +70,14 @@
       </div>
       <p class="sm:col-span-3 text-xs leading-5 text-slate-600 font-geist">
         {{ t("Em branco, os dois vêm da PTAX de fechamento do dia útil anterior a cada data. Em reais, não há conversão.") }}
+        {{ t("O Banco Central boletina dez moedas; nas de fora dela — o yuan, por exemplo — os dois fixings entram digitados.") }}
+      </p>
+    </div>
+
+    <div class="rounded-xl border border-white/[0.08] bg-black/20 px-4 py-3"
+         data-bloco="{{ lado }}" data-mostrar-em="moeda">
+      <p class="text-xs leading-5 text-slate-400 font-geist">
+        {{ t("Só a variação da moeda entre as duas datas, sem cupom e sem índice. Não há taxa para capitalizar, então contagem de dias e regime não se aplicam.") }}
       </p>
     </div>
 
@@ -137,8 +147,8 @@
       <div class="sm:col-span-3">
         <label class="rotulo" for="{{ lado }}_moeda_equity">{{ t("Moeda de cotação") }}</label>
         <select class="campo" id="{{ lado }}_moeda_equity" name="{{ lado }}_moeda">
-          {% for codigo, nome in moedas %}
-          <option value="{{ codigo }}" {{ 'selected' if f[lado ~ '_moeda'] == codigo }}>{{ codigo }} — {{ t(nome) }}</option>
+          {% for m in moedas %}
+          <option value="{{ m.codigo }}" {{ 'selected' if f[lado ~ '_moeda'] == m.codigo }}>{{ m.codigo }} — {{ t(m.nome) }}</option>
           {% endfor %}
         </select>
       </div>
@@ -196,7 +206,7 @@
       <span class="text-slate-500">{{ t("Juros do período") }}</span>
       <span class="text-slate-300 tabular-nums">R$ {{ p.juros | moeda(2) }}</span>
     </div>
-    {% if p.indexador != 'fator' %}
+    {% if p.convencao %}
     <div class="flex justify-between gap-3 text-xs font-geist">
       <span class="text-slate-500">{{ t("Contagem") }}</span>
       <span class="text-slate-300 tabular-nums">

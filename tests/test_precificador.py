@@ -672,6 +672,16 @@ FORMULARIOS = {
                        passiva_convencao="du_252", passiva_regime="composto",
                        passiva_moeda="BRL", passiva_tenor="3 month",
                        passiva_lookback="0", passiva_shift="0"),
+    "/liquidacao-moeda": dict(data_operacao="2025-09-08", inicio="2025-09-08",
+                       fim="2026-09-04", nocional="30.000.000,00",
+                       calendario="ANBIMA", reter_ir="1",
+                       ativa_indexador="moeda", ativa_moeda="CNH",
+                       ativa_ptax_inicial="0,7620", ativa_ptax_final="0,7845",
+                       ativa_tenor="3 month", ativa_lookback="0", ativa_shift="0",
+                       passiva_indexador="cdi_percentual", passiva_taxa="105",
+                       passiva_convencao="du_252", passiva_regime="composto",
+                       passiva_moeda="BRL", passiva_tenor="3 month",
+                       passiva_lookback="0", passiva_shift="0"),
     "/liquidacao-equity": dict(data_operacao="2025-09-08", inicio="2025-09-08",
                        fim="2026-09-04", nocional="20.000.000,00",
                        calendario="ANBIMA", reter_ir="1",
@@ -1370,3 +1380,74 @@ def test_sofr_composto_acumula_os_fixings_do_proprio_periodo():
     esperado = composto * (1 + 0.015 * a.dias_corridos / 360)
     assert abs(a.fator_do_indice - esperado) < 1e-9
     assert a.data_fixing is None                # não há data de fixação aqui
+
+
+def test_moeda_pura_rende_so_a_variacao_cambial():
+    """Uma ponta de moeda não tem cupom, nem índice, nem contagem de dias.
+
+    É o desenho mais simples que existe: o notional segue a moeda e mais nada.
+    Como não há taxa, não há o que capitalizar — e o resultado precisa deixar
+    isso explícito em vez de devolver uma convenção que não pesou no número.
+    """
+    from precificador import liquidacao as L
+    r = L.liquidar("2025-09-08", "2025-09-08", "2026-09-04", 30e6,
+                   L.Ponta(L.MOEDA, moeda="CNH",
+                           ptax_inicial=0.7620, ptax_final=0.7845),
+                   L.Ponta(L.PRE, 0.14), reter_ir=False)
+    a = r.ativa
+    assert a.fator_do_indice == 1.0                     # não há índice
+    assert abs(a.fator - 0.7845 / 0.7620) < 1e-12       # só a moeda
+    assert a.convencao is None and a.fracao_de_ano is None
+    assert L.MOEDA in L.SEM_TAXA
+
+
+def test_moeda_fora_do_boletim_do_bcb_exige_os_fixings():
+    """O BCB boletina dez moedas. Fora delas não há PTAX para buscar.
+
+    Sem esta trava a ponta de yuan iria bater na fonte e voltar com um erro de
+    rede, que manda procurar o problema no lugar errado.
+    """
+    from precificador import liquidacao as L
+    assert "CNH" not in L.MOEDAS_AUTOMATICAS and "USD" in L.MOEDAS_AUTOMATICAS
+    with pytest.raises(L.ErroLiquidacao) as exc:
+        L.liquidar("2025-09-08", "2025-09-08", "2026-09-04", 30e6,
+                   L.Ponta(L.MOEDA, moeda="CNH"), L.Ponta(L.PRE, 0.14))
+    assert "não boletina CNH" in str(exc.value)
+
+
+def test_lista_de_moedas_automaticas_e_a_do_boletim_do_bcb():
+    """As dez do boletim, conferidas contra o endpoint de moedas do Olinda."""
+    from precificador import liquidacao as L
+    assert L.MOEDAS_AUTOMATICAS == {
+        L.SEM_CONVERSAO, "USD", "EUR", "GBP", "JPY", "CHF",
+        "CAD", "AUD", "DKK", "NOK", "SEK"}
+
+
+def test_moeda_pura_em_reais_nao_faz_sentido():
+    from precificador import liquidacao as L
+    with pytest.raises(L.ErroLiquidacao) as exc:
+        L.liquidar("2025-09-08", "2025-09-08", "2026-09-04", 30e6,
+                   L.Ponta(L.MOEDA, moeda=L.SEM_CONVERSAO), L.Ponta(L.PRE, 0.14))
+    assert "moeda estrangeira" in str(exc.value)
+
+
+def test_resultado_serializa_para_quem_chama_de_fora():
+    """O motor serve sem a tela — o OTC tracker chama ``liquidar`` direto.
+
+    ``para_dict`` tem que sair em tipos que o ``json`` aceita, com as datas em
+    ISO e a descrição de cada ponta já montada em vez do par (molde, valores),
+    que só a tela bilíngue usa.
+    """
+    import json
+    from precificador import liquidacao as L
+    r = L.liquidar("2025-09-08", "2025-09-08", "2026-09-04", 30e6,
+                   L.Ponta(L.MOEDA, moeda="CNH",
+                           ptax_inicial=0.7620, ptax_final=0.7845),
+                   L.Ponta(L.CDI_PERCENTUAL, 1.05))
+    d = r.para_dict()
+    texto = json.dumps(d, ensure_ascii=False)      # falha se sobrar date ou objeto
+    assert d["fim"] == "2026-09-04"
+    assert d["ativa"]["descricao"] == "variação de 2,9528%, sem cupom"
+    assert isinstance(d["passiva"]["fixings"], int)    # a contagem, não a lista
+    assert d["ativa"]["convencao"] is None             # ponta sem taxa
+    assert '"quem_recebe"' in texto

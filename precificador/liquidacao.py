@@ -60,6 +60,10 @@ diários ``(1 + DI_k)^(1/252)``, um por fixing publicado, e essa capitalização
 diária **é** a definição do índice. A contagem escolhida na ponta de CDI vale
 para o spread, não para o produto — e a tela diz isso.
 
+O motor não sabe nada de formulário: ele recebe duas ``Ponta`` e devolve um
+``ResultadoLiquidacao``, e ``para_dict`` serializa tudo. Quem já tem a operação
+registrada em base chama ``liquidar`` direto, sem passar pela tela.
+
 A PTAX que entra nas pontas cambiais é a de **fechamento do dia útil anterior**
 a cada data, que é como o swap registrado na B3 define a variação cambial. Quem
 tiver a confirmação na mão digita as duas e a busca sai do caminho.
@@ -79,6 +83,7 @@ from .renda_fixa import aliquota_ir
 PRE = "pre"
 CDI_PERCENTUAL = "cdi_percentual"
 CDI_SPREAD = "cdi_spread"
+MOEDA = "moeda"
 CAMBIO = "cambio"
 SOFR = "sofr"
 TERM_SOFR = "term_sofr"
@@ -91,6 +96,7 @@ INDEXADORES = [
     (PRE, "Pré — taxa fixa ao ano"),
     (CDI_PERCENTUAL, "CDI — % do CDI realizado"),
     (CDI_SPREAD, "CDI + spread realizado"),
+    (MOEDA, "Moeda — só a variação cambial"),
     (CAMBIO, "Variação cambial + cupom"),
     (SOFR, "SOFR composto realizado + spread"),
     (TERM_SOFR, "Term SOFR do fixing + spread"),
@@ -102,14 +108,14 @@ INDEXADORES = [
 INDEXADOR_POR_CODIGO = dict(INDEXADORES)
 
 # indexadores que leem o que já aconteceu: o fluxo não pode terminar no futuro
-REALIZADOS = {CDI_PERCENTUAL, CDI_SPREAD, CAMBIO, SOFR, EURIBOR}
+REALIZADOS = {CDI_PERCENTUAL, CDI_SPREAD, MOEDA, CAMBIO, SOFR, EURIBOR}
 
 # indexadores cujo fluxo é denominado em moeda estrangeira. Todos eles pedem o
 # par de fixings que traz a ponta de volta para reais — sem isso a variação
 # cambial some da conta e o ajuste sai no tamanho errado.
 # equity entra aqui porque um índice estrangeiro — S&P, Nasdaq, Euro Stoxx —
 # rende na moeda dele e só vira reais depois da conversão
-COM_MOEDA = {CAMBIO, SOFR, TERM_SOFR, EURIBOR}
+COM_MOEDA = {MOEDA, CAMBIO, SOFR, TERM_SOFR, EURIBOR}
 
 # **Quanto.** A ponta de equity é cotada em moeda estrangeira e liquida em reais
 # sem conversão: o retorno do índice entra como número puro, e a variação
@@ -124,15 +130,54 @@ QUANTO = {EQUITY}
 # indexadores que declaram uma moeda na tela, convertendo ou não
 DECLARAM_MOEDA = COM_MOEDA | QUANTO
 
+# indexadores sem taxa nenhuma: não há o que capitalizar, então contagem de dias
+# e regime não se aplicam — τ não entra em lugar nenhum da conta
+SEM_TAXA = {MOEDA, FATOR}
+
 # a moeda de cada índice, quando ele tem uma só
 MOEDA_DO_INDEXADOR = {SOFR: "USD", TERM_SOFR: "USD", EURIBOR: "EUR"}
 
 SEM_CONVERSAO = "BRL"
 
-# moedas que a ponta aceita — as que o Banco Central boletina
-MOEDAS = [(SEM_CONVERSAO, "Real — fluxo já em reais, sem conversão"),
-          ("USD", "Dólar dos Estados Unidos"), ("EUR", "Euro"),
-          ("GBP", "Libra esterlina"), ("JPY", "Iene"), ("CHF", "Franco suíço")]
+
+@dataclass(frozen=True)
+class MoedaDeFluxo:
+    """Uma moeda que a ponta pode declarar.
+
+    ``automatica`` diz se o Banco Central boletina essa moeda. As que ele
+    boletina têm PTAX buscada sozinha; as outras dependem dos dois fixings
+    digitados, e a tela precisa avisar antes, não depois de dar erro.
+    """
+    codigo: str
+    nome: str
+    automatica: bool = True
+    nota: str = ""
+
+
+# As dez do boletim do BCB foram conferidas contra o endpoint de moedas do
+# Olinda — é a lista fechada dele, não uma suposição. O que estiver fora dela
+# não tem PTAX pública, e por isso entra aqui com ``automatica=False``.
+MOEDAS = [
+    MoedaDeFluxo(SEM_CONVERSAO, "Real — fluxo já em reais, sem conversão"),
+    MoedaDeFluxo("USD", "Dólar dos Estados Unidos"),
+    MoedaDeFluxo("EUR", "Euro"),
+    MoedaDeFluxo("GBP", "Libra esterlina"),
+    MoedaDeFluxo("JPY", "Iene"),
+    MoedaDeFluxo("CHF", "Franco suíço"),
+    MoedaDeFluxo("CAD", "Dólar canadense"),
+    MoedaDeFluxo("AUD", "Dólar australiano"),
+    MoedaDeFluxo("DKK", "Coroa dinamarquesa"),
+    MoedaDeFluxo("NOK", "Coroa norueguesa"),
+    MoedaDeFluxo("SEK", "Coroa sueca"),
+    MoedaDeFluxo("CNH", "Yuan offshore", False,
+                 "O BCB não boletina o yuan: os dois fixings entram digitados. "
+                 "CNH é o offshore, negociado fora da China continental, e não é "
+                 "a mesma cotação do CNY onshore."),
+    MoedaDeFluxo("CNY", "Yuan onshore", False,
+                 "O BCB não boletina o yuan: os dois fixings entram digitados."),
+]
+MOEDA_POR_CODIGO = {m.codigo: m for m in MOEDAS}
+MOEDAS_AUTOMATICAS = {m.codigo for m in MOEDAS if m.automatica}
 
 TENORES_EURIBOR = list(euribor.TENORES)
 TENORES_TERM_SOFR = ["1 month", "3 month", "6 month", "12 month"]
@@ -145,6 +190,16 @@ DEFASAGEM_FIXING = 2
 
 ATIVA = "ativa"
 PASSIVA = "passiva"
+
+
+def nome_da_descricao(ponta: "PontaLiquidada") -> str:
+    """A descrição da ponta já montada em português, para log e uso de fora.
+
+    A tela recebe o molde separado dos números porque é bilíngue; quem chama o
+    motor de outro sistema quer a frase pronta.
+    """
+    molde, valores = ponta.descricao
+    return molde.format(**valores)
 
 SOBRE_ORIGINAL = "original"
 SOBRE_REMANESCENTE = "remanescente"
@@ -216,10 +271,10 @@ class PontaLiquidada:
     nocional: float
     valor: float
     descricao: tuple = ("", {})    # (molde, valores) — a tela é bilíngue
-    convencao: str = contagem.DU_252
-    regime: str = contagem.COMPOSTO
-    dias_contados: int = 0         # o numerador da convenção escolhida
-    fracao_de_ano: float = 0.0     # τ
+    convencao: Optional[str] = contagem.DU_252
+    regime: Optional[str] = contagem.COMPOSTO
+    dias_contados: Optional[int] = 0   # o numerador da convenção escolhida
+    fracao_de_ano: Optional[float] = 0.0   # τ — None quando não há taxa
     contagem_vale_para_spread: bool = False
     dias_uteis: int = 0
     dias_corridos: int = 0
@@ -293,6 +348,13 @@ def _fator_cambial(ponta: Ponta, d0: date, d1: date) -> tuple:
     p0, p1 = ponta.ptax_inicial, ponta.ptax_final
     data0 = data1 = None
     if p0 is None or p1 is None:
+        if ponta.moeda not in MOEDAS_AUTOMATICAS:
+            # o BCB boletina dez moedas; fora delas não há PTAX para buscar, e o
+            # erro precisa dizer isso em vez de falhar na fonte
+            faltando = "inicial" if p0 is None else "final"
+            raise ErroLiquidacao(
+                f"o Banco Central não boletina {ponta.moeda}: informe o fixing "
+                f"{faltando} da moeda. Os dois entram digitados.")
         b0 = _ptax_do_dia_anterior(ponta.moeda, d0)
         b1 = _ptax_do_dia_anterior(ponta.moeda, d1)
         p0 = p0 if p0 is not None else b0.venda
@@ -317,11 +379,15 @@ def liquidar_ponta(ponta: Ponta, nocional: float, inicio, fim,
     d0, d1 = para_data(inicio), para_data(fim)
     tau = contagem.fracao(ponta.convencao, d0, d1, cal)
     fx, p0, p1, data_p0, data_p1 = _fator_cambial(ponta, d0, d1)
+    # numa ponta sem taxa a contagem não entrou em conta nenhuma; deixá-la no
+    # resultado faria o consumidor achar que ela pesou no número
+    sem_taxa = ponta.indexador in SEM_TAXA
     comum = dict(
         indexador=ponta.indexador, nocional=nocional,
-        convencao=ponta.convencao, regime=ponta.regime,
-        dias_contados=contagem.dias(ponta.convencao, d0, d1, cal),
-        fracao_de_ano=tau,
+        convencao=None if sem_taxa else ponta.convencao,
+        regime=None if sem_taxa else ponta.regime,
+        dias_contados=None if sem_taxa else contagem.dias(ponta.convencao, d0, d1, cal),
+        fracao_de_ano=None if sem_taxa else tau,
         dias_uteis=cal.dias_uteis(d0, d1), dias_corridos=(d1 - d0).days,
         moeda=ponta.moeda if ponta.indexador in DECLARAM_MOEDA else None,
         quanto=ponta.indexador in QUANTO and ponta.moeda != SEM_CONVERSAO,
@@ -360,6 +426,14 @@ def liquidar_ponta(ponta: Ponta, nocional: float, inicio, fim,
             valores = {"taxa": _numero(ponta.taxa * 100, 2), "du": acumulado.dias_uteis}
         return montar(indice, (molde, valores), fixings=acumulado.dias,
                       contagem_vale_para_spread=com_spread)
+
+    if ponta.indexador == MOEDA:
+        if fx == 1.0 and ponta.moeda == SEM_CONVERSAO:
+            raise ErroLiquidacao(
+                "uma ponta de moeda pura precisa de uma moeda estrangeira — em "
+                "reais ela não renderia nada")
+        return montar(1.0, ("variação de {variacao}%, sem cupom",
+                            {"variacao": _numero((fx - 1) * 100)}))
 
     if ponta.indexador == CAMBIO:
         return montar(
@@ -462,6 +536,38 @@ class ResultadoLiquidacao:
     def diferenca_de_fator(self) -> float:
         """O ajuste em pontos de fator — o que sobra por real de notional."""
         return self.ativa.fator - self.passiva.fator
+
+    def para_dict(self) -> dict:
+        """O resultado inteiro em tipos simples, pronto para JSON.
+
+        Existe para quem chama o motor de fora da tela — outro sistema que já
+        tem a operação registrada em base e só quer o ajuste de volta.
+        """
+        def ponta(p: PontaLiquidada) -> dict:
+            saida = {k: v for k, v in p.__dict__.items() if k != "fixings"}
+            saida["descricao"] = nome_da_descricao(p)
+            saida["fixings"] = len(p.fixings)
+            for campo in ("data_ptax_inicial", "data_ptax_final", "data_fixing"):
+                if saida.get(campo):
+                    saida[campo] = saida[campo].isoformat()
+            return saida
+
+        return {
+            "data_operacao": self.data_operacao.isoformat(),
+            "inicio": self.inicio.isoformat(), "fim": self.fim.isoformat(),
+            "nocional": self.nocional, "nocional_original": self.nocional_original,
+            "percentual_amortizacao": self.percentual_amortizacao,
+            "base_amortizacao": self.base_amortizacao,
+            "valor_amortizado": self.valor_amortizado,
+            "saldo_seguinte": self.saldo_seguinte,
+            "ativa": ponta(self.ativa), "passiva": ponta(self.passiva),
+            "ajuste_bruto": self.ajuste_bruto, "quem_recebe": self.quem_recebe,
+            "dias_corridos": self.dias_corridos, "dias_uteis": self.dias_uteis,
+            "dias_da_operacao": self.dias_da_operacao,
+            "aliquota_ir": self.aliquota_ir, "ir": self.ir,
+            "ajuste_liquido": self.ajuste_liquido,
+            "diferenca_de_fator": self.diferenca_de_fator,
+        }
 
 
 def liquidar(data_operacao, inicio, fim, nocional: float,

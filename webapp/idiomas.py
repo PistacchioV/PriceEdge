@@ -1305,6 +1305,24 @@ TRADUCOES: Dict[str, str] = {
     "Real — fluxo já em reais, sem conversão":
         "Real — flow already in reais, no conversion",
     "Dólar dos Estados Unidos": "US dollar",
+    "Dólar canadense": "Canadian dollar",
+    "Dólar australiano": "Australian dollar",
+    "Coroa dinamarquesa": "Danish krone",
+    "Coroa norueguesa": "Norwegian krone",
+    "Coroa sueca": "Swedish krona",
+    "Yuan offshore": "Offshore yuan",
+    "Yuan onshore": "Onshore yuan",
+    "fixing digitado": "fixing typed in",
+    "Moeda — só a variação cambial": "Currency — the currency move alone",
+    "variação de {variacao}%, sem cupom": "a {variacao}% currency move, no coupon",
+    "Só a variação da moeda entre as duas datas, sem cupom e sem índice. Não há taxa "
+    "para capitalizar, então contagem de dias e regime não se aplicam.":
+        "Just the currency move between the two dates, with no coupon and no index. "
+        "There is no rate to compound, so day count and regime do not apply.",
+    "O Banco Central boletina dez moedas; nas de fora dela — o yuan, por exemplo — os "
+    "dois fixings entram digitados.":
+        "The central bank publishes ten currencies; outside that list — the yuan, for "
+        "one — both fixings are typed in.",
     "Libra esterlina": "Pound sterling",
     "Franco suíço": "Swiss franc",
 
