@@ -4,9 +4,10 @@ pytest>=8.0
 # servidor WSGI de producao no Windows -- o gunicorn nao roda la
 waitress>=3.0
 
-# --- opcionais, para ambiente corporativo com SSO Kerberos -------------------
-# Nada aqui é necessário nas fontes públicas usadas por padrão; o pacote cai em
-# urllib quando não estão instalados. Ligue com PRECIFICADOR_SSO=1.
+# --- rede corporativa: proxy, CA interna e SSO Kerberos ----------------------
+# Nada aqui e necessario nas fontes publicas: sem estes pacotes o codigo cai no
+# urllib, que tambem respeita PRECIFICADOR_PROXY. Instale-os quando a saida
+# exigir Negotiate (PRECIFICADOR_SSO=1) ou CA interna.
 #
 # requests>=2.31
 # requests-negotiate-sspi>=0.5 ; sys_platform == "win32"

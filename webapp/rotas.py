@@ -16,6 +16,7 @@ from precificador.curvas import TENORES_TERM
 from precificador.instrumentos import (BULLET, LINEAR, PERCENTUAL,
                                        PERSONALIZADA, SPREAD)
 from precificador.interpolacao import METODOS, interpolar
+from precificador.erros import ErroDeFonte
 from precificador.produtos import (MOEDAS_NDF, MODO_MANUAL, MODO_PRECO,
                                    PROGRESSOES, NumeroIndice, casado, curva_ndf,
                                    moeda_ndf,
@@ -80,7 +81,7 @@ def curvas():
                    else servicos.curva(codigo, data_txt))
             contexto["curva"] = obj
             contexto["grafico"] = servicos.montar_grafico(obj)
-        except (b3.ErroB3, ValueError) as exc:
+        except (ErroDeFonte, ValueError) as exc:
             contexto["erro"] = str(exc)
     return render_template("curvas.html", **contexto)
 
@@ -93,7 +94,7 @@ def curvas_csv():
         obj = (servicos.curva_derivada(codigo, data_txt)
                if codigo in servicos.DERIVADA_POR_CODIGO
                else servicos.curva(codigo, data_txt))
-    except (b3.ErroB3, ValueError) as exc:
+    except (ErroDeFonte, ValueError) as exc:
         return Response(str(exc), status=404, mimetype="text/plain; charset=utf-8")
     nome = f"curva_{codigo}_{para_data(data_txt):%Y%m%d}.csv"
     return Response(servicos.csv_da_curva(obj), content_type="text/csv; charset=utf-8",
@@ -105,7 +106,7 @@ def api_curva(codigo: str):
     data_txt = request.args.get("data") or servicos.data_sugerida().isoformat()
     try:
         return jsonify(servicos.curva(codigo, data_txt).para_dict())
-    except (b3.ErroB3, ValueError) as exc:
+    except (ErroDeFonte, ValueError) as exc:
         return jsonify({"erro": str(exc)}), 404
 
 
@@ -118,7 +119,7 @@ def api_interpolar(codigo: str):
         obj = servicos.curva(codigo, data_txt)
         obj.metodo = request.args.get("metodo", obj.metodo)
         return jsonify({"dc": dc, "taxa": obj.taxa(dc), "metodo": obj.metodo})
-    except (b3.ErroB3, ValueError) as exc:
+    except (ErroDeFonte, ValueError) as exc:
         return jsonify({"erro": str(exc)}), 400
 
 
@@ -167,7 +168,7 @@ def interpolar_carregar():
     data_txt = request.args.get("data") or servicos.data_sugerida().isoformat()
     try:
         obj = servicos.curva(codigo, data_txt)
-    except (b3.ErroB3, ValueError) as exc:
+    except (ErroDeFonte, ValueError) as exc:
         return jsonify({"erro": str(exc)}), 404
     return jsonify({
         "x": "\n".join(str(v.dias_corridos) for v in obj.vertices),
@@ -230,7 +231,7 @@ def precificar():
         contexto["form"] = {k: v for k, v in request.form.items()}
         try:
             contexto["resultado"] = _montar_personalizado(request.form)
-        except (servicos.ErroFormulario, b3.ErroB3, SemConvergencia, ValueError) as exc:
+        except (servicos.ErroFormulario, ErroDeFonte, SemConvergencia, ValueError) as exc:
             contexto["erro"] = str(exc)
 
     contexto["insumos"] = montador.insumos_necessarios(
@@ -289,7 +290,7 @@ def ndf():
         contexto["form"] = {k: v for k, v in request.form.items()}
         try:
             contexto["resultado"] = _montar_ndf(request.form)
-        except (servicos.ErroFormulario, b3.ErroB3, ValueError) as exc:
+        except (servicos.ErroFormulario, ErroDeFonte, ValueError) as exc:
             contexto["erro"] = str(exc)
     return render_template("ndf.html", **contexto)
 
@@ -390,7 +391,7 @@ def api_cambio():
     try:
         base = para_data(data_txt)
         cotacao = cambio.ptax_moeda(codigo_bcb, base)
-    except (cambio.ErroCambio, ValueError) as exc:
+    except (ErroDeFonte, ValueError) as exc:
         return jsonify({"erro": str(exc)}), 502
 
     if moeda.codigo == "EURUSD":
@@ -418,7 +419,7 @@ def api_cambio():
                 {"vencimento": f.vencimento.isoformat(), "pontos": f.preco,
                  "taxa": f.taxa, "dc": f.dias_corridos} for f in futuros]
             resposta["fonte_futuros"] = "B3 — curva PTX (dólar a termo)"
-        except (b3.ErroB3, ValueError):
+        except (ErroDeFonte, ValueError):
             pass                      # sem a curva, o spot sozinho já serve
 
     return jsonify(resposta)
@@ -514,7 +515,7 @@ def sofr_indice():
         contexto["form"] = {k: v for k, v in request.form.items()}
         try:
             contexto["resultado"] = _compor_sofr(request.form)
-        except (servicos.ErroFormulario, sofr.ErroFed, ValueError) as exc:
+        except (servicos.ErroFormulario, ErroDeFonte, ValueError) as exc:
             contexto["erro"] = str(exc)
     return render_template("sofr.html", **contexto)
 
@@ -545,7 +546,7 @@ def _compor_sofr(form) -> dict:
             "taxa": taxa_indice,
             "diferenca_bp": (taxa_indice - resultado.taxa_composta) * 10000.0,
         }
-    except (sofr.ErroFed, ValueError):
+    except (ErroDeFonte, ValueError):
         conferencia = None      # o índice não cobre a janela; segue sem conferência
 
     return {
@@ -720,7 +721,7 @@ def calculadora_renda_fixa():
         contexto["form"] = {k: v for k, v in request.form.items()}
         try:
             contexto["resultado"] = _calcular_renda_fixa(request.form)
-        except (servicos.ErroFormulario, ValueError) as exc:
+        except (servicos.ErroFormulario, ErroDeFonte, ValueError) as exc:
             contexto["erro"] = str(exc)
     return render_template("renda_fixa.html", **contexto)
 
@@ -819,6 +820,6 @@ def ni_pro_rata():
                 "dup": calendario_anbima().dias_uteis(ni.data_base, ni.data_referencia),
                 "dut": calendario_anbima().dias_uteis(ni.data_base, ni.proxima_base),
             }
-        except (ValueError, servicos.ErroFormulario) as exc:
+        except (ValueError, servicos.ErroFormulario, ErroDeFonte) as exc:
             contexto["erro"] = str(exc)
     return render_template("ni_pro_rata.html", **contexto)

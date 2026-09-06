@@ -25,6 +25,7 @@ from datetime import date
 from typing import List, Optional
 
 from . import rede
+from .erros import ErroDeFonte
 from .calendario import (Calendario, calendario_anbima, para_data,
                          soma_meses)
 
@@ -46,7 +47,7 @@ PARIDADE_INVERTIDA = {"JPY", "CHF", "CAD", "SEK", "NOK", "DKK"}
 CABECALHO = {"User-Agent": "Mozilla/5.0", "Accept": "application/json"}
 
 
-class ErroCambio(RuntimeError):
+class ErroCambio(ErroDeFonte):
     """Falha ao obter cotação de câmbio."""
 
 

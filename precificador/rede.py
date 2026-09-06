@@ -17,7 +17,19 @@ abaixo bastam.
 
     PRECIFICADOR_SSO=1              liga o Negotiate na sessão
     PRECIFICADOR_CA_BUNDLE=...pem   CA interna (o certifi não traz a raiz da casa)
+    PRECIFICADOR_PROXY=http://...   proxy de saída, quando não há como descobrir
     PRECIFICADOR_SEM_PROXY=1        ignora o proxy do ambiente para hosts internos
+
+**Saída bloqueada.** Numa rede corporativa a conexão direta com a internet
+costuma não existir: o pedido morre em ``WinError 10060`` — "a tentativa de
+conexão falhou porque o host não respondeu" —, que é timeout de TCP, não erro
+de HTTP. Não adianta tentar de novo. O caminho é o proxy, e ele quase nunca
+está numa variável de ambiente: vem de um arquivo PAC apontado pelo registro do
+Windows, que nem o ``urllib`` nem o ``requests`` sabem interpretar.
+
+Por isso ``PRECIFICADOR_PROXY`` existe, e por isso ``diagnostico()`` reporta o
+que o Windows tem configurado — inclusive a URL do PAC, para quem precisa abrir
+o arquivo e ler de lá o endereço do proxy.
 
 Duas lições que vieram do OTC Tracker e que economizam horas de depuração:
 
@@ -35,6 +47,7 @@ import json
 import os
 import urllib.error
 import urllib.request
+from .erros import ErroDeFonte
 from typing import Optional
 
 try:                                    # Windows corporativo
@@ -62,8 +75,46 @@ UA_PADRAO = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36
 TIMEOUT = 40
 
 
-class ErroRede(RuntimeError):
+class ErroRede(ErroDeFonte):
     """Falha de rede ou de autenticação numa chamada externa."""
+
+
+def proxy_configurado() -> Optional[str]:
+    """O proxy a usar: o da variável, ou o que o sistema já expõe."""
+    escolhido = (os.getenv("PRECIFICADOR_PROXY") or "").strip()
+    if escolhido:
+        return escolhido
+    for chave in ("https_proxy", "HTTPS_PROXY", "http_proxy", "HTTP_PROXY"):
+        valor = (os.getenv(chave) or "").strip()
+        if valor:
+            return valor
+    return None
+
+
+def proxy_do_windows() -> dict:
+    """O que o Windows tem no registro: proxy fixo e/ou URL do arquivo PAC.
+
+    Só leitura, e só para relatar. O PAC não é interpretado aqui — é um script
+    JavaScript que escolhe o proxy por destino, e resolvê-lo exigiria um
+    interpretador. Mas saber que ele existe já responde a pergunta que trava
+    todo mundo: "o proxy não está em variável nenhuma, então onde está?".
+    """
+    try:
+        import winreg                                    # só existe no Windows
+    except ImportError:
+        return {}
+    caminho = r"Software\Microsoft\Windows\CurrentVersion\Internet Settings"
+    achado = {}
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, caminho) as chave:
+            for nome in ("ProxyEnable", "ProxyServer", "AutoConfigURL"):
+                try:
+                    achado[nome] = winreg.QueryValueEx(chave, nome)[0]
+                except OSError:
+                    pass
+    except OSError:
+        return {}
+    return achado
 
 
 def sso_ligado() -> bool:
@@ -86,6 +137,8 @@ def diagnostico() -> dict:
         "kerberos": HTTPKerberosAuth is not None,
         "ca_bundle": os.getenv("PRECIFICADOR_CA_BUNDLE") or None,
         "sem_proxy": os.getenv("PRECIFICADOR_SEM_PROXY", "").lower() in ("1", "true"),
+        "proxy": proxy_configurado(),
+        "proxy_do_windows": proxy_do_windows(),
     }
 
 
@@ -105,6 +158,9 @@ def sessao():
     ca = os.getenv("PRECIFICADOR_CA_BUNDLE")
     if ca:
         s.verify = ca                    # o certifi não traz a raiz interna
+    proxy = proxy_configurado()
+    if proxy:
+        s.proxies = {"http": proxy, "https": proxy}
 
     if HttpNegotiateAuth is not None:
         s.auth = HttpNegotiateAuth()
@@ -134,14 +190,45 @@ def obter(url: str, cabecalho: Optional[dict] = None, timeout: int = TIMEOUT) ->
         except Exception as exc:         # requests tem sua própria árvore de erros
             raise ErroRede(f"falha na chamada autenticada a {url}: {exc}") from exc
 
+    abridor = urllib.request.urlopen
+    proxy = proxy_configurado()
+    if proxy:
+        abridor = urllib.request.build_opener(
+            urllib.request.ProxyHandler({"http": proxy, "https": proxy})).open
+
     try:
-        with urllib.request.urlopen(
-                urllib.request.Request(url, headers=cabecalho), timeout=timeout) as r:
+        with abridor(urllib.request.Request(url, headers=cabecalho),
+                     timeout=timeout) as r:
             return r.read()
     except urllib.error.HTTPError as exc:
         raise ErroRede(f"HTTP {exc.code} em {url}") from exc
     except OSError as exc:
-        raise ErroRede(f"falha de conexão com {url}: {exc}") from exc
+        raise ErroRede(f"falha de conexão com {url}: {exc}{_pista_de_proxy(exc)}") from exc
+
+
+def _pista_de_proxy(exc: Exception) -> str:
+    """Explica o timeout de saída quando ele tem cara de bloqueio de rede.
+
+    ``WinError 10060`` e ``timed out`` não são erro do servidor remoto: são a
+    conexão nem chegando lá. Repetir não resolve, e a mensagem crua manda o
+    usuário investigar o site errado.
+    """
+    texto = str(exc)
+    bloqueio = ("10060" in texto or "timed out" in texto.lower()
+                or "Network is unreachable" in texto)
+    if not bloqueio or proxy_configurado():
+        return ""
+
+    dica = (". A conexão nem chegou ao servidor — numa rede corporativa isso é "
+            "o bloqueio de saída direta. Informe o proxy em PRECIFICADOR_PROXY "
+            "e suba de novo")
+    janela = proxy_do_windows()
+    if janela.get("ProxyServer"):
+        dica += f". O Windows tem configurado: {janela['ProxyServer']}"
+    elif janela.get("AutoConfigURL"):
+        dica += (f". O Windows usa um arquivo PAC ({janela['AutoConfigURL']}), "
+                 "que não diz o endereço direto: abra-o e leia de lá o proxy")
+    return dica
 
 
 def obter_json(url: str, cabecalho: Optional[dict] = None, timeout: int = TIMEOUT):

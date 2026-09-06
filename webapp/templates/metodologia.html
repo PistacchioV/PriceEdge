@@ -145,6 +145,7 @@
           (t('Negotiate SSPI'), rede.negotiate_sspi, 'requests-negotiate-sspi (Windows)'),
           (t('Kerberos'), rede.kerberos, 'requests-kerberos (kinit)'),
           (t('Proxy ignorado'), rede.sem_proxy, 'PRECIFICADOR_SEM_PROXY'),
+          (t('Proxy de saída'), rede.proxy, rede.proxy or 'PRECIFICADOR_PROXY'),
         ] %}
         <div class="rounded-[1.25rem] border border-white/[0.08] bg-white/[0.02] p-5">
           <div class="flex items-center justify-between gap-3">
@@ -159,11 +160,26 @@
         {% endfor %}
       </div>
 
+      {% if rede.proxy_do_windows %}
+      <div class="mt-6 rounded-2xl border border-amber-300/25 bg-amber-400/[0.07] px-5 py-4">
+        <p class="text-xs font-medium text-amber-100 font-geist">{{ t("O que o Windows tem configurado") }}</p>
+        <p class="mt-2 font-mono text-xs leading-6 text-amber-100/80">
+          {% for chave, valor in rede.proxy_do_windows.items() %}{{ chave }} = {{ valor }}<br/>{% endfor %}
+        </p>
+        {% if rede.proxy_do_windows.AutoConfigURL and not rede.proxy %}
+        <p class="mt-3 text-xs leading-5 text-amber-100/70 font-geist">
+          {{ t("A saída é resolvida por um arquivo PAC, que é um script e escolhe o proxy por destino — nem o urllib nem o requests sabem interpretá-lo. Abra a URL acima, leia o endereço do proxy e informe-o em PRECIFICADOR_PROXY.") }}
+        </p>
+        {% endif %}
+      </div>
+      {% endif %}
+
       <div class="mt-6 rounded-2xl border border-white/[0.08] bg-black/25 px-5 py-4">
         <p class="text-xs text-slate-500 font-geist">{{ t("Variáveis de ambiente") }}</p>
         <p class="mt-2 font-mono text-xs leading-6 text-cyan-100">
           PRECIFICADOR_SSO=1<br/>
           PRECIFICADOR_CA_BUNDLE=/caminho/ca-interna.pem<br/>
+          PRECIFICADOR_PROXY=http://proxy.interno:8080<br/>
           PRECIFICADOR_SEM_PROXY=1
         </p>
         <p class="mt-3 text-xs leading-5 text-slate-500 font-geist">

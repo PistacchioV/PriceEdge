@@ -41,6 +41,7 @@ from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
 
 from . import rede
+from .erros import ErroDeFonte
 
 RELATORIO = "/tilastot/markkina-_ja_hallinnolliset_korot/euriborkorot_pv_chrt_en"
 RAIZ = "https://reports.suomenpankki.fi"
@@ -70,7 +71,7 @@ CABECALHO = {
 _TRAVA = threading.Lock()          # a base é um arquivo só; escrita é serializada
 
 
-class ErroEuribor(RuntimeError):
+class ErroEuribor(ErroDeFonte):
     """Falha ao obter ou interpretar o relatório do Banco da Finlândia."""
 
 

@@ -1213,6 +1213,9 @@ TRADUCOES: Dict[str, str] = {
     'PTAX de fechamento': 'Closing PTAX',
     'Vem da âncora curta da curva de preço da B3, que é o ponto de onde ela constrói o termo — arredondada em duas casas. O spot D+2 interbancário não tem fonte pública: sobrescreva com a cotação de tela quando tiver.': "Taken from the short anchor of B3's price curve — the point it builds the forward from — rounded to two decimals. The interbank D+2 spot has no public feed: overwrite it with your screen quote when you have one.",
     'A média que o Banco Central apura em quatro janelas e publica às 13h. É contra ela que o NDF liquida no vencimento — não é o spot com que ele é precificado.': 'The average the central bank samples across four windows and publishes at 1pm. It is what the NDF settles against at maturity — not the spot it is priced off.',
+    'Proxy de saída': 'Outbound proxy',
+    'O que o Windows tem configurado': 'What Windows has configured',
+    'A saída é resolvida por um arquivo PAC, que é um script e escolhe o proxy por destino — nem o urllib nem o requests sabem interpretá-lo. Abra a URL acima, leia o endereço do proxy e informe-o em PRECIFICADOR_PROXY.': 'Egress is resolved by a PAC file, which is a script that picks the proxy per destination — neither urllib nor requests can interpret it. Open the URL above, read the proxy address and set it in PRECIFICADOR_PROXY.',
 }
 
 

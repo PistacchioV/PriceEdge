@@ -34,6 +34,7 @@ from datetime import date, datetime, timedelta
 from typing import Dict, List, Optional, Sequence
 
 from . import rede
+from .erros import ErroDeFonte
 from .calendario import Calendario, calendario_sofr, para_data
 
 API = "https://markets.newyorkfed.org/api/rates/secured"
@@ -61,7 +62,7 @@ def nome_da_convencao(lookback: int, shift: int) -> str:
     return molde.format(**valores)
 
 
-class ErroFed(RuntimeError):
+class ErroFed(ErroDeFonte):
     """Falha ao obter a série do NY Fed."""
 
 

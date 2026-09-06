@@ -993,3 +993,68 @@ def test_escada_pula_o_mes_corrente_quando_a_base_ja_o_alcancou():
     assert len(datas) == 5
     assert datas[0] == date(2026, 10, 30)
     assert all(d > date(2026, 9, 30) for d in datas)
+
+
+# ------------------------------------------- falha de fonte nao vira 500 ----
+
+def test_toda_excecao_de_fonte_herda_da_base():
+    """Uma fonte nova so entra no sistema se a tela souber trata-la."""
+    import pkgutil, importlib, inspect
+    import precificador
+    from precificador.erros import ErroDeFonte
+
+    fora = []
+    for m in pkgutil.iter_modules(precificador.__path__):
+        modulo = importlib.import_module(f"precificador.{m.name}")
+        for nome, classe in vars(modulo).items():
+            if (inspect.isclass(classe) and classe.__module__ == modulo.__name__
+                    and issubclass(classe, Exception) and nome.startswith("Erro")
+                    and classe is not ErroDeFonte
+                    and not issubclass(classe, ErroDeFonte)):
+                fora.append(f"{modulo.__name__}.{nome}")
+    assert not fora, ("estas excecoes de fonte nao herdam de ErroDeFonte, entao "
+                      f"escapam do except das telas: {fora}")
+
+
+def test_rede_fora_do_ar_nao_derruba_nenhuma_tela():
+    """Com a saida bloqueada, cada tela mostra aviso — nunca um traceback.
+
+    Reproduz o WinError 10060 da rede corporativa: a conexao nem chega ao
+    servidor. Foi assim que a calculadora de renda fixa devolveu um traceback
+    do Flask, porque a rota nao listava ErroBCB na sua tupla de except.
+    """
+    from unittest.mock import patch
+    from webapp import create_app
+    from precificador import rede
+
+    def bloqueado(*a, **k):
+        raise rede.ErroRede(
+            "falha de conexão com https://api.bcb.gov.br: [WinError 10060] "
+            "A connection attempt failed")
+
+    app = create_app()
+    app.config["PROPAGATE_EXCEPTIONS"] = False
+    cliente = app.test_client()
+
+    with patch.object(rede, "obter", bloqueado), patch.object(rede, "obter_json", bloqueado):
+        for chave, dados in FORMULARIOS.items():
+            rota = _rota_do_formulario(chave)
+            r = cliente.post(rota, data=dados)
+            assert r.status_code == 200, (
+                f"{rota} devolveu {r.status_code} com a rede bloqueada — "
+                "a tela deveria mostrar o aviso, não estourar")
+        for rota in ("/", "/curvas?curva=DOC&extrair=1", "/ndf", "/sofr",
+                     "/term-sofr", "/euribor", "/metodologia", "/api/cambio",
+                     "/api/ndf/spot"):
+            r = cliente.get(rota)
+            assert r.status_code in (200, 502), (
+                f"{rota} devolveu {r.status_code} com a rede bloqueada")
+
+
+def test_timeout_de_saida_explica_o_proxy():
+    """A mensagem tem que apontar o proxy, não mandar investigar o servidor."""
+    from precificador import rede
+    pista = rede._pista_de_proxy(OSError("[WinError 10060] A connection attempt failed"))
+    assert "proxy" in pista.lower() and "PRECIFICADOR_PROXY" in pista
+    # erro de verdade do servidor não ganha a pista
+    assert rede._pista_de_proxy(OSError("HTTP 404")) == ""

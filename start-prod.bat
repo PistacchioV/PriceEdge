@@ -41,68 +41,63 @@ set "BASE=%~dp0"
 REM ---------------------------------------------------------------------------
 REM  Localiza o Python. NAO instala nada.
 REM
-REM  Duas regras, e as duas vieram de erro em maquina de verdade:
+REM  Caminho conhecido e resolvido com `if exist`: e instantaneo e nao depende
+REM  de nada. Um python.exe dentro de ds\tools ou de Programs\Python e o Python
+REM  de verdade -- nao ha o que validar ali.
 REM
-REM  1) O teste e EXECUTAR o candidato, nao verificar se o arquivo existe. O
-REM     "App Execution Alias" da Microsoft Store instala um python.exe de zero
-REM     byte em %LOCALAPPDATA%\Microsoft\WindowsApps, que entra no PATH e
-REM     responde ao `where python`. Ele nao e Python -- ao ser chamado imprime
-REM     "Python was not found; run without arguments to install from the
-REM     Microsoft Store" e sai. Quem aceita o primeiro python.exe do `where`
-REM     pega esse, e depois falha no pip e no waitress com a mesma mensagem.
-REM
-REM  2) A varredura usa `dir /b /s`, e NAO `for /d` com curinga. Num `for /d`,
-REM     um padrao entre aspas -- for /d %%d in ("C:\...\python3*") -- e tratado
-REM     como texto literal: o curinga nao expande, %%~fd vira o proprio
-REM     "...\python3*" e o caminho testado nunca existe. Tirar as aspas faria o
-REM     curinga funcionar mas quebraria em "C:\Program Files". `dir /b /s`
-REM     resolve os dois casos e ainda acha o python.exe em qualquer
-REM     profundidade, sem precisar adivinhar o nome da pasta de versao.
+REM  Ja o que vem do PATH passa por teste de execucao, porque e exatamente la
+REM  que mora o "App Execution Alias" da Microsoft Store: um python.exe de zero
+REM  byte em %LOCALAPPDATA%\Microsoft\WindowsApps que responde ao `where` e, ao
+REM  ser chamado, so imprime "Python was not found; run without arguments to
+REM  install from the Microsoft Store". Foi ele que o launcher pegou na
+REM  primeira tentativa, e por isso o pip e o waitress falharam com essa mesma
+REM  mensagem, sem nunca dizer que o problema era o Python escolhido.
 REM ---------------------------------------------------------------------------
 set "PY="
 
 REM  QuickEdit: um clique dentro do console poe a janela em modo de selecao e
 REM  CONGELA o processo ate um Esc. O titulo passa a comecar com "Select". Como
-REM  a tela fica parada sem explicacao, o aviso vem antes de qualquer espera.
+REM  a tela fica parada sem explicacao nenhuma, o aviso vem antes de tudo.
 echo [DICA] Se o titulo da janela comecar com "Select", o console esta em modo
 echo        de selecao e o processo fica congelado. Aperte Esc para destravar.
 echo.
-echo [INFO] Procurando o Python...
 
-call :TESTAR_PYTHON "%PRICEEDGE_PYTHON%"
-call :TESTAR_PYTHON "%BASE%.venv\Scripts\python.exe"
-call :TESTAR_PYTHON "%BASE%Scripts\python.exe"
+if defined PRICEEDGE_PYTHON if exist "%PRICEEDGE_PYTHON%" set "PY=%PRICEEDGE_PYTHON%"
+if not defined PY if exist "%BASE%.venv\Scripts\python.exe" set "PY=%BASE%.venv\Scripts\python.exe"
+if not defined PY if exist "%BASE%Scripts\python.exe"       set "PY=%BASE%Scripts\python.exe"
 
-REM  ---- caminhos exatos primeiro: acerto instantaneo, sem varrer nada -------
-REM  layout da estacao: ds\tools\python3.NN\latest (ou a pasta da versao)
+REM  layout desta estacao: ds\tools\python3.NN\latest\python.exe
 for %%n in (3.13 3.12 3.11 3.10) do (
-    call :TESTAR_PYTHON "%USERPROFILE%\ds\tools\python%%n\latest\python.exe"
-    call :TESTAR_PYTHON "%USERPROFILE%\ds\tools\python%%n\python.exe"
-)
-for %%n in (313 312 311 310) do (
-    call :TESTAR_PYTHON "%LOCALAPPDATA%\Programs\Python\Python%%n\python.exe"
-    call :TESTAR_PYTHON "%ProgramFiles%\Python%%n\python.exe"
-    call :TESTAR_PYTHON "C:\Python%%n\python.exe"
+    if not defined PY if exist "%USERPROFILE%\ds\tools\python%%n\latest\python.exe" set "PY=%USERPROFILE%\ds\tools\python%%n\latest\python.exe"
+    if not defined PY if exist "%USERPROFILE%\ds\tools\python%%n\python.exe"        set "PY=%USERPROFILE%\ds\tools\python%%n\python.exe"
 )
 
-REM  o launcher py resolve a versao sozinho; passa pelo mesmo teste de execucao
+REM  instalacoes comuns do Windows
+for %%n in (313 312 311 310) do (
+    if not defined PY if exist "%LOCALAPPDATA%\Programs\Python\Python%%n\python.exe" set "PY=%LOCALAPPDATA%\Programs\Python\Python%%n\python.exe"
+    if not defined PY if exist "%ProgramFiles%\Python%%n\python.exe"                 set "PY=%ProgramFiles%\Python%%n\python.exe"
+    if not defined PY if exist "C:\Python%%n\python.exe"                             set "PY=C:\Python%%n\python.exe"
+)
+
+if defined PY if defined PRICEEDGE_DEBUG echo [DEBUG] achado por caminho: %PY%
+
+REM  ---- so agora o PATH, e so ele passa por teste de execucao --------------
 call :TESTAR_PYTHON "py"
 call :TESTAR_PYTHON "python"
 call :TESTAR_PYTHON "python3"
 
-REM  ---- so agora varre, e so pastas pequenas e locais --------------------
+REM  ---- ultimo recurso: varrer, e so pasta pequena e local ----------------
 REM  NUNCA varra %USERPROFILE% inteiro nem %USERPROFILE%\ds: essas arvores
 REM  costumam ter junction para share de rede, e `dir /s` entra nelas -- a
 REM  busca some por minutos numa tela preta, sem imprimir nada, com cara de
-REM  travada. Aqui a varredura e o ultimo recurso e cobre so a pasta de
-REM  ferramentas e a de instalacao do Python.
+REM  travada. Foi o que aconteceu aqui.
 if not defined PY echo [INFO] Nao achei nos caminhos usuais; varrendo ds\tools...
 call :VARRER "%USERPROFILE%\ds\tools"
 call :VARRER "%LOCALAPPDATA%\Programs\Python"
 
 if not defined PY (
     echo.
-    echo [ERRO] Nenhum Python que responda foi encontrado.
+    echo [ERRO] Nenhum Python foi encontrado.
     echo.
     echo        Procurei em:
     echo          %USERPROFILE%\ds\tools\python3.1x\latest\python.exe
@@ -114,12 +109,7 @@ if not defined PY (
     echo        Aponte o caminho e rode de novo:
     echo          set PRICEEDGE_PYTHON=C:\Users\seu.usuario\ds\tools\python3.12\latest\python.exe
     echo.
-    echo        Para ver cada candidato testado e por que foi recusado:
-    echo          set PRICEEDGE_DEBUG=1
-    echo.
-    echo        Um python.exe que existe mas nao responde e, quase sempre, o
-    echo        atalho da Microsoft Store em WindowsApps -- ignorado aqui de
-    echo        proposito.
+    echo        Para ver cada candidato testado:  set PRICEEDGE_DEBUG=1
     echo.
     popd
     pause

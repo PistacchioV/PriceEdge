@@ -27,6 +27,7 @@ from datetime import date
 from typing import List, Optional
 
 from . import rede
+from .erros import ErroDeFonte
 from .calendario import para_data
 
 SGS_CDI = 4389
@@ -34,7 +35,7 @@ SGS_SELIC = 11
 API = "https://api.bcb.gov.br/dados/serie/bcdata.sgs.{serie}/dados"
 
 
-class ErroBCB(RuntimeError):
+class ErroBCB(ErroDeFonte):
     """Falha ao obter a série do Banco Central."""
 
 

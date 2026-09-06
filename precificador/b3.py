@@ -31,6 +31,7 @@ from datetime import date, timedelta
 from typing import List
 
 from . import rede
+from .erros import ErroDeFonte
 from .calendario import calendario_anbima, para_data
 
 BASE_URL = ("https://sistemaswebb3-derivativos.b3.com.br"
@@ -88,7 +89,7 @@ NOME_POR_CODIGO = {cod: nome for cod, nome, _, _ in CURVAS_COMPLETAS}
 CODIGOS_DE_PRECO = {cod for cod, _, conv, _ in CURVAS_COMPLETAS if conv == PRECO}
 
 
-class ErroB3(RuntimeError):
+class ErroB3(ErroDeFonte):
     """Falha ao obter ou interpretar o arquivo da B3."""
 
 
