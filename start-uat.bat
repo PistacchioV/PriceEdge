@@ -7,6 +7,9 @@ REM  Abre  http://127.0.0.1:5051/  no navegador sozinho.
 REM
 REM  Uso:  duplo clique.
 REM        start-uat.bat noinstall   -> pula a instalacao (util offline)
+REM
+REM  Nao instala Python. Se o desta estacao estiver num lugar que o script nao
+REM  procura, aponte:   set PRICEEDGE_PYTHON=C:\caminho\para\python.exe
 REM ============================================================================
 
 setlocal
@@ -14,10 +17,9 @@ set "PORTA=5051"
 set "URL=http://127.0.0.1:%PORTA%/"
 
 REM ---------------------------------------------------------------------------
-REM  Reentrada: quando este mesmo .bat e chamado com --abrir, ele nao sobe nada.
-REM  So espera o servidor responder e abre o navegador. E o jeito de abrir a
-REM  pagina sozinho sem aspas aninhadas dentro de `cmd /c`, que e onde essa
-REM  linha costuma quebrar.
+REM  Reentrada: chamado com --abrir, este mesmo .bat nao sobe nada. So espera a
+REM  porta responder e abre o navegador. E o jeito de abrir a pagina sozinho sem
+REM  aspas aninhadas dentro de `cmd /c`, que e onde essa linha costuma quebrar.
 REM ---------------------------------------------------------------------------
 if /I "%~1"=="--abrir" goto :ABRIR_NAVEGADOR
 
@@ -36,34 +38,74 @@ if errorlevel 1 (
 set "BASE=%~dp0"
 
 REM ---------------------------------------------------------------------------
-REM  Localiza o Python. Nao instala nada: se nao houver Python nesta maquina,
-REM  o script para e diz o que falta, em vez de tentar resolver sozinho.
+REM  Localiza o Python. NAO instala nada.
+REM
+REM  O teste e EXECUTAR o candidato, nao verificar se o arquivo existe. O
+REM  motivo tem nome: o "App Execution Alias" da Microsoft Store instala um
+REM  python.exe de zero byte em %LOCALAPPDATA%\Microsoft\WindowsApps, que entra
+REM  no PATH e responde ao `where python`. Ele nao e Python -- ao ser chamado
+REM  imprime "Python was not found; run without arguments to install from the
+REM  Microsoft Store" e sai. Um launcher que aceita o primeiro python.exe que o
+REM  `where` devolve pega esse, e depois falha no pip e no waitress com a mesma
+REM  mensagem, sem nunca dizer que o problema e o Python escolhido.
+REM
+REM  Ordem: variavel de ambiente, venv ao lado, arvore ds\tools da estacao,
+REM  instalacoes comuns, o launcher py, e so entao o PATH.
 REM ---------------------------------------------------------------------------
 set "PY="
-if exist "%BASE%.venv\Scripts\python.exe"     set "PY=%BASE%.venv\Scripts\python.exe"
-if not defined PY if exist "%BASE%Scripts\python.exe" set "PY=%BASE%Scripts\python.exe"
-if not defined PY (
-    where python >nul 2>&1 && set "PY=python"
+
+call :TESTAR_PYTHON "%PRICEEDGE_PYTHON%"
+call :TESTAR_PYTHON "%BASE%.venv\Scripts\python.exe"
+call :TESTAR_PYTHON "%BASE%Scripts\python.exe"
+
+REM  layout da estacao: %USERPROFILE%\ds\tools\python3.12\<versao>\python.exe,
+REM  com um "latest" ao lado das versoes numeradas
+for /d %%d in ("%USERPROFILE%\ds\tools\python3*") do (
+    call :TESTAR_PYTHON "%%~fd\latest\python.exe"
+    for /d %%v in ("%%~fd\*") do call :TESTAR_PYTHON "%%~fv\python.exe"
 )
-if not defined PY (
-    where py >nul 2>&1 && set "PY=py"
-)
+for /d %%d in ("%USERPROFILE%\ds\tools\*") do call :TESTAR_PYTHON "%%~fd\python.exe"
+
+REM  instalacoes comuns do Windows
+for /d %%d in ("%LOCALAPPDATA%\Programs\Python\Python3*") do call :TESTAR_PYTHON "%%~fd\python.exe"
+for /d %%d in ("%ProgramFiles%\Python3*")                 do call :TESTAR_PYTHON "%%~fd\python.exe"
+for /d %%d in ("C:\Python3*")                             do call :TESTAR_PYTHON "%%~fd\python.exe"
+
+REM  o launcher py resolve a versao sozinho; o alias da loja tambem se chama py,
+REM  por isso ele passa pelo mesmo teste de execucao
+call :TESTAR_PYTHON "py"
+call :TESTAR_PYTHON "python"
+call :TESTAR_PYTHON "python3"
 
 if not defined PY (
     echo.
-    echo [ERRO] Python nao encontrado nesta maquina.
-    echo        Instale o Python 3.10 ou mais novo, ou crie o virtualenv:
-    echo            python -m venv .venv
+    echo [ERRO] Nenhum Python que responda foi encontrado.
+    echo.
+    echo        Procurei, nesta ordem:
+    echo          %%PRICEEDGE_PYTHON%%  ^(nao definida^)
+    echo          %BASE%.venv\Scripts\python.exe
+    echo          %USERPROFILE%\ds\tools\python3*\latest\python.exe
+    echo          %USERPROFILE%\ds\tools\python3*\3.12.x\python.exe
+    echo          %LOCALAPPDATA%\Programs\Python\Python3*\python.exe
+    echo          py / python / python3 no PATH
+    echo.
+    echo        Se o Python estiver em outro lugar, aponte para ele e rode de novo:
+    echo          set PRICEEDGE_PYTHON=C:\caminho\para\python.exe
+    echo.
+    echo        Um python.exe que existe mas nao responde e, quase sempre, o
+    echo        atalho da Microsoft Store em WindowsApps -- ele e ignorado aqui
+    echo        de proposito.
     echo.
     popd
     pause
     exit /b 1
 )
 echo [INFO] Python: %PY%
+for /f "usebackq delims=" %%v in (`"%PY%" -c "import sys;print(sys.version.split()[0])" 2^>nul`) do echo [INFO] Versao: %%v
 
 REM ---------------------------------------------------------------------------
-REM  Dependencias, best-effort: se o pypi estiver bloqueado, avisa e segue com
-REM  o que ja esta instalado -- numa maquina corporativa esse e o caso comum.
+REM  Dependencias, best-effort: se o pypi estiver bloqueado, avisa e segue com o
+REM  que ja esta instalado -- numa estacao corporativa esse e o caso comum.
 REM ---------------------------------------------------------------------------
 if /I "%~1"=="noinstall" (
     echo [INFO] Instalacao de dependencias pulada ^(noinstall^).
@@ -110,16 +152,35 @@ exit /b
 
 
 REM ===========================================================================
+:TESTAR_PYTHON
+REM  Aceita %~1 como Python so se ele executar e disser a propria versao.
+REM  Primeiro candidato que passar vence; os seguintes saem na primeira linha.
+REM ===========================================================================
+if defined PY exit /b 0
+if "%~1"=="" exit /b 0
+REM  o atalho da Microsoft Store responde ao `where` e nao e Python
+echo %~1 | findstr /I /C:"\WindowsApps\" >nul && exit /b 0
+set "MARCA="
+REM  max(m,9)==m e nao m>=9: para o cmd, o ">" dentro de um `for /f` e
+REM  redirecionamento de saida, mesmo entre aspas. Escrito com ">=", o teste
+REM  falharia calado e TODO candidato seria recusado -- inclusive o Python certo.
+for /f "usebackq delims=" %%r in (`"%~1" -c "import sys;v=sys.version_info;print('PY3OK' if v[0]==3 and max(v[1],9)==v[1] else 'VELHO')" 2^>nul`) do set "MARCA=%%r"
+if /I not "%MARCA%"=="PY3OK" exit /b 0
+set "PY=%~1"
+exit /b 0
+
+
+REM ===========================================================================
 :ABRIR_NAVEGADOR
 REM  Espera o servidor atender antes de abrir a pagina. Sem isto o navegador
 REM  chega antes e mostra "nao foi possivel acessar" -- o servidor sobe em
 REM  segundos numa maquina rapida e em bem mais de um share lento, entao um
 REM  `timeout` fixo erra dos dois lados. Aqui o teste e a porta responder.
-REM ===========================================================================
+REM
 REM  netstat e nao PowerShell: Test-NetConnection so aceita o operador ternario
-REM  no PowerShell 7, e a maquina corporativa vem com o 5.1 -- ali a linha
-REM  falha calada e o navegador abre cedo demais, toda vez. netstat existe em
-REM  qualquer Windows e nao depende de politica de execucao.
+REM  no PowerShell 7, e a estacao vem com o 5.1 -- ali a linha falharia calada e
+REM  o navegador abriria cedo demais, toda vez.
+REM ===========================================================================
 set "TENTATIVAS=0"
 :ESPERAR
 set /a TENTATIVAS+=1

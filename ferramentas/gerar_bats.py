@@ -1,43 +1,12 @@
-@echo off
-REM ============================================================================
-REM  PriceEdge - PRODUCAO  (Windows)
-REM
-REM  Waitress (servidor WSGI), porta 5050, em todas as interfaces.
-REM  Abre  http://127.0.0.1:5050/  no navegador sozinho; a rede chega pelo
-REM  http://<IP-da-maquina>:5050/
-REM
-REM  Uso:  duplo clique.
-REM        start-prod.bat noinstall   -> pula a instalacao (util offline)
-REM
-REM  Nao instala Python. Se o desta estacao estiver num lugar que o script nao
-REM  procura, aponte:   set PRICEEDGE_PYTHON=C:\caminho\para\python.exe
-REM ============================================================================
+"""Gera start-uat.bat e start-prod.bat a partir de um molde comum.
 
-setlocal
-set "PORTA=5050"
-set "URL=http://127.0.0.1:%PORTA%/"
+Os dois .bat são autocontidos de propósito — quem copia um launcher para outra
+pasta copia um arquivo, não dois — e o localizador de Python é idêntico nos
+dois. Para não corrigir a mesma coisa duas vezes, eles saem daqui.
+"""
+import pathlib
 
-REM ---------------------------------------------------------------------------
-REM  Reentrada: chamado com --abrir, este mesmo .bat nao sobe nada. So espera a
-REM  porta responder e abre o navegador. E o jeito de abrir a pagina sozinho sem
-REM  aspas aninhadas dentro de `cmd /c`, que e onde essa linha costuma quebrar.
-REM ---------------------------------------------------------------------------
-if /I "%~1"=="--abrir" goto :ABRIR_NAVEGADOR
-
-REM ---------------------------------------------------------------------------
-REM  UNC-safe: `cd /d` nao aceita caminho de rede -- o cmd responde "UNC paths
-REM  are not supported", cai em C:\Windows e segue. Dali o run.py nao e achado e
-REM  o servidor nem sobe. O pushd mapeia o share numa letra temporaria.
-REM ---------------------------------------------------------------------------
-pushd "%~dp0" 2>nul
-if errorlevel 1 (
-    echo [ERRO] Nao consegui acessar a pasta: %~dp0
-    pause
-    exit /b 1
-)
-
-set "BASE=%~dp0"
-
+LOCALIZADOR = r'''
 REM ---------------------------------------------------------------------------
 REM  Localiza o Python. NAO instala nada.
 REM
@@ -103,69 +72,9 @@ if not defined PY (
 )
 echo [INFO] Python: %PY%
 for /f "usebackq delims=" %%v in (`"%PY%" -c "import sys;print(sys.version.split()[0])" 2^>nul`) do echo [INFO] Versao: %%v
+'''
 
-REM ---------------------------------------------------------------------------
-REM  Dependencias, best-effort: se o pypi estiver bloqueado, avisa e segue com o
-REM  que ja esta instalado -- numa estacao corporativa esse e o caso comum.
-REM ---------------------------------------------------------------------------
-if /I "%~1"=="noinstall" (
-    echo [INFO] Instalacao de dependencias pulada ^(noinstall^).
-) else (
-    echo.
-    echo [INFO] Instalando dependencias ^(requirements.txt^)...
-    "%PY%" -m pip install -r "%BASE%requirements.txt" --timeout 10 --retries 1 --disable-pip-version-check
-    if errorlevel 1 (
-        echo.
-        echo [AVISO] Nao consegui instalar/atualizar as dependencias ^(rede/pypi^).
-        echo         Seguindo com o que ja esta instalado.
-        echo.
-    )
-)
-
-REM ---------------------------------------------------------------------------
-REM  Bytecode em disco local. Rodando de um share, o Python grava um .pyc por
-REM  modulo pela rede na primeira subida depois de um pull -- centenas de
-REM  gravacoes atomicas, minutos parado sem imprimir nada, com cara de travado.
-REM  Nao use PYTHONDONTWRITEBYTECODE: evita a escrita mas obriga a recompilar
-REM  tudo a cada subida. %LOCALAPPDATA% e nao %TEMP%, que a Limpeza de Disco
-REM  apaga.
-REM ---------------------------------------------------------------------------
-if not defined PYTHONPYCACHEPREFIX set "PYTHONPYCACHEPREFIX=%LOCALAPPDATA%\PriceEdge\pycache"
-
-set "PRECIFICADOR_PORTA=%PORTA%"
-set "PRECIFICADOR_HOST=0.0.0.0"
-set "PRECIFICADOR_DEBUG=0"
-
-REM abre o navegador numa janela propria, que espera o servidor responder
-start "PriceEdge - navegador" /min "%~f0" --abrir
-
-echo.
-echo [PRODUCAO] PriceEdge em http://0.0.0.0:%PORTA%  ^(waitress^)
-echo            Feche esta janela ou Ctrl+C para parar.
-echo.
-REM ---------------------------------------------------------------------------
-REM  Waitress e nao gunicorn: gunicorn nao roda no Windows.
-REM
-REM  Escale com THREADS, nunca com processos. O cache de curvas da B3 vive na
-REM  memoria do processo -- com dois processos, cada um baixa e guarda a sua
-REM  copia, e duas telas abertas lado a lado podem mostrar curvas de momentos
-REM  diferentes. Alem disso a maior parte do tempo de um request aqui e espera
-REM  de rede (B3, BCB, NY Fed, Banco da Finlandia): a thread fica parada
-REM  segurando a vaga, e com as quatro vagas padrao do waitress quatro esperas
-REM  dessas param o servidor inteiro, inclusive para quem so pediu um CSS.
-REM ---------------------------------------------------------------------------
-"%PY%" -m waitress --host=0.0.0.0 --port=%PORTA% --threads=16 run:app
-if errorlevel 1 (
-    echo.
-    echo [ERRO] waitress nao subiu. Instale com:  "%PY%" -m pip install waitress
-)
-
-echo.
-echo [INFO] O servidor parou.
-popd
-pause
-exit /b
-
+SUBROTINA = r'''
 
 REM ===========================================================================
 :TESTAR_PYTHON
@@ -184,7 +93,9 @@ for /f "usebackq delims=" %%r in (`"%~1" -c "import sys;v=sys.version_info;print
 if /I not "%MARCA%"=="PY3OK" exit /b 0
 set "PY=%~1"
 exit /b 0
+'''
 
+NAVEGADOR = r'''
 
 REM ===========================================================================
 :ABRIR_NAVEGADOR
@@ -211,3 +122,141 @@ goto :ESPERAR
 :ABRIR_ASSIM_MESMO
 start "" "%URL%"
 exit /b
+'''
+
+
+def montar(ambiente, porta, host, debug, cabecalho, arranque, titulo_janela):
+    return f'''@echo off
+REM ============================================================================
+{cabecalho}
+REM ============================================================================
+
+setlocal
+set "PORTA={porta}"
+set "URL=http://127.0.0.1:%PORTA%/"
+
+REM ---------------------------------------------------------------------------
+REM  Reentrada: chamado com --abrir, este mesmo .bat nao sobe nada. So espera a
+REM  porta responder e abre o navegador. E o jeito de abrir a pagina sozinho sem
+REM  aspas aninhadas dentro de `cmd /c`, que e onde essa linha costuma quebrar.
+REM ---------------------------------------------------------------------------
+if /I "%~1"=="--abrir" goto :ABRIR_NAVEGADOR
+
+REM ---------------------------------------------------------------------------
+REM  UNC-safe: `cd /d` nao aceita caminho de rede -- o cmd responde "UNC paths
+REM  are not supported", cai em C:\\Windows e segue. Dali o run.py nao e achado e
+REM  o servidor nem sobe. O pushd mapeia o share numa letra temporaria.
+REM ---------------------------------------------------------------------------
+pushd "%~dp0" 2>nul
+if errorlevel 1 (
+    echo [ERRO] Nao consegui acessar a pasta: %~dp0
+    pause
+    exit /b 1
+)
+
+set "BASE=%~dp0"
+{LOCALIZADOR}
+REM ---------------------------------------------------------------------------
+REM  Dependencias, best-effort: se o pypi estiver bloqueado, avisa e segue com o
+REM  que ja esta instalado -- numa estacao corporativa esse e o caso comum.
+REM ---------------------------------------------------------------------------
+if /I "%~1"=="noinstall" (
+    echo [INFO] Instalacao de dependencias pulada ^(noinstall^).
+) else (
+    echo.
+    echo [INFO] Instalando dependencias ^(requirements.txt^)...
+    "%PY%" -m pip install -r "%BASE%requirements.txt" --timeout 10 --retries 1 --disable-pip-version-check
+    if errorlevel 1 (
+        echo.
+        echo [AVISO] Nao consegui instalar/atualizar as dependencias ^(rede/pypi^).
+        echo         Seguindo com o que ja esta instalado.
+        echo.
+    )
+)
+
+REM ---------------------------------------------------------------------------
+REM  Bytecode em disco local. Rodando de um share, o Python grava um .pyc por
+REM  modulo pela rede na primeira subida depois de um pull -- centenas de
+REM  gravacoes atomicas, minutos parado sem imprimir nada, com cara de travado.
+REM  Nao use PYTHONDONTWRITEBYTECODE: evita a escrita mas obriga a recompilar
+REM  tudo a cada subida. %LOCALAPPDATA% e nao %TEMP%, que a Limpeza de Disco
+REM  apaga.
+REM ---------------------------------------------------------------------------
+if not defined PYTHONPYCACHEPREFIX set "PYTHONPYCACHEPREFIX=%LOCALAPPDATA%\\PriceEdge\\pycache"
+
+set "PRECIFICADOR_PORTA=%PORTA%"
+set "PRECIFICADOR_HOST={host}"
+set "PRECIFICADOR_DEBUG={debug}"
+
+REM abre o navegador numa janela propria, que espera o servidor responder
+start "{titulo_janela}" /min "%~f0" --abrir
+
+{arranque}
+echo.
+echo [INFO] O servidor parou.
+popd
+pause
+exit /b
+{SUBROTINA}{NAVEGADOR}'''
+
+
+UAT = montar(
+    "uat", 5051, "127.0.0.1", 1,
+    """REM  PriceEdge - UAT  (Windows)
+REM
+REM  Werkzeug com auto-reload, porta 5051, so em localhost.
+REM  Abre  http://127.0.0.1:5051/  no navegador sozinho.
+REM
+REM  Uso:  duplo clique.
+REM        start-uat.bat noinstall   -> pula a instalacao (util offline)
+REM
+REM  Nao instala Python. Se o desta estacao estiver num lugar que o script nao
+REM  procura, aponte:   set PRICEEDGE_PYTHON=C:\\caminho\\para\\python.exe""",
+    '''echo.
+echo [UAT] PriceEdge em %URL%  ^(Werkzeug, auto-reload^)
+echo       Feche esta janela ou Ctrl+C para parar.
+echo.
+"%PY%" "%BASE%run.py"
+''',
+    "PriceEdge UAT - navegador")
+
+PROD = montar(
+    "prod", 5050, "0.0.0.0", 0,
+    """REM  PriceEdge - PRODUCAO  (Windows)
+REM
+REM  Waitress (servidor WSGI), porta 5050, em todas as interfaces.
+REM  Abre  http://127.0.0.1:5050/  no navegador sozinho; a rede chega pelo
+REM  http://<IP-da-maquina>:5050/
+REM
+REM  Uso:  duplo clique.
+REM        start-prod.bat noinstall   -> pula a instalacao (util offline)
+REM
+REM  Nao instala Python. Se o desta estacao estiver num lugar que o script nao
+REM  procura, aponte:   set PRICEEDGE_PYTHON=C:\\caminho\\para\\python.exe""",
+    '''echo.
+echo [PRODUCAO] PriceEdge em http://0.0.0.0:%PORTA%  ^(waitress^)
+echo            Feche esta janela ou Ctrl+C para parar.
+echo.
+REM ---------------------------------------------------------------------------
+REM  Waitress e nao gunicorn: gunicorn nao roda no Windows.
+REM
+REM  Escale com THREADS, nunca com processos. O cache de curvas da B3 vive na
+REM  memoria do processo -- com dois processos, cada um baixa e guarda a sua
+REM  copia, e duas telas abertas lado a lado podem mostrar curvas de momentos
+REM  diferentes. Alem disso a maior parte do tempo de um request aqui e espera
+REM  de rede (B3, BCB, NY Fed, Banco da Finlandia): a thread fica parada
+REM  segurando a vaga, e com as quatro vagas padrao do waitress quatro esperas
+REM  dessas param o servidor inteiro, inclusive para quem so pediu um CSS.
+REM ---------------------------------------------------------------------------
+"%PY%" -m waitress --host=0.0.0.0 --port=%PORTA% --threads=16 run:app
+if errorlevel 1 (
+    echo.
+    echo [ERRO] waitress nao subiu. Instale com:  "%PY%" -m pip install waitress
+)
+''',
+    "PriceEdge - navegador")
+
+for nome, conteudo in (("start-uat.bat", UAT), ("start-prod.bat", PROD)):
+    crlf = conteudo.replace("\r\n", "\n").replace("\n", "\r\n")
+    pathlib.Path(nome).write_bytes(crlf.encode("cp1252"))
+    print(f"{nome}: {len(crlf.splitlines())} linhas")
