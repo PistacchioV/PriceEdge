@@ -40,17 +40,23 @@ set "BASE=%~dp0"
 REM ---------------------------------------------------------------------------
 REM  Localiza o Python. NAO instala nada.
 REM
-REM  O teste e EXECUTAR o candidato, nao verificar se o arquivo existe. O
-REM  motivo tem nome: o "App Execution Alias" da Microsoft Store instala um
-REM  python.exe de zero byte em %LOCALAPPDATA%\Microsoft\WindowsApps, que entra
-REM  no PATH e responde ao `where python`. Ele nao e Python -- ao ser chamado
-REM  imprime "Python was not found; run without arguments to install from the
-REM  Microsoft Store" e sai. Um launcher que aceita o primeiro python.exe que o
-REM  `where` devolve pega esse, e depois falha no pip e no waitress com a mesma
-REM  mensagem, sem nunca dizer que o problema e o Python escolhido.
+REM  Duas regras, e as duas vieram de erro em maquina de verdade:
 REM
-REM  Ordem: variavel de ambiente, venv ao lado, arvore ds\tools da estacao,
-REM  instalacoes comuns, o launcher py, e so entao o PATH.
+REM  1) O teste e EXECUTAR o candidato, nao verificar se o arquivo existe. O
+REM     "App Execution Alias" da Microsoft Store instala um python.exe de zero
+REM     byte em %LOCALAPPDATA%\Microsoft\WindowsApps, que entra no PATH e
+REM     responde ao `where python`. Ele nao e Python -- ao ser chamado imprime
+REM     "Python was not found; run without arguments to install from the
+REM     Microsoft Store" e sai. Quem aceita o primeiro python.exe do `where`
+REM     pega esse, e depois falha no pip e no waitress com a mesma mensagem.
+REM
+REM  2) A varredura usa `dir /b /s`, e NAO `for /d` com curinga. Num `for /d`,
+REM     um padrao entre aspas -- for /d %%d in ("C:\...\python3*") -- e tratado
+REM     como texto literal: o curinga nao expande, %%~fd vira o proprio
+REM     "...\python3*" e o caminho testado nunca existe. Tirar as aspas faria o
+REM     curinga funcionar mas quebraria em "C:\Program Files". `dir /b /s`
+REM     resolve os dois casos e ainda acha o python.exe em qualquer
+REM     profundidade, sem precisar adivinhar o nome da pasta de versao.
 REM ---------------------------------------------------------------------------
 set "PY="
 
@@ -58,21 +64,17 @@ call :TESTAR_PYTHON "%PRICEEDGE_PYTHON%"
 call :TESTAR_PYTHON "%BASE%.venv\Scripts\python.exe"
 call :TESTAR_PYTHON "%BASE%Scripts\python.exe"
 
-REM  layout da estacao: %USERPROFILE%\ds\tools\python3.12\<versao>\python.exe,
-REM  com um "latest" ao lado das versoes numeradas
-for /d %%d in ("%USERPROFILE%\ds\tools\python3*") do (
-    call :TESTAR_PYTHON "%%~fd\latest\python.exe"
-    for /d %%v in ("%%~fd\*") do call :TESTAR_PYTHON "%%~fv\python.exe"
-)
-for /d %%d in ("%USERPROFILE%\ds\tools\*") do call :TESTAR_PYTHON "%%~fd\python.exe"
+REM  arvore de ferramentas da estacao -- e onde mora o Python aqui, sem venv
+call :VARRER "%USERPROFILE%\ds\tools"
+call :VARRER "%USERPROFILE%\ds"
+call :VARRER "%LOCALAPPDATA%\Programs\Python"
+call :VARRER "%LOCALAPPDATA%\Programs\Python\Python312"
+call :VARRER "%ProgramFiles%\Python312"
+call :VARRER "%ProgramFiles(x86)%\Python312"
+call :VARRER "C:\Python312"
+call :VARRER "C:\Python311"
 
-REM  instalacoes comuns do Windows
-for /d %%d in ("%LOCALAPPDATA%\Programs\Python\Python3*") do call :TESTAR_PYTHON "%%~fd\python.exe"
-for /d %%d in ("%ProgramFiles%\Python3*")                 do call :TESTAR_PYTHON "%%~fd\python.exe"
-for /d %%d in ("C:\Python3*")                             do call :TESTAR_PYTHON "%%~fd\python.exe"
-
-REM  o launcher py resolve a versao sozinho; o alias da loja tambem se chama py,
-REM  por isso ele passa pelo mesmo teste de execucao
+REM  o launcher py resolve a versao sozinho; passa pelo mesmo teste de execucao
 call :TESTAR_PYTHON "py"
 call :TESTAR_PYTHON "python"
 call :TESTAR_PYTHON "python3"
@@ -81,20 +83,21 @@ if not defined PY (
     echo.
     echo [ERRO] Nenhum Python que responda foi encontrado.
     echo.
-    echo        Procurei, nesta ordem:
-    echo          %%PRICEEDGE_PYTHON%%  ^(nao definida^)
-    echo          %BASE%.venv\Scripts\python.exe
-    echo          %USERPROFILE%\ds\tools\python3*\latest\python.exe
-    echo          %USERPROFILE%\ds\tools\python3*\3.12.x\python.exe
-    echo          %LOCALAPPDATA%\Programs\Python\Python3*\python.exe
-    echo          py / python / python3 no PATH
+    echo        Procurei python.exe, recursivamente, em:
+    echo          %USERPROFILE%\ds\tools
+    echo          %LOCALAPPDATA%\Programs\Python
+    echo          %ProgramFiles%\Python312   e   C:\Python312
+    echo        e tentei py, python e python3 no PATH.
     echo.
-    echo        Se o Python estiver em outro lugar, aponte para ele e rode de novo:
-    echo          set PRICEEDGE_PYTHON=C:\caminho\para\python.exe
+    echo        Aponte o caminho e rode de novo:
+    echo          set PRICEEDGE_PYTHON=C:\Users\seu.usuario\ds\tools\python3.12\latest\python.exe
+    echo.
+    echo        Para ver cada candidato testado e por que foi recusado:
+    echo          set PRICEEDGE_DEBUG=1
     echo.
     echo        Um python.exe que existe mas nao responde e, quase sempre, o
-    echo        atalho da Microsoft Store em WindowsApps -- ele e ignorado aqui
-    echo        de proposito.
+    echo        atalho da Microsoft Store em WindowsApps -- ignorado aqui de
+    echo        proposito.
     echo.
     popd
     pause
@@ -152,6 +155,21 @@ exit /b
 
 
 REM ===========================================================================
+:VARRER
+REM  Testa todo python.exe sob %~1, em qualquer profundidade.
+REM  `dir /b /s` imprime caminho completo e lida com espaco no caminho, que e
+REM  onde o `for /d` com curinga entre aspas falhava calado.
+REM ===========================================================================
+if defined PY exit /b 0
+if "%~1"=="" exit /b 0
+if not exist "%~1" (
+    if defined PRICEEDGE_DEBUG echo [DEBUG] pasta inexistente: %~1
+    exit /b 0
+)
+for /f "usebackq delims=" %%p in (`dir /b /s "%~1\python.exe" 2^>nul`) do call :TESTAR_PYTHON "%%p"
+exit /b 0
+
+REM ===========================================================================
 :TESTAR_PYTHON
 REM  Aceita %~1 como Python so se ele executar e disser a propria versao.
 REM  Primeiro candidato que passar vence; os seguintes saem na primeira linha.
@@ -159,13 +177,20 @@ REM ===========================================================================
 if defined PY exit /b 0
 if "%~1"=="" exit /b 0
 REM  o atalho da Microsoft Store responde ao `where` e nao e Python
-echo %~1 | findstr /I /C:"\WindowsApps\" >nul && exit /b 0
+echo %~1 | findstr /I /C:"\WindowsApps\" >nul && (
+    if defined PRICEEDGE_DEBUG echo [DEBUG] recusado ^(atalho da Microsoft Store^): %~1
+    exit /b 0
+)
 set "MARCA="
 REM  max(m,9)==m e nao m>=9: para o cmd, o ">" dentro de um `for /f` e
 REM  redirecionamento de saida, mesmo entre aspas. Escrito com ">=", o teste
 REM  falharia calado e TODO candidato seria recusado -- inclusive o Python certo.
 for /f "usebackq delims=" %%r in (`"%~1" -c "import sys;v=sys.version_info;print('PY3OK' if v[0]==3 and max(v[1],9)==v[1] else 'VELHO')" 2^>nul`) do set "MARCA=%%r"
-if /I not "%MARCA%"=="PY3OK" exit /b 0
+if /I not "%MARCA%"=="PY3OK" (
+    if defined PRICEEDGE_DEBUG echo [DEBUG] recusado ^(nao respondeu^): %~1
+    exit /b 0
+)
+if defined PRICEEDGE_DEBUG echo [DEBUG] aceito: %~1
 set "PY=%~1"
 exit /b 0
 
