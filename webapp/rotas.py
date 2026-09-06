@@ -7,8 +7,8 @@ from datetime import date, timedelta
 from flask import (Blueprint, Response, jsonify, redirect, render_template,
                    request, url_for)
 
-from precificador import (b3, cambio, cdi, euribor, fontes, glossario,
-                          montador, rede, renda_fixa, sofr)
+from precificador import (b3, cambio, cdi, contagem, euribor, fontes, glossario,
+                          liquidacao, montador, rede, renda_fixa, sofr)
 from precificador.calendario import (CALENDARIOS_DISPONIVEIS, CONVENCOES_DIA_UTIL,
                                      MODIFIED_FOLLOWING, calendario_anbima,
                                      obter_calendario, para_data, soma_meses)
@@ -784,6 +784,120 @@ def _calcular_renda_fixa(form) -> dict:
 
     return {"r": resultado, "comparacao": comparacao, "indexador": indexador,
             "acumulado": acumulado}
+
+
+# --------------------------------------------------------------- liquidação
+
+@bp.route("/liquidacao", methods=["GET", "POST"])
+def liquidacao_swap():
+    """Valor de liquidação de um swap — o ajuste que uma parte paga à outra."""
+    hoje = date.today()
+    ano_passado = date(hoje.year - 1, hoje.month, 1)
+    contexto = {
+        "form": {
+            "data_operacao": ano_passado.isoformat(),
+            "inicio": ano_passado.isoformat(), "fim": hoje.isoformat(),
+            "nocional": "10.000.000,00", "nocional_original": "10.000.000,00",
+            "amortizacao": "0", "base_amortizacao": liquidacao.SOBRE_ORIGINAL,
+            "calendario": "ANBIMA", "arredondar_di": "", "reter_ir": "1",
+        },
+        "indexadores": liquidacao.INDEXADORES,
+        "convencoes": contagem.CONVENCOES,
+        "regimes": contagem.REGIMES,
+        "moedas": liquidacao.MOEDAS,
+        "bases_amortizacao": liquidacao.BASES_AMORTIZACAO,
+        "tenores_euribor": liquidacao.TENORES_EURIBOR,
+        "calendarios": CALENDARIOS,
+        "hoje": hoje.isoformat(),
+        "resultado": None, "erro": None,
+    }
+    # cada ponta repete os mesmos campos com o seu prefixo
+    padrao = {
+        "ativa": dict(indexador=liquidacao.PRE, taxa="14"),
+        "passiva": dict(indexador=liquidacao.CDI_PERCENTUAL, taxa="100"),
+    }
+    for lado, escolhas in padrao.items():
+        contexto["form"].update({
+            f"{lado}_indexador": escolhas["indexador"], f"{lado}_taxa": escolhas["taxa"],
+            f"{lado}_convencao": contagem.DU_252, f"{lado}_regime": contagem.COMPOSTO,
+            f"{lado}_moeda": liquidacao.SEM_CONVERSAO,
+            f"{lado}_ptax_inicial": "", f"{lado}_ptax_final": "",
+            f"{lado}_ni_inicial": "", f"{lado}_ni_final": "", f"{lado}_fator": "",
+            f"{lado}_tenor": "3 month", f"{lado}_data_fixing": "",
+            f"{lado}_taxa_indice": "", f"{lado}_lookback": "0", f"{lado}_shift": "0",
+            f"{lado}_ativo": "", f"{lado}_preco_inicial": "", f"{lado}_preco_final": "",
+        })
+
+    if request.method == "POST":
+        contexto["form"] = {k: v for k, v in request.form.items()}
+        try:
+            contexto["resultado"] = _liquidar(request.form)
+        except (servicos.ErroFormulario, ErroDeFonte, ValueError) as exc:
+            contexto["erro"] = str(exc)
+    return render_template("liquidacao.html", **contexto)
+
+
+def _ponta_do_form(form, prefixo: str) -> liquidacao.Ponta:
+    """Lê uma das duas pontas — só os campos que o indexador escolhido usa."""
+    def campo(nome: str) -> str:
+        return f"{prefixo}_{nome}"
+
+    def texto(nome: str) -> str:
+        return (form.get(campo(nome)) or "").strip()
+
+    def opcional(nome: str, rotulo: str):
+        return servicos.numero_do_form(form, campo(nome), rotulo) if texto(nome) else None
+
+    indexador = form.get(campo("indexador")) or liquidacao.PRE
+    lado = "ativa" if prefixo == "ativa" else "passiva"
+    taxa = 0.0
+    if indexador != liquidacao.FATOR:
+        taxa = servicos.taxa_do_form(form, campo("taxa"), f"taxa da ponta {lado}", 0.0)
+    return liquidacao.Ponta(
+        indexador=indexador, taxa=taxa,
+        convencao=form.get(campo("convencao")) or contagem.DU_252,
+        regime=form.get(campo("regime")) or contagem.COMPOSTO,
+        moeda=form.get(campo("moeda")) or liquidacao.SEM_CONVERSAO,
+        ptax_inicial=opcional("ptax_inicial", f"fixing inicial da ponta {lado}"),
+        ptax_final=opcional("ptax_final", f"fixing final da ponta {lado}"),
+        ni_inicial=opcional("ni_inicial", f"número-índice inicial da ponta {lado}"),
+        ni_final=opcional("ni_final", f"número-índice final da ponta {lado}"),
+        fator_manual=opcional("fator", f"fator da ponta {lado}"),
+        ativo=texto("ativo"),
+        preco_inicial=opcional("preco_inicial", f"preço inicial da ponta {lado}"),
+        preco_final=opcional("preco_final", f"preço final da ponta {lado}"),
+        tenor=form.get(campo("tenor")) or "3 month",
+        data_fixing=para_data(texto("data_fixing")) if texto("data_fixing") else None,
+        taxa_indice=(servicos.taxa_do_form(form, campo("taxa_indice"),
+                                           f"taxa do fixing da ponta {lado}")
+                     if texto("taxa_indice") else None),
+        lookback=int(texto("lookback") or 0), shift=int(texto("shift") or 0),
+    )
+
+
+def _liquidar(form) -> dict:
+    def ligado(campo: str) -> bool:
+        return str(form.get(campo) or "").lower() in ("1", "on", "true")
+
+    calendario = form.get("calendario") or "ANBIMA"
+    resultado = liquidacao.liquidar(
+        data_operacao=para_data(form.get("data_operacao") or ""),
+        inicio=para_data(form.get("inicio") or ""),
+        fim=para_data(form.get("fim") or ""),
+        nocional=servicos.numero_do_form(form, "nocional", "notional remanescente"),
+        ponta_ativa=_ponta_do_form(form, "ativa"),
+        ponta_passiva=_ponta_do_form(form, "passiva"),
+        nocional_original=servicos.numero_do_form(form, "nocional_original",
+                                                  "notional original", 0.0),
+        percentual_amortizacao=servicos.taxa_do_form(form, "amortizacao",
+                                                     "amortização", 0.0),
+        base_amortizacao=form.get("base_amortizacao") or liquidacao.SOBRE_ORIGINAL,
+        calendario=obter_calendario(calendario),
+        arredondar_di=ligado("arredondar_di"), reter_ir=ligado("reter_ir"),
+    )
+    return {"r": resultado,
+            "comparacao": servicos.contagens_lado_a_lado(resultado.inicio,
+                                                         resultado.fim, calendario)}
 
 
 # -------------------------------------------------------------- metodologia

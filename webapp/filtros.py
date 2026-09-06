@@ -41,7 +41,22 @@ def data_br(valor) -> str:
     return valor.strftime("%d/%m/%Y")
 
 
+def indexador_nome(codigo) -> str:
+    """O rótulo do indexador — a tela mostra o nome, o form guarda o código."""
+    from precificador.liquidacao import INDEXADOR_POR_CODIGO
+    return INDEXADOR_POR_CODIGO.get(codigo, codigo)
+
+
+def convencao_nome(codigo) -> str:
+    """Só o nome curto da contagem: "DU/252", sem a explicação que vem depois."""
+    from precificador.contagem import CONVENCAO_POR_CODIGO
+    nome = CONVENCAO_POR_CODIGO.get(codigo, (codigo, ""))[0]
+    return nome.split(" — ")[0]
+
+
 def registrar(app) -> None:
     for funcao in (moeda, percentual, bps, numero, data_br):
         app.jinja_env.filters[funcao.__name__] = funcao
     app.jinja_env.globals["hoje"] = date.today
+    app.jinja_env.globals["indexador_nome"] = indexador_nome
+    app.jinja_env.globals["convencao_nome"] = convencao_nome

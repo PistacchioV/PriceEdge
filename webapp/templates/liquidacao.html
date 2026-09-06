@@ -1,0 +1,503 @@
+{% extends "base.html" %}
+{% from "_componentes.html" import alerta, estatistica, botao %}
+{% block titulo %}{{ t("Liquidação") }}{% endblock %}
+
+{% macro ponta(lado, rotulo, cor) %}
+{% set f = form %}
+<div class="rounded-2xl border {{ 'border-cyan-200/20 bg-cyan-400/[0.05]' if cor == 'cyan' else 'border-white/[0.08] bg-white/[0.02]' }} p-5">
+  <div class="mb-4 flex items-center gap-2">
+    <span class="h-1.5 w-1.5 rounded-full {{ 'bg-cyan-200' if cor == 'cyan' else 'bg-slate-400' }}"></span>
+    <p class="text-[11px] font-semibold uppercase tracking-widest {{ 'text-cyan-200' if cor == 'cyan' else 'text-slate-400' }} font-geist">{{ rotulo }}</p>
+  </div>
+  <div class="grid gap-4">
+    <div>
+      <label class="rotulo" for="{{ lado }}_indexador">{{ t("Indexador") }}</label>
+      <select class="campo campo-indexador" id="{{ lado }}_indexador" name="{{ lado }}_indexador" data-lado="{{ lado }}">
+        {% for valor, nome in indexadores %}
+        <option value="{{ valor }}" {{ 'selected' if f[lado ~ '_indexador'] == valor }}>{{ t(nome) }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div data-bloco="{{ lado }}" data-mostrar-em="pre,cdi_percentual,cdi_spread,cambio,sofr,term_sofr,euribor,ipca,equity">
+      <label class="rotulo" for="{{ lado }}_taxa">{{ t("Taxa contratada ou spread") }}</label>
+      <input class="campo" id="{{ lado }}_taxa" name="{{ lado }}_taxa" data-formato="percentual"
+             value="{{ f[lado ~ '_taxa'] }}" inputmode="decimal"/>
+      <p class="mt-2 text-xs leading-5 text-slate-600 font-geist">
+        {{ t("14 para 14% a.a. · 100 para 100% do CDI · 2 para CDI+2% · 3,25 para um cupom de 3,25%") }}
+      </p>
+    </div>
+
+    <div class="grid gap-4 sm:grid-cols-2" data-bloco="{{ lado }}" data-mostrar-em="pre,cdi_spread,cambio,sofr,term_sofr,euribor,ipca,equity">
+      <div>
+        <label class="rotulo" for="{{ lado }}_convencao">{{ t("Contagem de dias") }}</label>
+        <select class="campo" id="{{ lado }}_convencao" name="{{ lado }}_convencao">
+          {% for valor, nome, _ in convencoes %}
+          <option value="{{ valor }}" {{ 'selected' if f[lado ~ '_convencao'] == valor }}>{{ t(nome) }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="rotulo" for="{{ lado }}_regime">{{ t("Capitalização") }}</label>
+        <select class="campo" id="{{ lado }}_regime" name="{{ lado }}_regime">
+          {% for valor, nome in regimes %}
+          <option value="{{ valor }}" {{ 'selected' if f[lado ~ '_regime'] == valor }}>{{ t(nome) }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <div class="grid gap-4 sm:grid-cols-3" data-bloco="{{ lado }}" data-mostrar-em="cambio,sofr,term_sofr,euribor,equity">
+      <div>
+        <label class="rotulo" for="{{ lado }}_moeda">{{ t("Moeda do fluxo") }}</label>
+        <select class="campo" id="{{ lado }}_moeda" name="{{ lado }}_moeda">
+          {% for codigo, nome in moedas %}
+          <option value="{{ codigo }}" {{ 'selected' if f[lado ~ '_moeda'] == codigo }}>{{ codigo }} — {{ t(nome) }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="rotulo" for="{{ lado }}_ptax_inicial">{{ t("Fixing inicial da moeda") }}</label>
+        <input class="campo" id="{{ lado }}_ptax_inicial" name="{{ lado }}_ptax_inicial"
+               value="{{ f[lado ~ '_ptax_inicial'] }}" inputmode="decimal" placeholder="{{ t('PTAX, busca sozinha') }}"/>
+      </div>
+      <div>
+        <label class="rotulo" for="{{ lado }}_ptax_final">{{ t("Fixing final da moeda") }}</label>
+        <input class="campo" id="{{ lado }}_ptax_final" name="{{ lado }}_ptax_final"
+               value="{{ f[lado ~ '_ptax_final'] }}" inputmode="decimal" placeholder="{{ t('PTAX, busca sozinha') }}"/>
+      </div>
+      <p class="sm:col-span-3 text-xs leading-5 text-slate-600 font-geist">
+        {{ t("Em branco, os dois vêm da PTAX de fechamento do dia útil anterior a cada data. Em reais, não há conversão.") }}
+      </p>
+    </div>
+
+    <div class="grid gap-4 sm:grid-cols-3" data-bloco="{{ lado }}" data-mostrar-em="term_sofr,euribor">
+      <div>
+        <label class="rotulo" for="{{ lado }}_tenor">{{ t("Prazo do fixing") }}</label>
+        <select class="campo" id="{{ lado }}_tenor" name="{{ lado }}_tenor">
+          {% for tenor in tenores_euribor %}
+          <option value="{{ tenor }}" {{ 'selected' if f[lado ~ '_tenor'] == tenor }}>{{ tenor }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="rotulo" for="{{ lado }}_data_fixing">{{ t("Data do fixing") }}</label>
+        <input class="campo" id="{{ lado }}_data_fixing" name="{{ lado }}_data_fixing" type="date"
+               value="{{ f[lado ~ '_data_fixing'] }}"/>
+      </div>
+      <div data-bloco="{{ lado }}" data-mostrar-em="term_sofr">
+        <label class="rotulo" for="{{ lado }}_taxa_indice">{{ t("Taxa do fixing (% a.a.)") }}</label>
+        <input class="campo" id="{{ lado }}_taxa_indice" name="{{ lado }}_taxa_indice"
+               value="{{ f[lado ~ '_taxa_indice'] }}" inputmode="decimal"/>
+      </div>
+      <p class="sm:col-span-3 text-xs leading-5 text-slate-600 font-geist">
+        {{ t("Taxa a termo: fixada antes de o fluxo começar. Em branco, a data do fixing é D-2 dias úteis do início.") }}
+      </p>
+    </div>
+
+    <div class="rounded-xl border border-amber-300/20 bg-amber-400/[0.06] px-4 py-3"
+         data-bloco="{{ lado }}" data-mostrar-em="term_sofr">
+      <p class="text-xs leading-5 text-amber-100/85 font-geist">
+        {{ t("O Term SOFR é administrado pela CME e licenciado — não há fonte pública que permita redistribuí-lo, então a taxa do fixing entra digitada.") }}
+      </p>
+    </div>
+
+    <div class="grid gap-4 sm:grid-cols-2" data-bloco="{{ lado }}" data-mostrar-em="sofr">
+      <div>
+        <label class="rotulo" for="{{ lado }}_lookback">{{ t("Lookback (dias úteis)") }}</label>
+        <input class="campo" id="{{ lado }}_lookback" name="{{ lado }}_lookback"
+               value="{{ f[lado ~ '_lookback'] }}" inputmode="numeric"/>
+      </div>
+      <div>
+        <label class="rotulo" for="{{ lado }}_shift">{{ t("Observation shift (dias úteis)") }}</label>
+        <input class="campo" id="{{ lado }}_shift" name="{{ lado }}_shift"
+               value="{{ f[lado ~ '_shift'] }}" inputmode="numeric"/>
+      </div>
+      <p class="sm:col-span-2 text-xs leading-5 text-slate-600 font-geist">
+        {{ t("O SOFR composto olha para trás: ele acumula os fixings do próprio período, sem data de fixação.") }}
+      </p>
+    </div>
+
+    <div class="grid gap-4 sm:grid-cols-3" data-bloco="{{ lado }}" data-mostrar-em="equity">
+      <div>
+        <label class="rotulo" for="{{ lado }}_ativo">{{ t("Ação ou índice") }}</label>
+        <input class="campo" id="{{ lado }}_ativo" name="{{ lado }}_ativo"
+               value="{{ f[lado ~ '_ativo'] }}" placeholder="IBOV, PETR4, S&amp;P 500"/>
+      </div>
+      <div>
+        <label class="rotulo" for="{{ lado }}_preco_inicial">{{ t("Preço inicial") }}</label>
+        <input class="campo" id="{{ lado }}_preco_inicial" name="{{ lado }}_preco_inicial"
+               value="{{ f[lado ~ '_preco_inicial'] }}" inputmode="decimal"/>
+      </div>
+      <div>
+        <label class="rotulo" for="{{ lado }}_preco_final">{{ t("Preço final") }}</label>
+        <input class="campo" id="{{ lado }}_preco_final" name="{{ lado }}_preco_final"
+               value="{{ f[lado ~ '_preco_final'] }}" inputmode="decimal"/>
+      </div>
+      <p class="sm:col-span-3 text-xs leading-5 text-slate-600 font-geist">
+        {{ t("A ponta rende a variação de preço no período. Índice estrangeiro rende na moeda dele e converte pelo fixing acima.") }}
+      </p>
+    </div>
+
+    <div class="grid gap-4 sm:grid-cols-2" data-bloco="{{ lado }}" data-mostrar-em="ipca">
+      <div>
+        <label class="rotulo" for="{{ lado }}_ni_inicial">{{ t("Número-índice inicial") }}</label>
+        <input class="campo" id="{{ lado }}_ni_inicial" name="{{ lado }}_ni_inicial"
+               value="{{ f[lado ~ '_ni_inicial'] }}" inputmode="decimal"/>
+      </div>
+      <div>
+        <label class="rotulo" for="{{ lado }}_ni_final">{{ t("Número-índice final") }}</label>
+        <input class="campo" id="{{ lado }}_ni_final" name="{{ lado }}_ni_final"
+               value="{{ f[lado ~ '_ni_final'] }}" inputmode="decimal"/>
+      </div>
+    </div>
+
+    <div data-bloco="{{ lado }}" data-mostrar-em="fator">
+      <label class="rotulo" for="{{ lado }}_fator">{{ t("Fator acumulado") }}</label>
+      <input class="campo" id="{{ lado }}_fator" name="{{ lado }}_fator"
+             value="{{ f[lado ~ '_fator'] }}" inputmode="decimal" placeholder="1,1234567890"/>
+      <p class="mt-2 text-xs leading-5 text-slate-600 font-geist">
+        {{ t("O fator que veio na confirmação, sem recalcular nada.") }}
+      </p>
+    </div>
+  </div>
+</div>
+{% endmacro %}
+
+{% macro resumo_ponta(p, rotulo, cor) %}
+<div class="rounded-2xl border {{ 'border-cyan-200/25 bg-cyan-300/[0.07]' if cor == 'cyan' else 'border-white/[0.08] bg-white/[0.03]' }} p-5">
+  <div class="flex items-start justify-between gap-3">
+    <div class="min-w-0">
+      <p class="text-xs text-slate-400 font-geist">{{ rotulo }}</p>
+      <p class="mt-1 text-sm font-medium {{ 'text-cyan-100' if cor == 'cyan' else 'text-slate-200' }} font-geist">
+        {{ t(indexador_nome(p.indexador)) }}
+      </p>
+    </div>
+    <span class="shrink-0 rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[11px] text-slate-400 font-geist tabular-nums">
+      {{ '%.10f' | format(p.fator) }}
+    </span>
+  </div>
+  <p class="mt-4 text-2xl tracking-tight text-white font-jakarta font-medium tabular-nums">R$ {{ p.valor | moeda(2) }}</p>
+  {% set molde, valores = p.descricao %}
+  <p class="mt-1.5 text-xs leading-5 text-slate-500 font-geist">{{ t(molde).format(**valores) }}</p>
+  <div class="mt-4 space-y-1.5 border-t border-white/[0.07] pt-3">
+    <div class="flex justify-between gap-3 text-xs font-geist">
+      <span class="text-slate-500">{{ t("Juros do período") }}</span>
+      <span class="text-slate-300 tabular-nums">R$ {{ p.juros | moeda(2) }}</span>
+    </div>
+    {% if p.indexador != 'fator' %}
+    <div class="flex justify-between gap-3 text-xs font-geist">
+      <span class="text-slate-500">{{ t("Contagem") }}</span>
+      <span class="text-slate-300 tabular-nums">
+        {{ convencao_nome(p.convencao) }} · {{ p.dias_contados | numero }} {{ t("dias") }} · τ&nbsp;{{ '%.6f' | format(p.fracao_de_ano) | replace('.', ',') }}
+      </span>
+    </div>
+    {% endif %}
+    {% if p.ptax_inicial %}
+    <div class="flex justify-between gap-3 text-xs font-geist">
+      <span class="text-slate-500">{{ t("Fixing") }} {{ p.moeda }}/BRL</span>
+      <span class="text-slate-300 tabular-nums">{{ p.ptax_inicial | moeda(4) }} → {{ p.ptax_final | moeda(4) }}</span>
+    </div>
+    <div class="flex justify-between gap-3 text-xs font-geist">
+      <span class="text-slate-500">{{ t("Índice · câmbio") }}</span>
+      <span class="text-slate-300 tabular-nums">
+        {{ '%.8f' | format(p.fator_do_indice) }} · {{ '%.8f' | format(p.fator_cambial) }}
+      </span>
+    </div>
+    {% endif %}
+    {% if p.data_fixing %}
+    <div class="flex justify-between gap-3 text-xs font-geist">
+      <span class="text-slate-500">{{ t("Fixing de") }} {{ p.tenor }}</span>
+      <span class="text-slate-300 tabular-nums">
+        {{ p.taxa_do_fixing | percentual(5) }} {{ t("em") }} {{ p.data_fixing | data_br }}
+      </span>
+    </div>
+    {% endif %}
+    {% if p.preco_inicial %}
+    <div class="flex justify-between gap-3 text-xs font-geist">
+      <span class="text-slate-500">{{ p.ativo or t("Preço") }}</span>
+      <span class="text-slate-300 tabular-nums">{{ p.preco_inicial | moeda(2) }} → {{ p.preco_final | moeda(2) }}</span>
+    </div>
+    {% endif %}
+    {% if p.contagem_vale_para_spread %}
+    <p class="pt-1 text-[11px] leading-4 text-amber-200/70 font-geist">
+      {{ t("O produto diário do CDI é sempre 252 — a contagem escolhida capitaliza o spread.") }}
+    </p>
+    {% endif %}
+  </div>
+</div>
+{% endmacro %}
+
+{% block conteudo %}
+<section class="sm:px-6 lg:px-8 pt-16 pr-5 pb-10 pl-5">
+  <div class="w-full max-w-[1600px] mr-auto ml-auto">
+    <div class="reveal grid gap-8 lg:grid-cols-[1fr_0.72fr] lg:items-end">
+      <div class="max-w-3xl">
+        <p class="text-sm font-medium text-cyan-100 font-geist">{{ t("Calculadora") }}</p>
+        <h1 class="mt-4 text-4xl text-white sm:text-5xl tracking-tighter leading-[1.05] font-jakarta font-medium">{{ t("O ajuste que muda de mãos.") }}</h1>
+      </div>
+      <div class="lg:ml-auto lg:max-w-md">
+        <p class="text-base leading-7 text-slate-400 font-geist">
+          {{ t("Índice realizado, não projeção: o CDI vem dia a dia do Banco Central e a variação cambial vem da PTAX publicada. As duas pontas rendem sobre o notional remanescente e só a diferença liquida.") }}
+        </p>
+      </div>
+    </div>
+
+    <form method="post" class="mt-12 grid gap-6 lg:grid-cols-[1.05fr_0.95fr] lg:items-start">
+      <div class="min-w-0 rounded-[2rem] border border-white/[0.09] bg-gradient-to-b from-white/[0.05] to-transparent p-6 backdrop-blur-xl sm:p-8">
+        <div class="mb-6 flex flex-wrap items-center justify-between gap-3 border-b border-white/[0.08] pb-6">
+          {{ botao(t('Calcular a liquidação'), 'solar:calculator-minimalistic-linear') }}
+        </div>
+
+        <p class="text-[11px] font-semibold uppercase tracking-widest text-cyan-200 font-geist">{{ t("A operação") }}</p>
+        <div class="mt-5 grid gap-4 sm:grid-cols-3">
+          <div>
+            <label class="rotulo" for="data_operacao">{{ t("Data da operação") }}</label>
+            <input class="campo" id="data_operacao" name="data_operacao" type="date"
+                   value="{{ form.data_operacao }}" required/>
+          </div>
+          <div>
+            <label class="rotulo" for="inicio">{{ t("Início do fluxo") }}</label>
+            <input class="campo" id="inicio" name="inicio" type="date" value="{{ form.inicio }}" required/>
+          </div>
+          <div>
+            <label class="rotulo" for="fim">{{ t("Fim do fluxo") }}</label>
+            <input class="campo" id="fim" name="fim" type="date" value="{{ form.fim }}"
+                   data-maximo-hoje="{{ hoje }}" required/>
+          </div>
+          <div class="sm:col-span-3">
+            <p class="text-xs leading-5 text-slate-600 font-geist">
+              {{ t("A data da operação conta o prazo do IR; o fluxo é onde os índices acumulam.") }}
+            </p>
+          </div>
+        </div>
+
+        <p class="mt-8 text-[11px] font-semibold uppercase tracking-widest text-cyan-200 font-geist">{{ t("O principal") }}</p>
+        <div class="mt-5 grid gap-4 sm:grid-cols-2">
+          <div>
+            <label class="rotulo" for="nocional">{{ t("Notional remanescente (R$)") }}</label>
+            <input class="campo" id="nocional" name="nocional" value="{{ form.nocional }}"
+                   inputmode="decimal" data-formato="moeda" required/>
+            <p class="mt-2 text-xs leading-5 text-slate-600 font-geist">{{ t("A base que rende — é este valor que multiplica o fator das duas pontas.") }}</p>
+          </div>
+          <div>
+            <label class="rotulo" for="nocional_original">{{ t("Notional original (R$)") }}</label>
+            <input class="campo" id="nocional_original" name="nocional_original"
+                   value="{{ form.nocional_original }}" inputmode="decimal" data-formato="moeda"/>
+            <p class="mt-2 text-xs leading-5 text-slate-600 font-geist">{{ t("O valor de registro, só para calcular a amortização sobre ele.") }}</p>
+          </div>
+          <div>
+            <label class="rotulo" for="amortizacao">{{ t("Amortização no fim do fluxo (%)") }}</label>
+            <input class="campo" id="amortizacao" name="amortizacao" data-formato="percentual"
+                   value="{{ form.amortizacao }}" inputmode="decimal"/>
+          </div>
+          <div>
+            <label class="rotulo" for="base_amortizacao">{{ t("Amortização incide sobre") }}</label>
+            <select class="campo" id="base_amortizacao" name="base_amortizacao">
+              {% for valor, nome in bases_amortizacao %}
+              <option value="{{ valor }}" {{ 'selected' if form.base_amortizacao == valor }}>{{ t(nome) }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+
+        <p class="mt-8 text-[11px] font-semibold uppercase tracking-widest text-cyan-200 font-geist">{{ t("As duas pontas") }}</p>
+        <div class="mt-5 grid gap-4">
+          {{ ponta('ativa', t('Ponta ativa — quem recebe o índice'), 'cyan') }}
+          {{ ponta('passiva', t('Ponta passiva — quem paga o índice'), 'slate') }}
+        </div>
+
+        <div class="mt-6 grid gap-4">
+          <div>
+            <label class="rotulo" for="calendario">{{ t("Calendário") }}</label>
+            <select class="campo" id="calendario" name="calendario">
+              {% for valor, _ in calendarios %}
+              <option value="{{ valor }}" {{ 'selected' if form.calendario == valor }}>{{ valor }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <label class="flex cursor-pointer items-start gap-3 rounded-xl border border-white/[0.08] bg-black/20 px-4 py-3 transition hover:border-white/[0.16]">
+            <input type="checkbox" name="reter_ir" value="1" class="mt-0.5 h-4 w-4 shrink-0 accent-cyan-300"
+                   {{ 'checked' if form.reter_ir }}/>
+            <span>
+              <span class="block text-sm font-medium text-slate-200 font-geist">{{ t("Reter o IR na fonte") }}</span>
+              <span class="mt-1 block text-xs leading-5 text-slate-500 font-geist">
+                {{ t("Tabela regressiva sobre o resultado positivo, pelo prazo contado da data da operação.") }}
+              </span>
+            </span>
+          </label>
+          <label class="flex cursor-pointer items-start gap-3 rounded-xl border border-white/[0.08] bg-black/20 px-4 py-3 transition hover:border-white/[0.16]">
+            <input type="checkbox" name="arredondar_di" value="1" class="mt-0.5 h-4 w-4 shrink-0 accent-cyan-300"
+                   {{ 'checked' if form.arredondar_di }}/>
+            <span>
+              <span class="block text-sm font-medium text-slate-200 font-geist">{{ t("Arredondar o fator diário do DI na 8ª casa") }}</span>
+              <span class="mt-1 block text-xs leading-5 text-slate-500 font-geist">
+                {{ t("Padrão B3/CETIP. Desligado, o fator roda em precisão plena — que é o padrão aqui.") }}
+              </span>
+            </span>
+          </label>
+        </div>
+      </div>
+
+      <div class="min-w-0">
+        {% if erro %}{{ alerta(erro) }}{% endif %}
+
+        {% if resultado %}
+        {% set r = resultado.r %}
+        {% set recebe_ativa = r.quem_recebe == 'ativa' %}
+        <div class="sem-reveal rounded-[2rem] border {{ 'border-emerald-300/25' if recebe_ativa else 'border-rose-400/25' }} bg-gradient-to-b {{ 'from-emerald-400/[0.1]' if recebe_ativa else 'from-rose-500/[0.1]' }} via-white/[0.04] to-transparent p-6 backdrop-blur-xl sm:p-8">
+          <p class="text-[11px] font-semibold uppercase tracking-widest {{ 'text-emerald-200' if recebe_ativa else 'text-rose-200' }} font-geist">
+            {{ t("Ajuste líquido em") }} {{ r.fim | data_br }}
+          </p>
+          <p class="mt-3 text-5xl tracking-tight text-white font-jakarta font-medium tabular-nums">
+            R$ {{ (r.ajuste_liquido if r.ajuste_liquido >= 0 else -r.ajuste_liquido) | moeda(2) }}
+          </p>
+          <p class="mt-3 text-sm leading-6 text-slate-300 font-geist">
+            {% if recebe_ativa %}
+            {{ t("A ponta passiva paga à ponta ativa.") }}
+            {% else %}
+            {{ t("A ponta ativa paga à ponta passiva.") }}
+            {% endif %}
+          </p>
+
+          <div class="mt-7 grid gap-3 sm:grid-cols-2">
+            {{ estatistica(t('Ajuste bruto'), 'R$ ' ~ (r.ajuste_bruto | moeda(2)),
+                           t('diferença de fator de ') ~ ('%.10f' | format(r.diferenca_de_fator) | replace('.', ','))) }}
+            {{ estatistica(t('IR retido'), 'R$ ' ~ (r.ir | moeda(2)),
+                           (t('alíquota ') ~ (r.aliquota_ir | percentual(1)) ~ ' · ' ~ (r.dias_da_operacao | numero) ~ ' ' ~ t('dias de operação')) if r.aliquota_ir else t('sem retenção')) }}
+            {{ estatistica(t('Notional remanescente'), 'R$ ' ~ (r.nocional | moeda(2)),
+                           t('base das duas pontas'), destaque=true) }}
+            {{ estatistica(t('Saldo após a amortização'), 'R$ ' ~ (r.saldo_seguinte | moeda(2)),
+                           (t('amortiza R$ ') ~ (r.valor_amortizado | moeda(2))) if r.valor_amortizado else t('sem amortização neste fluxo')) }}
+          </div>
+        </div>
+
+        <div class="sem-reveal mt-6 grid gap-4 sm:grid-cols-2">
+          {{ resumo_ponta(r.ativa, t('Ponta ativa'), 'cyan') }}
+          {{ resumo_ponta(r.passiva, t('Ponta passiva'), 'slate') }}
+        </div>
+
+        {% if r.valor_amortizado %}
+        <div class="sem-reveal mt-6 rounded-[2rem] border border-white/[0.09] bg-slate-950/40 p-6 backdrop-blur-xl">
+          <p class="text-sm font-medium text-white font-geist">{{ t("O caminho do principal") }}</p>
+          <p class="mt-2 text-sm leading-6 text-slate-400 font-geist">
+            {{ t("A amortização acontece no fim do fluxo: ela não entra no fator deste período, que rendeu sobre o saldo de abertura. Ela define o saldo do fluxo seguinte.") }}
+          </p>
+          <div class="mt-5 rolagem">
+            <table class="tabela-dados">
+              <thead><tr><th>{{ t("Etapa") }}</th><th>{{ t("Base") }}</th><th>{{ t("Valor") }}</th></tr></thead>
+              <tbody>
+                <tr>
+                  <td class="text-white">{{ t("Notional original") }}</td>
+                  <td class="text-slate-500">{{ t("registro") }}</td>
+                  <td class="text-slate-300">R$ {{ r.nocional_original | moeda(2) }}</td>
+                </tr>
+                <tr>
+                  <td class="text-white">{{ t("Notional remanescente") }}</td>
+                  <td class="text-slate-500">{{ t("abertura do fluxo") }}</td>
+                  <td class="text-cyan-100">R$ {{ r.nocional | moeda(2) }}</td>
+                </tr>
+                <tr>
+                  <td class="text-white">{{ t("Amortização") }}</td>
+                  <td class="text-slate-500">
+                    {{ r.percentual_amortizacao | percentual(4) }}
+                    {{ t("sobre o valor original") if r.base_amortizacao == 'original' else t("sobre o saldo remanescente") }}
+                  </td>
+                  <td class="text-slate-300">R$ {{ r.valor_amortizado | moeda(2) }}</td>
+                </tr>
+                <tr>
+                  <td class="text-white">{{ t("Saldo seguinte") }}</td>
+                  <td class="text-slate-500">{{ t("abertura do próximo fluxo") }}</td>
+                  <td class="text-cyan-100">R$ {{ r.saldo_seguinte | moeda(2) }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        {% endif %}
+
+        <div class="sem-reveal mt-6 rounded-[2rem] border border-white/[0.09] bg-slate-950/40 backdrop-blur-xl">
+          <div class="flex flex-wrap items-center justify-between gap-3 border-b border-white/[0.07] px-6 py-4">
+            <div>
+              <p class="text-sm font-medium text-white font-geist">{{ t("O mesmo período em cada contagem") }}</p>
+              <p class="mt-0.5 text-xs text-slate-500 font-geist">
+                {{ r.inicio | data_br }} {{ t("a") }} {{ r.fim | data_br }}
+                · {{ r.dias_corridos | numero }} {{ t("dias corridos") }}
+                · {{ r.dias_uteis | numero }} {{ t("dias úteis") }}
+              </p>
+            </div>
+          </div>
+          <div class="rolagem px-2">
+            <table class="tabela-dados">
+              <thead>
+                <tr><th>{{ t("Convenção") }}</th><th>{{ t("Dias") }}</th><th>{{ t("Base") }}</th><th>τ</th></tr>
+              </thead>
+              <tbody>
+              {% for c in resultado.comparacao %}
+                <tr>
+                  <td class="{{ 'text-cyan-100' if c.codigo in (r.ativa.convencao, r.passiva.convencao) else 'text-white' }}">{{ t(c.nome) }}</td>
+                  <td class="text-slate-300">{{ c.dias | numero }}</td>
+                  <td class="text-slate-500">{{ c.base if c.base else t('ano real') }}</td>
+                  <td class="text-slate-300">{{ '%.6f' | format(c.fracao) | replace('.', ',') }}</td>
+                </tr>
+              {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {% if r.ativa.fixings or r.passiva.fixings %}
+        {% set com_cdi = r.ativa if r.ativa.fixings else r.passiva %}
+        <div class="sem-reveal mt-6 rounded-[2rem] border border-white/[0.09] bg-slate-950/40 backdrop-blur-xl">
+          <div class="flex flex-wrap items-center justify-between gap-3 border-b border-white/[0.07] px-6 py-4">
+            <div>
+              <p class="text-sm font-medium text-white font-geist">{{ t("Acúmulo do CDI, dia a dia") }}</p>
+              <p class="mt-0.5 text-xs text-slate-500 font-geist">
+                {{ t("série 4389 do BCB") }} · {{ com_cdi.fixings | length }} {{ t("dias úteis") }}
+              </p>
+            </div>
+          </div>
+          <div class="rolagem max-h-[24rem] px-2">
+            <table class="tabela-dados">
+              <thead>
+                <tr><th>{{ t("Data") }}</th><th>{{ t("CDI (% a.a.)") }}</th><th>{{ t("Fator do dia") }}</th><th>{{ t("Acumulado") }}</th></tr>
+              </thead>
+              <tbody>
+              {% for d in com_cdi.fixings %}
+                <tr>
+                  <td>{{ d.data | data_br }}</td>
+                  <td class="text-cyan-100">{{ d.taxa | percentual(2) }}</td>
+                  <td class="text-slate-400">{{ '%.10f' | format(d.fator_dia) }}</td>
+                  <td class="text-white">{{ '%.10f' | format(d.fator_acumulado) }}</td>
+                </tr>
+              {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        {% endif %}
+
+        <div class="sem-reveal mt-6 rounded-2xl border border-white/[0.08] bg-black/25 px-5 py-4">
+          <p class="text-xs text-slate-500 font-geist">{{ t("Como a conta é feita") }}</p>
+          <p class="mt-2 text-xs leading-6 text-slate-400 font-geist">
+            {{ t("O principal do swap é nocional: não troca de mãos. Liquida só a diferença entre o valor futuro das duas pontas, e quem tem o resultado negativo paga. O IR segue a tabela regressiva — até 180 dias 22,5% · 181 a 360 dias 20% · 361 a 720 dias 17,5% · acima de 720 dias 15%.") }}
+          </p>
+        </div>
+
+        {% else %}
+        <div class="rounded-[2rem] border border-dashed border-white/[0.12] bg-white/[0.02] p-10 text-center">
+          <div class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-cyan-300/10 text-cyan-200">
+            <iconify-icon height="24" icon="solar:card-transfer-linear" width="24"></iconify-icon>
+          </div>
+          <p class="text-sm text-slate-400 font-geist">{{ t("Informe as datas, o saldo remanescente e o indexador de cada ponta.") }}</p>
+        </div>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/liquidacao.js') }}"></script>
+{% endblock %}

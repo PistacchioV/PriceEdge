@@ -1221,6 +1221,190 @@ TRADUCOES: Dict[str, str] = {
     'Proxy visto por este processo': 'Proxy seen by this process',
     'Nenhuma variável de proxy neste processo': 'No proxy variable in this process',
     'A estação pode ter o proxy configurado e este processo não enxergá-lo: variável definida no perfil de um terminal não chega ao cmd que o .bat abre. Defina antes de subir, ou grave de vez com setx.': "The workstation may have a proxy configured that this process cannot see: a variable set in one terminal's profile never reaches the cmd the .bat opens. Set it before starting, or make it permanent with setx.",
+
+    # ----------------------------------------------------- liquidação de swap
+    "Liquidação": "Settlement",
+    "Liquidação de swap": "Swap settlement",
+    "O ajuste que muda de mãos.": "The payment that changes hands.",
+    "Índice realizado, não projeção: o CDI vem dia a dia do Banco Central e a "
+    "variação cambial vem da PTAX publicada. As duas pontas rendem sobre o notional "
+    "remanescente e só a diferença liquida.":
+        "Realised indices, not forecasts: CDI comes day by day from the central bank "
+        "and the currency move comes from published PTAX. Both legs accrue on the "
+        "outstanding notional and only the difference settles.",
+    "Calcular a liquidação": "Settle",
+    "Informe as datas, o saldo remanescente e o indexador de cada ponta.":
+        "Enter the dates, the outstanding balance and each leg's index.",
+
+    "A operação": "The trade",
+    "Data da operação": "Trade date",
+    "Início do fluxo": "Flow start",
+    "Fim do fluxo": "Flow end",
+    "A data da operação conta o prazo do IR; o fluxo é onde os índices acumulam.":
+        "The trade date sets the withholding-tax horizon; the flow is where the "
+        "indices accrue.",
+
+    "O principal": "The principal",
+    "Notional remanescente (R$)": "Outstanding notional (BRL)",
+    "Notional original (R$)": "Original notional (BRL)",
+    "Notional remanescente": "Outstanding notional",
+    "Notional original": "Original notional",
+    "A base que rende — é este valor que multiplica o fator das duas pontas.":
+        "The base that accrues — this is the figure both legs' factors multiply.",
+    "O valor de registro, só para calcular a amortização sobre ele.":
+        "The registered amount, used only to size the amortisation against it.",
+    "Amortização no fim do fluxo (%)": "Amortisation at flow end (%)",
+    "Amortização incide sobre": "Amortisation applies to",
+    "Sobre o valor original — parcela constante":
+        "The original amount — constant instalment",
+    "Sobre o saldo remanescente — parcela decrescente":
+        "The outstanding balance — declining instalment",
+    "sobre o valor original": "of the original amount",
+    "sobre o saldo remanescente": "of the outstanding balance",
+    "O caminho do principal": "How the principal moves",
+    "A amortização acontece no fim do fluxo: ela não entra no fator deste período, "
+    "que rendeu sobre o saldo de abertura. Ela define o saldo do fluxo seguinte.":
+        "Amortisation happens at flow end: it does not enter this period's factor, "
+        "which accrued on the opening balance. It sets the next flow's balance.",
+    "Etapa": "Stage",
+    "registro": "registered",
+    "abertura do fluxo": "flow opening",
+    "abertura do próximo fluxo": "next flow's opening",
+    "Saldo seguinte": "Next balance",
+    "Saldo após a amortização": "Balance after amortisation",
+    "amortiza R$ ": "amortises BRL ",
+    "sem amortização neste fluxo": "no amortisation in this flow",
+    "base das duas pontas": "base of both legs",
+
+    "As duas pontas": "The two legs",
+    "Ponta ativa — quem recebe o índice": "Receiving leg — receives the index",
+    "Ponta passiva — quem paga o índice": "Paying leg — pays the index",
+    "Taxa contratada ou spread": "Contracted rate or spread",
+    "Pré — taxa fixa ao ano": "Fixed — rate per annum",
+    "CDI — % do CDI realizado": "CDI — % of realised CDI",
+    "CDI + spread realizado": "Realised CDI + spread",
+    "Variação cambial + cupom": "Currency move + coupon",
+    "SOFR composto realizado + spread": "Realised compounded SOFR + spread",
+    "Term SOFR do fixing + spread": "Term SOFR fixing + spread",
+    "EURIBOR do fixing + spread": "EURIBOR fixing + spread",
+    "IPCA por número-índice + cupom real": "IPCA by index number + real coupon",
+    "Equity — ação ou índice, por variação de preço":
+        "Equity — a stock or index, by price move",
+    "Fator acumulado digitado": "Accrued factor, typed in",
+    "O fator que veio na confirmação, sem recalcular nada.":
+        "The factor as it came on the confirmation, with nothing recalculated.",
+
+    "Moeda do fluxo": "Flow currency",
+    "Fixing inicial da moeda": "Opening currency fixing",
+    "Fixing final da moeda": "Closing currency fixing",
+    "PTAX, busca sozinha": "PTAX, fetched automatically",
+    "Em branco, os dois vêm da PTAX de fechamento do dia útil anterior a cada data. "
+    "Em reais, não há conversão.":
+        "Left blank, both come from the closing PTAX of the business day before each "
+        "date. In reais there is no conversion.",
+    "Real — fluxo já em reais, sem conversão":
+        "Real — flow already in reais, no conversion",
+    "Dólar dos Estados Unidos": "US dollar",
+    "Libra esterlina": "Pound sterling",
+    "Franco suíço": "Swiss franc",
+
+    "Prazo do fixing": "Fixing tenor",
+    "Data do fixing": "Fixing date",
+    "Taxa do fixing (% a.a.)": "Fixing rate (% p.a.)",
+    "Taxa a termo: fixada antes de o fluxo começar. Em branco, a data do fixing é "
+    "D-2 dias úteis do início.":
+        "A forward-looking rate, set before the flow starts. Left blank, the fixing "
+        "date is two business days before the start.",
+    "O Term SOFR é administrado pela CME e licenciado — não há fonte pública que "
+    "permita redistribuí-lo, então a taxa do fixing entra digitada.":
+        "Term SOFR is administered by CME and licensed — no public source allows "
+        "redistributing it, so the fixing rate is typed in.",
+    "Lookback (dias úteis)": "Lookback (business days)",
+    "Observation shift (dias úteis)": "Observation shift (business days)",
+    "O SOFR composto olha para trás: ele acumula os fixings do próprio período, sem "
+    "data de fixação.":
+        "Compounded SOFR looks backwards: it accrues the period's own fixings, with "
+        "no fixing date.",
+
+    "Número-índice inicial": "Opening index number",
+    "Número-índice final": "Closing index number",
+    "Ação ou índice": "Stock or index",
+    "Preço inicial": "Opening price",
+    "Preço final": "Closing price",
+    "Preço": "Price",
+    "A ponta rende a variação de preço no período. Índice estrangeiro rende na moeda "
+    "dele e converte pelo fixing acima.":
+        "The leg earns the price move over the period. A foreign index accrues in its "
+        "own currency and converts at the fixing above.",
+
+    "Contagem de dias": "Day count",
+    "Capitalização": "Compounding",
+    "Composto — (1 + i) ^ τ": "Compound — (1 + i) ^ τ",
+    "Simples — 1 + i · τ": "Simple — 1 + i · τ",
+    "DU/252 — dias úteis": "BD/252 — business days",
+    "ACT/360 — dias corridos": "ACT/360 — calendar days",
+    "ACT/365 — dias corridos": "ACT/365 — calendar days",
+    "30/360 — bond basis": "30/360 — bond basis",
+    "30E/360 — eurobond": "30E/360 — eurobond",
+    "ACT/ACT — ISDA": "ACT/ACT — ISDA",
+    "O mesmo período em cada contagem": "The same period under each day count",
+    "Convenção": "Convention",
+    "Contagem": "Day count",
+    "Dias": "Days",
+    "Base": "Base",
+    "ano real": "actual year",
+
+    "Ajuste líquido em": "Net payment on",
+    "Ajuste bruto": "Gross payment",
+    "A ponta passiva paga à ponta ativa.": "The paying leg pays the receiving leg.",
+    "A ponta ativa paga à ponta passiva.": "The receiving leg pays the paying leg.",
+    "diferença de fator de ": "factor difference of ",
+    "IR retido": "Tax withheld",
+    "sem retenção": "nothing withheld",
+    "dias de operação": "days since the trade",
+    "Reter o IR na fonte": "Withhold tax at source",
+    "Tabela regressiva sobre o resultado positivo, pelo prazo contado da data da "
+    "operação.":
+        "The regressive table on a positive result, over the horizon counted from the "
+        "trade date.",
+    "Juros do período": "Interest for the period",
+    "Fixing": "Fixing",
+    "Fixing de": "Fixing for",
+    "Índice · câmbio": "Index · currency",
+    "em": "on",
+    "Como a conta é feita": "How the number is built",
+    "O principal do swap é nocional: não troca de mãos. Liquida só a diferença entre "
+    "o valor futuro das duas pontas, e quem tem o resultado negativo paga. O IR segue "
+    "a tabela regressiva — até 180 dias 22,5% · 181 a 360 dias 20% · 361 a 720 dias "
+    "17,5% · acima de 720 dias 15%.":
+        "A swap's principal is notional: it never changes hands. Only the difference "
+        "between the two legs' future values settles, and whoever ends up negative "
+        "pays. Withholding follows the regressive table — up to 180 days 22.5% · 181 "
+        "to 360 days 20% · 361 to 720 days 17.5% · beyond 720 days 15%.",
+    "O produto diário do CDI é sempre 252 — a contagem escolhida capitaliza o spread.":
+        "The CDI daily product is always 252 — the chosen day count compounds the spread.",
+    "14 para 14% a.a. · 100 para 100% do CDI · 2 para CDI+2% · 3,25 para um cupom de "
+    "3,25%":
+        "14 for 14% p.a. · 100 for 100% of CDI · 2 for CDI+2% · 3.25 for a 3.25% coupon",
+
+    # moldes de descrição de cada ponta
+    "{taxa}% a.a. sobre τ = {tau}": "{taxa}% p.a. over τ = {tau}",
+    "{taxa}% do CDI em {du} dias úteis publicados":
+        "{taxa}% of CDI over {du} published business days",
+    "CDI + {taxa}% em {du} dias úteis publicados":
+        "CDI + {taxa}% over {du} published business days",
+    "variação de {variacao}% mais cupom de {taxa}% sobre τ = {tau}":
+        "a {variacao}% currency move plus a {taxa}% coupon over τ = {tau}",
+    "SOFR composto de {sofr}% mais spread de {taxa}% em {dc} dias corridos":
+        "compounded SOFR of {sofr}% plus a {taxa}% spread over {dc} calendar days",
+    "{nome} {tenor} de {indice}% mais spread de {taxa}%, fixado em {quando}":
+        "{nome} {tenor} at {indice}% plus a {taxa}% spread, fixed on {quando}",
+    "correção de {correcao}% mais cupom real de {taxa}% a.a.":
+        "a {correcao}% inflation adjustment plus a {taxa}% p.a. real coupon",
+    "{ativo} variou {retorno}% mais spread de {taxa}%":
+        "{ativo} moved {retorno}% plus a {taxa}% spread",
+    "fator digitado": "factor typed in",
+
 }
 
 

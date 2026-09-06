@@ -660,6 +660,40 @@ FORMULARIOS = {
                        quantidade="4", calendario="ANBIMA"),
     "/ni-pro-rata": dict(ni_anterior="7.545,53", projecao="0,68",
                          data="2026-04-13", vne="1.000,00", ni_partida="7.545,53"),
+    "/liquidacao": dict(data_operacao="2025-09-08", inicio="2025-09-08",
+                       fim="2026-09-04", nocional="50.000.000,00",
+                       nocional_original="100.000.000,00", amortizacao="10",
+                       base_amortizacao="original", calendario="ANBIMA",
+                       reter_ir="1", ativa_indexador="pre", ativa_taxa="14",
+                       ativa_convencao="du_252", ativa_regime="composto",
+                       ativa_moeda="BRL", ativa_tenor="3 month",
+                       ativa_lookback="0", ativa_shift="0",
+                       passiva_indexador="cdi_percentual", passiva_taxa="100",
+                       passiva_convencao="du_252", passiva_regime="composto",
+                       passiva_moeda="BRL", passiva_tenor="3 month",
+                       passiva_lookback="0", passiva_shift="0"),
+    "/liquidacao-equity": dict(data_operacao="2025-09-08", inicio="2025-09-08",
+                       fim="2026-09-04", nocional="20.000.000,00",
+                       calendario="ANBIMA", reter_ir="1",
+                       ativa_indexador="equity", ativa_ativo="S&P 500",
+                       ativa_preco_inicial="6400", ativa_preco_final="6980",
+                       ativa_taxa="0", ativa_moeda="USD",
+                       ativa_ptax_inicial="5,40", ativa_ptax_final="5,32",
+                       ativa_convencao="act_360", ativa_regime="simples",
+                       passiva_indexador="pre", passiva_taxa="14",
+                       passiva_convencao="du_252", passiva_regime="composto",
+                       passiva_moeda="BRL"),
+    "/liquidacao-term-sofr": dict(data_operacao="2025-09-08", inicio="2025-09-08",
+                       fim="2026-09-04", nocional="30.000.000,00",
+                       calendario="ANBIMA", reter_ir="1",
+                       ativa_indexador="term_sofr", ativa_taxa_indice="4,32",
+                       ativa_taxa="1,5", ativa_tenor="12 month",
+                       ativa_moeda="USD", ativa_ptax_inicial="5,40",
+                       ativa_ptax_final="5,32", ativa_convencao="act_360",
+                       ativa_regime="simples",
+                       passiva_indexador="cdi_spread", passiva_taxa="2",
+                       passiva_convencao="du_252", passiva_regime="composto",
+                       passiva_moeda="BRL"),
     "/interpolar": dict(x="1\n365\n1826", y="14\n13,5\n13,8", alvos="180, 900",
                         metodo="spline", extrapolar="flat"),
 }
@@ -667,7 +701,7 @@ FORMULARIOS = {
 # as chaves acima carregam um sufixo para poder repetir a mesma rota com outros
 # dados; a rota de verdade é o que vem antes do primeiro traço depois de "/ndf"
 def _rota_do_formulario(chave: str) -> str:
-    for base in ("/ndf", "/sofr"):
+    for base in ("/ndf", "/sofr", "/liquidacao"):
         if chave.startswith(base + "-"):
             return base
     return chave
@@ -676,7 +710,8 @@ def _rota_do_formulario(chave: str) -> str:
 def _exercitar_aplicacao(app):
     """Passa por todas as telas e pelos formulários, para o audit ver tudo."""
     gets = ["/", "/curvas", "/precificar", "/ndf", "/sofr", "/term-sofr", "/euribor",
-            "/renda-fixa", "/interpolar", "/ni-pro-rata", "/metodologia"]
+            "/renda-fixa", "/liquidacao", "/interpolar", "/ni-pro-rata",
+            "/metodologia"]
     for rota in gets:
         app.test_client().get(rota + "?idioma=en")
 
@@ -766,7 +801,8 @@ def test_nenhum_texto_em_portugues_sobra_na_tela_em_ingles():
 
     paginas = ["/", "/curvas?curva=DOC&extrair=1", "/curvas?curva=PTX&extrair=1",
                "/precificar", "/ndf", "/sofr", "/term-sofr", "/euribor",
-               "/renda-fixa", "/interpolar", "/ni-pro-rata", "/metodologia"]
+               "/renda-fixa", "/liquidacao", "/interpolar", "/ni-pro-rata",
+            "/metodologia"]
     def varrer(rotulo, html):
         for texto in _texto_visivel(html):
             achados = {p.lower() for p in _MARCADORES_PT.findall(texto)}
@@ -998,7 +1034,14 @@ def test_escada_pula_o_mes_corrente_quando_a_base_ja_o_alcancou():
 # ------------------------------------------- falha de fonte nao vira 500 ----
 
 def test_toda_excecao_de_fonte_herda_da_base():
-    """Uma fonte nova so entra no sistema se a tela souber trata-la."""
+    """Uma fonte nova so entra no sistema se a tela souber trata-la.
+
+    A garantia e que nenhuma excecao do pacote escape do ``except`` das rotas.
+    Elas capturam ``(ErroFormulario, ErroDeFonte, ValueError)``, entao ha dois
+    jeitos legitimos de estar coberto: herdar de ``ErroDeFonte``, para falha de
+    fonte externa, ou de ``ValueError``, para dado de entrada que nao fecha.
+    O que nao pode e uma terceira via — dai o teste.
+    """
     import pkgutil, importlib, inspect
     import precificador
     from precificador.erros import ErroDeFonte
@@ -1010,10 +1053,10 @@ def test_toda_excecao_de_fonte_herda_da_base():
             if (inspect.isclass(classe) and classe.__module__ == modulo.__name__
                     and issubclass(classe, Exception) and nome.startswith("Erro")
                     and classe is not ErroDeFonte
-                    and not issubclass(classe, ErroDeFonte)):
+                    and not issubclass(classe, (ErroDeFonte, ValueError))):
                 fora.append(f"{modulo.__name__}.{nome}")
-    assert not fora, ("estas excecoes de fonte nao herdam de ErroDeFonte, entao "
-                      f"escapam do except das telas: {fora}")
+    assert not fora, ("estas excecoes nao herdam de ErroDeFonte nem de ValueError, "
+                      f"entao escapam do except das telas: {fora}")
 
 
 def test_rede_fora_do_ar_nao_derruba_nenhuma_tela():
@@ -1058,3 +1101,236 @@ def test_timeout_de_saida_explica_o_proxy():
     assert "proxy" in pista.lower() and "PRECIFICADOR_PROXY" in pista
     # erro de verdade do servidor não ganha a pista
     assert rede._pista_de_proxy(OSError("HTTP 404")) == ""
+
+
+# ----------------------------------------------- contagem de dias e liquidação
+
+def test_cada_convencao_conta_o_seu_proprio_numero_de_dias():
+    """O mesmo período tem uma contagem diferente em cada convenção.
+
+    É o motivo de a contagem ser campo de tela e não constante de código: quem
+    liquida um swap contra uma confirmação de fora precisa reproduzir a régua da
+    contraparte, não a nossa.
+    """
+    from precificador import contagem
+    inicio, fim = date(2026, 1, 31), date(2026, 7, 31)
+    cal = calendario_anbima()
+
+    assert contagem.dias(contagem.ACT_360, inicio, fim) == 181
+    assert contagem.dias(contagem.ACT_365, inicio, fim) == 181
+    # na régua de 30 dias, seis meses são exatamente 180
+    assert contagem.dias(contagem.T30_360, inicio, fim) == 180
+    assert contagem.dias(contagem.T30E_360, inicio, fim) == 180
+    assert contagem.dias(contagem.DU_252, inicio, fim, cal) < 181
+
+    # e o τ segue o denominador de cada uma
+    assert contagem.fracao(contagem.ACT_360, inicio, fim) == 181 / 360
+    assert contagem.fracao(contagem.ACT_365, inicio, fim) == 181 / 365
+    assert contagem.fracao(contagem.T30_360, inicio, fim) == 0.5
+
+
+def test_30_360_e_30e_360_so_diferem_no_dia_final():
+    """A única diferença entre as duas: quem trunca o dia 31 do fim."""
+    from precificador import contagem
+    # 30/360 não baixa o dia final porque o inicial (30) não veio de um 31
+    assert contagem.dias(contagem.T30_360, date(2026, 2, 28), date(2026, 8, 31)) == 183
+    assert contagem.dias(contagem.T30E_360, date(2026, 2, 28), date(2026, 8, 31)) == 182
+
+
+def test_act_act_divide_cada_trecho_pelo_ano_dele():
+    """Um ano cheio é 1,0 mesmo atravessando um bissexto."""
+    from precificador import contagem
+    assert contagem.fracao(contagem.ACT_ACT, date(2024, 1, 1), date(2025, 1, 1)) == 1.0
+    assert contagem.fracao(contagem.ACT_ACT, date(2026, 1, 1), date(2027, 1, 1)) == 1.0
+    # um ano que atravessa um bissexto passa um pouco de 1,0: 184 dias sobre 365
+    # em 2023 mais 182 sobre 366 em 2024. É a convenção funcionando, não erro.
+    meio = contagem.fracao(contagem.ACT_ACT, date(2023, 7, 1), date(2024, 7, 1))
+    assert abs(meio - (184 / 365 + 182 / 366)) < 1e-12
+    assert 1.0 < meio < 1.002
+
+
+def test_regime_simples_e_composto_dao_numeros_diferentes():
+    from precificador import contagem
+    inicio, fim = date(2026, 1, 2), date(2027, 1, 2)
+    simples = contagem.fator(0.10, contagem.ACT_360, contagem.SIMPLES, inicio, fim)
+    composto = contagem.fator(0.10, contagem.ACT_360, contagem.COMPOSTO, inicio, fim)
+    # num ano civil ACT/360 dá τ = 365/360 > 1, e aí o composto passa o simples:
+    # ele capitaliza o próprio juro na fração de ano que sobra
+    assert composto > simples
+    assert abs(simples - (1 + 0.10 * 365 / 360)) < 1e-12
+    assert abs(composto - 1.10 ** (365 / 360)) < 1e-12
+
+
+def test_liquidacao_aplica_o_saldo_remanescente_e_nao_o_original():
+    """A base das duas pontas é o que sobrou, não o valor de registro.
+
+    Este é o erro que o módulo existe para não deixar acontecer: num swap já
+    amortizado pela metade, usar o notional de registro dobra o ajuste.
+    """
+    from precificador import liquidacao as L
+    comum = dict(data_operacao="2025-09-08", inicio="2025-09-08", fim="2026-09-04",
+                 ponta_ativa=L.Ponta(L.PRE, 0.14),
+                 ponta_passiva=L.Ponta(L.FATOR, fator_manual=1.10),
+                 reter_ir=False)
+    metade = L.liquidar(nocional=50e6, nocional_original=100e6, **comum)
+    inteiro = L.liquidar(nocional=100e6, nocional_original=100e6, **comum)
+    assert abs(inteiro.ajuste_bruto - 2 * metade.ajuste_bruto) < 1e-6
+    assert metade.nocional == 50e6
+
+
+def test_amortizacao_muda_de_valor_conforme_a_base():
+    """Os mesmos 10% valem coisas diferentes sobre original e sobre remanescente."""
+    from precificador import liquidacao as L
+    assert L.amortizar(100e6, 60e6, 0.10, L.SOBRE_ORIGINAL) == 10e6
+    assert L.amortizar(100e6, 60e6, 0.10, L.SOBRE_REMANESCENTE) == 6e6
+    # e nunca amortiza mais do que existe de saldo
+    assert L.amortizar(100e6, 5e6, 0.10, L.SOBRE_ORIGINAL) == 5e6
+
+
+def test_amortizacao_nao_entra_no_fator_do_proprio_fluxo():
+    """Ela define o saldo do fluxo seguinte, não a base deste."""
+    from precificador import liquidacao as L
+    comum = dict(data_operacao="2025-09-08", inicio="2025-09-08", fim="2026-09-04",
+                 nocional=50e6, nocional_original=100e6, reter_ir=False,
+                 ponta_ativa=L.Ponta(L.PRE, 0.14),
+                 ponta_passiva=L.Ponta(L.FATOR, fator_manual=1.10))
+    sem = L.liquidar(percentual_amortizacao=0.0, **comum)
+    com = L.liquidar(percentual_amortizacao=0.10, **comum)
+    assert sem.ajuste_bruto == com.ajuste_bruto
+    assert com.saldo_seguinte == 40e6 and sem.saldo_seguinte == 50e6
+
+
+def test_ponta_em_moeda_separa_o_indice_do_cambio():
+    """As duas metades do fator ficam guardadas separadas.
+
+    Um equity estrangeiro que sobe 9% com o dólar caindo 1,5% não rendeu 9% em
+    reais, e o resultado tem que deixar ver qual das duas explicou o número.
+    """
+    from precificador import liquidacao as L
+    r = L.liquidar("2025-09-08", "2025-09-08", "2026-09-04", 20e6,
+                   L.Ponta(L.EQUITY, ativo="S&P 500", preco_inicial=6400,
+                           preco_final=6980, moeda="USD",
+                           ptax_inicial=5.40, ptax_final=5.32),
+                   L.Ponta(L.PRE, 0.14), reter_ir=False)
+    a = r.ativa
+    assert abs(a.fator_do_indice - 6980 / 6400) < 1e-12
+    assert abs(a.fator_cambial - 5.32 / 5.40) < 1e-12
+    assert abs(a.fator - a.fator_do_indice * a.fator_cambial) < 1e-12
+
+
+def test_fluxo_em_reais_nao_converte():
+    from precificador import liquidacao as L
+    r = L.liquidar("2025-09-08", "2025-09-08", "2026-09-04", 10e6,
+                   L.Ponta(L.EQUITY, ativo="IBOV", preco_inicial=140000,
+                           preco_final=152000, moeda=L.SEM_CONVERSAO),
+                   L.Ponta(L.PRE, 0.14), reter_ir=False)
+    assert r.ativa.fator_cambial == 1.0
+    assert abs(r.ativa.fator - 152000 / 140000) < 1e-12
+
+
+def test_fixing_de_taxa_a_termo_cai_em_d_menos_2_uteis():
+    """EURIBOR e Term SOFR são fixados antes de o fluxo começar."""
+    from precificador import liquidacao as L
+    cal = calendario_anbima()
+    # 2026-09-04 é uma sexta-feira; D-2 úteis é a quarta anterior
+    assert L.data_de_fixing(date(2026, 9, 4), cal) == date(2026, 9, 2)
+    r = L.liquidar("2025-09-08", "2025-09-08", "2026-09-04", 10e6,
+                   L.Ponta(L.TERM_SOFR, taxa=0.015, taxa_indice=0.0432,
+                           moeda=L.SEM_CONVERSAO),
+                   L.Ponta(L.PRE, 0.14), reter_ir=False)
+    assert r.ativa.data_fixing == L.data_de_fixing(date(2025, 9, 8), cal)
+
+
+def test_term_sofr_sem_taxa_digitada_explica_a_licenca():
+    """A taxa da CME não pode ser redistribuída — o erro tem que dizer isso."""
+    from precificador import liquidacao as L
+    with pytest.raises(L.ErroLiquidacao) as exc:
+        L.liquidar("2025-09-08", "2025-09-08", "2026-09-04", 10e6,
+                   L.Ponta(L.TERM_SOFR, taxa=0.015), L.Ponta(L.PRE, 0.14))
+    assert "licenciado" in str(exc.value)
+
+
+def test_liquidacao_recusa_indice_realizado_no_futuro():
+    """CDI e PTAX são o que aconteceu; não há fixing de amanhã."""
+    from precificador import liquidacao as L
+    amanha = date.today() + __import__("datetime").timedelta(days=30)
+    with pytest.raises(L.ErroLiquidacao) as exc:
+        L.liquidar("2025-01-02", "2025-01-02", amanha, 10e6,
+                   L.Ponta(L.CDI_PERCENTUAL, 1.0), L.Ponta(L.PRE, 0.14))
+    assert "realizado" in str(exc.value)
+
+
+def test_ir_sai_da_tabela_regressiva_contada_da_operacao():
+    """O prazo do IR conta da contratação, não do início do fluxo."""
+    from precificador import liquidacao as L
+    ativa, passiva = L.Ponta(L.PRE, 0.20), L.Ponta(L.FATOR, fator_manual=1.0)
+    # 2 anos e meio de operação: 15%
+    longo = L.liquidar("2024-01-02", "2026-01-02", "2026-09-04", 10e6, ativa, passiva)
+    assert longo.aliquota_ir == 0.15
+    # o mesmo fluxo, contratado junto: 8 meses, 20%
+    curto = L.liquidar("2026-01-02", "2026-01-02", "2026-09-04", 10e6, ativa, passiva)
+    assert curto.aliquota_ir == 0.20
+    assert abs(curto.ajuste_liquido - curto.ajuste_bruto * 0.80) < 1e-6
+
+
+def test_resultado_negativo_nao_retem_ir():
+    """Não se retém imposto sobre prejuízo."""
+    from precificador import liquidacao as L
+    r = L.liquidar("2026-01-02", "2026-01-02", "2026-09-04", 10e6,
+                   L.Ponta(L.FATOR, fator_manual=1.0), L.Ponta(L.PRE, 0.20))
+    assert r.ajuste_bruto < 0 and r.ir == 0.0 and r.quem_recebe == L.PASSIVA
+
+
+def test_nenhum_select_da_aplicacao_chega_vazio_a_tela():
+    """Um ``<select>`` sem opção é uma variável de contexto que faltou.
+
+    O Jinja itera um nome indefinido em silêncio: o ``for`` não roda, o select
+    sai vazio e a página continua devolvendo 200. Foi assim que o campo de
+    calendário da tela de liquidação chegou à tela sem nenhuma opção — nada no
+    log, nada no teste de rota, só um campo em branco. Este teste varre o HTML
+    de cada tela e falha no select que não tem nem uma ``<option>``.
+    """
+    from webapp import create_app
+    app = create_app()
+    vazios = []
+
+    def varrer(rotulo, html):
+        for atributos, miolo in re.findall(r"<select([^>]*)>(.*?)</select>", html, re.S):
+            if "<option" not in miolo:
+                nome = re.search(r'name="([^"]+)"', atributos)
+                vazios.append(f"{rotulo}: {nome.group(1) if nome else atributos.strip()}")
+
+    paginas = ["/", "/curvas", "/precificar", "/ndf", "/sofr", "/term-sofr",
+               "/euribor", "/renda-fixa", "/liquidacao", "/interpolar",
+               "/ni-pro-rata", "/metodologia"]
+    for rota in paginas:
+        varrer(rota, app.test_client().get(rota).data.decode())
+    for chave, dados in FORMULARIOS.items():
+        rota = _rota_do_formulario(chave)
+        varrer(chave, app.test_client().post(rota, data=dados).data.decode())
+
+    assert not vazios, ("estes select chegaram à tela sem nenhuma opção — falta a "
+                        f"variável no contexto da rota: {vazios}")
+
+
+def test_sofr_composto_acumula_os_fixings_do_proprio_periodo():
+    """A ponta de SOFR composto olha para trás — sem data de fixação.
+
+    Ela é o contraponto do Term SOFR: uma acumula o que aconteceu dia a dia, a
+    outra usa uma taxa fixada antes de o período começar. O fator da primeira
+    tem que sair do produto dos fixings, e não de uma taxa só.
+    """
+    from precificador import liquidacao as L
+    r = L.liquidar("2025-09-08", "2025-09-08", "2026-09-04", 30e6,
+                   L.Ponta(L.SOFR, taxa=0.015, moeda=L.SEM_CONVERSAO,
+                           convencao="act_360", regime="simples"),
+                   L.Ponta(L.PRE, 0.14), reter_ir=False)
+    a = r.ativa
+    assert len(a.fixings) > 200                 # um fixing por dia útil do ano
+    assert 0.02 < a.taxa_do_fixing < 0.08       # SOFR realizado, não uma taxa digitada
+    # ``taxa_do_fixing`` é o SOFR composto **anualizado**: para virar fator ele
+    # volta a passar pela mesma ACT/360 de onde saiu. Depois entra o spread.
+    composto = 1 + a.taxa_do_fixing * a.dias_corridos / 360
+    esperado = composto * (1 + 0.015 * a.dias_corridos / 360)
+    assert abs(a.fator_do_indice - esperado) < 1e-9
+    assert a.data_fixing is None                # não há data de fixação aqui

@@ -13,8 +13,9 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import Dict, List, Optional, Tuple
 
-from precificador import b3
-from precificador.calendario import calendario_anbima, para_data, terceira_quarta
+from precificador import b3, contagem
+from precificador.calendario import (calendario_anbima, obter_calendario,
+                                     para_data, terceira_quarta)
 from precificador.curvas import EXP252, PRECO, Curva, CurvaTermSOFR, Vertice
 from precificador.calendario import FOLLOWING
 from precificador.instrumentos import BULLET, PERSONALIZADA
@@ -464,3 +465,22 @@ def spot_da_curva(moeda, data):
     except (b3.ErroB3, KeyError):
         return None
     return c.vertices[0].taxa if c.vertices else None
+
+
+def contagens_lado_a_lado(inicio, fim, calendario: str = "ANBIMA") -> list:
+    """Cada convenção de contagem no mesmo período, para comparar.
+
+    O número de dias e o τ mudam de convenção para convenção, e a diferença é
+    invisível quando só se olha uma. Lado a lado ela aparece: os mesmos seis
+    meses valem 0,4881 de ano em DU/252 e 0,5028 em ACT/360.
+    """
+    cal = obter_calendario(calendario)
+    linhas = []
+    for codigo, nome, _ in contagem.CONVENCOES:
+        linhas.append({
+            "codigo": codigo, "nome": nome,
+            "dias": contagem.dias(codigo, inicio, fim, cal),
+            "base": contagem.base(codigo),
+            "fracao": contagem.fracao(codigo, inicio, fim, cal),
+        })
+    return linhas
