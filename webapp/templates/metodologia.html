@@ -1,0 +1,211 @@
+{% extends "base.html" %}
+{% block titulo %}Metodologia{% endblock %}
+
+{% block conteudo %}
+<section class="sm:px-6 lg:px-8 pt-16 pr-5 pb-16 pl-5">
+  <div class="w-full max-w-[1600px] mr-auto ml-auto">
+    <div class="reveal grid gap-8 lg:grid-cols-[1fr_0.72fr] lg:items-end">
+      <div class="max-w-3xl">
+        <p class="text-sm font-medium text-cyan-100 font-geist">{{ t("Referência") }}</p>
+        <h1 class="mt-4 text-4xl text-white sm:text-5xl tracking-tighter leading-[1.05] font-jakarta font-medium">{{ t("Convenções, fontes e critérios de cálculo.") }}</h1>
+      </div>
+      <div class="lg:ml-auto lg:max-w-md">
+        <p class="text-base leading-7 text-slate-400 font-geist">
+          {{ t("Tudo que a ferramenta decide por você está listado aqui, com o motivo de cada escolha.") }}
+        </p>
+      </div>
+    </div>
+
+    <!-- convenções -->
+    <div class="mt-14 grid gap-4 lg:grid-cols-3">
+      {% set convencoes = [
+        ('Juros em reais', 'exponencial 252', '(1 + i) ^ (DU / 252)', 'DI, IPCA e TR. DU pelo calendário ANBIMA, contando NETWORKDAYS − 1.'),
+        ('Juros em dólar', 'linear 360', '1 + i · DC / 360', 'Cupom cambial, pré USD e Term SOFR. DC é dia de calendário puro.'),
+        ('Spread sobre CDI', 'multiplicativo', '(1+CDI) · (1+spread) = (1+pré)', 'Somar o spread ao CDI é erro.'),
+        ('Spread sobre SOFR', 'aditivo', 'SOFR + spread', 'Praxe do mercado de dólar. Diferente do CDI de propósito.'),
+        ('Interpolação', 'spline cúbica natural', 'segunda derivada = 0 nas pontas', 'Cupom cambial usa linear, como a B3 publica.'),
+        ('Eixo da curva', 'dias corridos', 'taxa = f(dias corridos)', 'O desconto, porém, é em dias úteis. São eixos diferentes de propósito.'),
+      ] %}
+      {% for titulo, subtitulo, formula, texto in convencoes %}
+      <div class="rounded-[1.5rem] border border-white/[0.08] bg-white/[0.02] p-6">
+        <p class="text-[11px] font-semibold uppercase tracking-widest text-cyan-200 font-geist">{{ t(titulo) }}</p>
+        <h3 class="mt-3 text-[20px] tracking-tight text-white font-jakarta font-medium">{{ t(subtitulo) }}</h3>
+        <p class="mt-4 rounded-xl border border-white/[0.06] bg-black/25 px-3 py-2 font-mono text-xs text-cyan-100">{{ t(formula) }}</p>
+        <p class="mt-4 text-sm leading-6 text-slate-400 font-geist">{{ t(texto) }}</p>
+      </div>
+      {% endfor %}
+    </div>
+
+    <!-- decisões do porte -->
+    <div class="mt-20">
+      <p class="text-sm font-medium text-slate-400 font-geist">{{ t("01 · Critérios de cálculo") }}</p>
+      <h2 class="mt-4 max-w-3xl text-3xl leading-[1.15] tracking-tight text-white sm:text-4xl font-jakarta font-medium">{{ t("Três escolhas de cálculo que valem explicação.") }}</h2>
+
+      <div class="mt-10 space-y-4">
+        {% set decisoes = [
+          ('A curva é interpolada em dias corridos',
+           'O eixo publicado pela B3 vai até 12.556 — são dias corridos. Consultar essa curva num valor de dias úteis (126 em vez de 183) devolve a taxa de um prazo mais curto, e a diferença chega a 15 bp no vértice de seis meses. Por isso o eixo é explícito em Curva.eixo e taxa_para(dc, du) escolhe o certo sozinha.'),
+          ('Fora do domínio, a curva trava na ponta',
+           'Prolongar o polinômio cúbico além do último vértice pode devolver qualquer coisa. O padrão aqui é travar no último valor publicado; a extrapolação cúbica e a tangente continuam disponíveis na tela de interpolação, para conferir contra outra fonte.'),
+          ('O endpoint GetReferenceRates saiu',
+           'O endereço referenceRatesProxy/api/pt-br/GetReferenceRates/ responde 404 hoje. Só o GetDownloadFile, do link “Histórico de arquivos”, continua de pé — e é o único usado aqui. O Search/GetList também foi descartado: ignora o parâmetro de data e devolve sempre a curva mais recente, disfarçada de histórico.'),
+        ] %}
+        {% for titulo, texto in decisoes %}
+        <div class="rounded-[1.5rem] border border-white/[0.08] bg-gradient-to-b from-white/[0.04] to-transparent p-6 sm:p-7">
+          <div class="flex gap-4">
+            <span class="mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-400/10 text-amber-300">
+              <iconify-icon height="14" icon="solar:info-circle-linear" width="14"></iconify-icon>
+            </span>
+            <div>
+              <h3 class="text-[19px] tracking-tight text-white font-jakarta font-medium">{{ t(titulo) }}</h3>
+              <p class="mt-3 text-[15px] leading-7 text-slate-400 font-geist">{{ t(texto) }}</p>
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- curvas -->
+    <div class="mt-20">
+      <p class="text-sm font-medium text-slate-400 font-geist">{{ t("02 · Curvas disponíveis") }}</p>
+      <h2 class="mt-4 max-w-3xl text-3xl leading-[1.15] tracking-tight text-white sm:text-4xl font-jakarta font-medium">{{ t("Sete curvas, com o código que a B3 usa no arquivo.") }}</h2>
+      <div class="mt-10 rounded-[2rem] border border-white/[0.09] bg-slate-950/40 backdrop-blur-xl">
+        <div class="rolagem px-2">
+          <table class="tabela-dados">
+            <thead><tr><th>{{ t("Nome") }}</th><th>{{ t("Código") }}</th><th>{{ t("Convenção") }}</th><th>{{ t("Uso") }}</th></tr></thead>
+            <tbody>
+            {% for cod, nome, conv, descricao in curvas %}
+              <tr>
+                <td class="text-white">{{ t(nome) }}</td>
+                <td class="text-cyan-100">{{ cod }}</td>
+                <td class="text-slate-500">{{ t('exponencial 252') if conv == 'EXP252' else (t('linear 360') if conv == 'LIN360' else t('Preço a termo')) }}</td>
+                <td class="text-slate-400" style="text-align:left">{{ t(descricao) }}</td>
+              </tr>
+            {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- fontes -->
+    <div class="mt-20" id="fontes">
+      <p class="text-sm font-medium text-slate-400 font-geist">{{ t("03 · Fontes de dados") }}</p>
+      <h2 class="mt-4 max-w-3xl text-3xl leading-[1.15] tracking-tight text-white sm:text-4xl font-jakarta font-medium">{{ t("Onde cada número nasce.") }}</h2>
+      <p class="mt-5 max-w-2xl text-[15px] leading-7 text-slate-400 font-geist">
+        {{ t("As marcadas como automáticas a ferramenta busca sozinha. O resto entra digitado — e é aí que compensa conferir na fonte.") }}
+      </p>
+
+      <div class="mt-10 space-y-10">
+        {% for grupo, lista in fontes.items() %}
+        <div>
+          <div class="mb-4 flex items-center gap-3">
+            <span class="text-[11px] font-semibold uppercase tracking-widest text-cyan-200 font-geist">{{ t(grupo) }}</span>
+            <span class="h-px flex-1 bg-white/[0.07]"></span>
+          </div>
+          <div class="grid gap-3 lg:grid-cols-2">
+            {% for f in lista %}
+            <a href="{{ f.url }}" target="_blank" rel="noopener"
+               class="group flex items-start gap-4 rounded-[1.25rem] border border-white/[0.08] bg-white/[0.02] p-5 transition hover:border-cyan-200/25 hover:bg-cyan-400/[0.05]">
+              <span class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl {{ 'bg-emerald-400/10 text-emerald-300' if f.automatizado else 'bg-white/[0.05] text-slate-400' }}">
+                <iconify-icon height="16" width="16" icon="{{ 'solar:refresh-circle-linear' if f.automatizado else 'solar:link-minimalistic-2-linear' }}"></iconify-icon>
+              </span>
+              <span class="min-w-0">
+                <span class="flex flex-wrap items-center gap-2">
+                  <span class="text-sm font-medium text-white font-geist">{{ t(f.descricao) }}</span>
+                  {% if f.automatizado %}
+                  <span class="rounded-full border border-emerald-300/20 bg-emerald-400/10 px-2 py-0.5 text-[10px] font-medium text-emerald-200 font-geist">{{ t("automático") }}</span>
+                  {% endif %}
+                </span>
+                {% if f.nota %}<span class="mt-2 block text-xs leading-5 text-slate-500 font-geist">{{ t(f.nota) }}</span>{% endif %}
+                <span class="mt-2 block truncate font-mono text-[11px] text-slate-600 group-hover:text-cyan-200/70">{{ f.url }}</span>
+              </span>
+            </a>
+            {% endfor %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- rede -->
+    <div class="mt-20">
+      <p class="text-sm font-medium text-slate-400 font-geist">{{ t("04 · Rede e autenticação") }}</p>
+      <h2 class="mt-4 max-w-3xl text-3xl leading-[1.15] tracking-tight text-white sm:text-4xl font-jakarta font-medium">{{ t("Como as chamadas externas saem daqui.") }}</h2>
+      <p class="mt-5 max-w-2xl text-[15px] leading-7 text-slate-400 font-geist">
+        {{ t("Toda busca externa passa por um ponto só. Fora de rede corporativa vai por urllib, sem autenticação — as fontes usadas são públicas. Num ambiente com SSO, três variáveis ligam o Negotiate sem mexer em código.") }}
+      </p>
+
+      <div class="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {% for rotulo, ativo, detalhe in [
+          (t('SSO pedido'), rede.sso_pedido, 'PRECIFICADOR_SSO'),
+          (t('SSO disponível'), rede.sso_disponivel, 'requests + Negotiate'),
+          (t('requests'), rede.requests, 'pip install requests'),
+          (t('Negotiate SSPI'), rede.negotiate_sspi, 'requests-negotiate-sspi (Windows)'),
+          (t('Kerberos'), rede.kerberos, 'requests-kerberos (kinit)'),
+          (t('Proxy ignorado'), rede.sem_proxy, 'PRECIFICADOR_SEM_PROXY'),
+        ] %}
+        <div class="rounded-[1.25rem] border border-white/[0.08] bg-white/[0.02] p-5">
+          <div class="flex items-center justify-between gap-3">
+            <p class="text-sm font-medium text-white font-geist">{{ rotulo }}</p>
+            <span class="rounded-full px-2.5 py-0.5 text-[11px] font-medium font-geist
+                         {{ 'bg-emerald-400/10 text-emerald-200' if ativo else 'bg-white/[0.05] text-slate-500' }}">
+              {{ t("ativo") if ativo else t("inativo") }}
+            </span>
+          </div>
+          <p class="mt-2 font-mono text-[11px] text-slate-500">{{ detalhe }}</p>
+        </div>
+        {% endfor %}
+      </div>
+
+      <div class="mt-6 rounded-2xl border border-white/[0.08] bg-black/25 px-5 py-4">
+        <p class="text-xs text-slate-500 font-geist">{{ t("Variáveis de ambiente") }}</p>
+        <p class="mt-2 font-mono text-xs leading-6 text-cyan-100">
+          PRECIFICADOR_SSO=1<br/>
+          PRECIFICADOR_CA_BUNDLE=/caminho/ca-interna.pem<br/>
+          PRECIFICADOR_SEM_PROXY=1
+        </p>
+        <p class="mt-3 text-xs leading-5 text-slate-500 font-geist">
+          {{ t("O ADFS só oferece o desafio Negotiate a User-Agents da lista dele: com o padrão do requests ele devolve a página de login, e o erro que chega fala de JSON inválido sem mencionar autenticação. Por isso o User-Agent de navegador é forçado quando o SSO está ligado.") }}
+        </p>
+      </div>
+    </div>
+
+    <!-- glossário -->
+    <div class="mt-20" id="glossario">
+      <p class="text-sm font-medium text-slate-400 font-geist">{{ t("05 · Glossário") }}</p>
+      <h2 class="mt-4 max-w-3xl text-3xl leading-[1.15] tracking-tight text-white sm:text-4xl font-jakarta font-medium">{{ t("O que cada termo quer dizer aqui.") }}</h2>
+      <p class="mt-5 max-w-2xl text-[15px] leading-7 text-slate-400 font-geist">
+        {{ t("Definições operacionais, não de livro: o que o termo significa dentro desta ferramenta e onde ele costuma ser confundido.") }}
+      </p>
+
+      <div class="mt-10 space-y-10">
+        {% for grupo, verbetes in glossario.items() %}
+        <div>
+          <div class="mb-4 flex items-center gap-3">
+            <span class="text-[11px] font-semibold uppercase tracking-widest text-cyan-200 font-geist">{{ t(grupo) }}</span>
+            <span class="h-px flex-1 bg-white/[0.07]"></span>
+          </div>
+          <dl class="grid gap-3 lg:grid-cols-2">
+            {% for v in verbetes %}
+            <div class="rounded-[1.25rem] border border-white/[0.08] bg-white/[0.02] p-5 transition hover:border-white/[0.16]">
+              <dt class="text-sm font-medium text-white font-geist">{{ t(v.termo) }}</dt>
+              <dd class="mt-2 text-sm leading-6 text-slate-400 font-geist">{{ t(v.definicao) }}</dd>
+              {% if v.nota %}
+              <dd class="mt-3 flex gap-2 text-xs leading-5 text-cyan-100/80 font-geist">
+                <iconify-icon class="mt-0.5 shrink-0" height="13" icon="solar:lightbulb-linear" width="13"></iconify-icon>
+                <span>{{ t(v.nota) }}</span>
+              </dd>
+              {% endif %}
+            </div>
+            {% endfor %}
+          </dl>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+  </div>
+</section>
+{% endblock %}

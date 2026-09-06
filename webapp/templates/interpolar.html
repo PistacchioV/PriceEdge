@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+{% from "_componentes.html" import alerta, estatistica, botao %}
+{% block titulo %}Interpolação{% endblock %}
+
+{% block conteudo %}
+<section class="sm:px-6 lg:px-8 pt-16 pr-5 pb-10 pl-5">
+  <div class="w-full max-w-[1600px] mr-auto ml-auto">
+    <div class="reveal grid gap-8 lg:grid-cols-[1fr_0.72fr] lg:items-end">
+      <div class="max-w-3xl">
+        <p class="text-sm font-medium text-cyan-100 font-geist">{{ t("Interpolação") }}</p>
+        <h1 class="mt-4 text-4xl text-white sm:text-5xl tracking-tighter leading-[1.05] font-jakarta font-medium">{{ t("Interpolação de curvas.") }}</h1>
+      </div>
+      <div class="lg:ml-auto lg:max-w-md">
+        <p class="text-base leading-7 text-slate-400 font-geist">
+          {{ t("Spline cúbica natural — segunda derivada zero nas pontas, busca binária pelo intervalo. Dá para comparar com a linear e com a flat-forward, e ver o que cada uma faz fora do domínio dos vértices.") }}
+        </p>
+      </div>
+    </div>
+
+    <form method="post" class="mt-12 grid gap-6 lg:grid-cols-[1fr_0.85fr] lg:items-start">
+      <div class="min-w-0 rounded-[2rem] border border-white/[0.09] bg-gradient-to-b from-white/[0.05] to-transparent p-6 backdrop-blur-xl sm:p-8">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <p class="text-[11px] font-semibold uppercase tracking-widest text-cyan-200 font-geist">{{ t("Pontos conhecidos") }}</p>
+          <div class="flex items-center gap-2">
+            <select class="campo w-auto py-1.5 text-xs" id="curva-fonte">
+              {% for cod, nome, conv, _ in curvas_disponiveis %}<option value="{{ cod }}">{{ t(nome) }}</option>{% endfor %}
+            </select>
+            <button type="button" id="btn-carregar"
+              class="inline-flex items-center gap-1.5 rounded-full border border-white/[0.12] bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-slate-200 transition hover:bg-white/[0.08] font-geist">
+              <iconify-icon height="14" icon="solar:cloud-download-linear" width="14"></iconify-icon>{{ t("Carregar da B3") }}
+            </button>
+          </div>
+        </div>
+
+        <div class="mt-5 grid gap-4 sm:grid-cols-2">
+          <div>
+            <label class="rotulo" for="x">{{ t("Eixo x — prazos (dias corridos)") }}</label>
+            <textarea class="campo font-mono text-xs" id="x" name="x" rows="12" spellcheck="false" placeholder="1&#10;7&#10;30">{{ x_txt }}</textarea>
+          </div>
+          <div>
+            <label class="rotulo" for="y">{{ t("Eixo y — taxas (% a.a.)") }}</label>
+            <textarea class="campo font-mono text-xs" id="y" name="y" rows="12" spellcheck="false" placeholder="14,65&#10;14,64&#10;14,60">{{ y_txt }}</textarea>
+          </div>
+        </div>
+
+        <div class="mt-5 grid gap-4 sm:grid-cols-2">
+          <div>
+            <label class="rotulo" for="metodo">{{ t("Método") }}</label>
+            <select class="campo" id="metodo" name="metodo">
+              {% set rotulos = {'spline': 'Spline cúbica natural', 'linear': 'Linear', 'flat_forward': 'Flat-forward (exponencial 252)'} %}
+              {% for m in metodos %}
+              <option value="{{ m }}" {{ 'selected' if metodo == m }}>{{ rotulos.get(m, m) }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label class="rotulo" for="extrapolar">{{ t("Fora do domínio") }}</label>
+            <select class="campo" id="extrapolar" name="extrapolar">
+              <option value="flat" {{ 'selected' if extrapolar == 'flat' }}>{{ t("Travar na ponta (recomendado)") }}</option>
+              <option value="cubica" {{ 'selected' if extrapolar == 'cubica' }}>{{ t("Extrapolar o polinômio") }}</option>
+            </select>
+          </div>
+          <div class="sm:col-span-2">
+            <label class="rotulo" for="alvos">{{ t("Prazos a interpolar") }}</label>
+            <input class="campo font-mono text-xs" id="alvos" name="alvos" value="{{ alvos_txt }}" placeholder="126, 183, 365, 1826"/>
+          </div>
+        </div>
+
+        <div class="mt-8">{{ botao(t('Interpolar'), 'solar:graph-new-linear') }}</div>
+      </div>
+
+      <div class="min-w-0">
+        {% if erro %}{{ alerta(erro) }}{% endif %}
+
+        {% if resultado %}
+        <div class="sem-reveal grid gap-3 sm:grid-cols-2">
+          {{ estatistica(t('Vértices'), resultado.n, t('pontos na curva')) }}
+          {{ estatistica(t('Domínio'), (resultado.dominio[0] | numero) ~ ' – ' ~ (resultado.dominio[1] | numero), t('dias corridos')) }}
+        </div>
+        <div class="sem-reveal mt-6 rounded-[2rem] border border-white/[0.09] bg-slate-950/40 backdrop-blur-xl">
+          <div class="border-b border-white/[0.07] px-6 py-4">
+            <p class="text-sm font-medium text-white font-geist">{{ t("Resultado") }}</p>
+          </div>
+          <div class="rolagem max-h-[26rem] px-2">
+            <table class="tabela-dados">
+              <thead><tr><th>{{ t("Prazo (dc)") }}</th><th>{{ t("Taxa interpolada") }}</th><th>{{ t("Situação") }}</th></tr></thead>
+              <tbody>
+              {% for l in resultado.linhas %}
+                <tr>
+                  <td>{{ l.x | numero(0) }}</td>
+                  <td class="text-cyan-100">{{ '%.6f' | format(l.y) }}</td>
+                  <td class="{{ 'text-amber-300' if l.fora else 'text-slate-600' }}">
+                    {{ 'extrapolado' if l.fora else 'dentro do domínio' }}
+                  </td>
+                </tr>
+              {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        {% else %}
+        <div class="rounded-[2rem] border border-dashed border-white/[0.12] bg-white/[0.02] p-10 text-center">
+          <div class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-cyan-300/10 text-cyan-200">
+            <iconify-icon height="24" icon="solar:graph-linear" width="24"></iconify-icon>
+          </div>
+          <p class="text-sm text-slate-400 font-geist">{{ t("Cole os vértices ou carregue uma curva da B3.") }}</p>
+          <p class="mx-auto mt-2 max-w-sm text-xs leading-5 text-slate-600 font-geist">
+            {{ t("Um valor por linha, nas duas colunas. Vírgula ou ponto decimal, tanto faz.") }}
+          </p>
+        </div>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById("btn-carregar").addEventListener("click", async (evento) => {
+  const botao = evento.currentTarget;
+  const curva = document.getElementById("curva-fonte").value;
+  const original = botao.innerHTML;
+  botao.disabled = true;
+  botao.textContent = "Baixando...";
+  try {
+    const resposta = await fetch(`/interpolar/carregar?curva=${curva}&data={{ data_sugerida.isoformat() }}`);
+    const dados = await resposta.json();
+    if (!resposta.ok) throw new Error(dados.erro || "falha ao carregar");
+    document.getElementById("x").value = dados.x;
+    document.getElementById("y").value = dados.y;
+    botao.innerHTML = original;
+  } catch (erro) {
+    botao.textContent = erro.message.slice(0, 60);
+    setTimeout(() => { botao.innerHTML = original; }, 4000);
+  } finally {
+    botao.disabled = false;
+  }
+});
+</script>
+{% endblock %}

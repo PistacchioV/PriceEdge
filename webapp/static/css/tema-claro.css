@@ -1,0 +1,176 @@
+/* Tema claro.
+ *
+ * O design system Pulsedesk é escuro por construção: as cores estão nas
+ * próprias classes utilitárias do Tailwind, espalhadas pelo markup. Em vez de
+ * reescrever todo o HTML com variáveis, esta folha remapeia — sob
+ * `html[data-tema="claro"]` — exatamente o conjunto de utilitários que os
+ * templates usam. É uma lista finita e verificável (levantada com grep), não
+ * um remapeamento genérico.
+ *
+ * O `!important` é proposital: o runtime do Tailwind injeta suas regras depois
+ * deste arquivo, e as camadas de fundo do herói vêm em `style=` inline. Sem
+ * ele o tema não pega.
+ *
+ * A paleta mantém o ciano como acento, mas escurecido — ciano claro sobre
+ * branco não passa em contraste. O botão primário inverte: fundo forte,
+ * texto branco.
+ */
+
+:root { color-scheme: dark; }
+html[data-tema="claro"] { color-scheme: light; }
+
+html[data-tema="claro"] body {
+  background: #eef2f8 !important;
+  color: #0f172a !important;
+}
+
+/* ---------------------------------------------------------- camadas de fundo */
+html[data-tema="claro"] .camada-gradiente {
+  background:
+    radial-gradient(circle at 50% -10%, rgba(14, 116, 144, 0.10), transparent 38%),
+    radial-gradient(circle at 82% 18%, rgba(59, 130, 246, 0.07), transparent 30%),
+    linear-gradient(180deg, #f8fafc 0%, #eef2f8 45%, #e9eef6 100%) !important;
+}
+html[data-tema="claro"] .camada-ruido { opacity: 0.02 !important; }
+html[data-tema="claro"] .moldura {
+  border-color: rgba(15, 23, 42, 0.08) !important;
+  background: rgba(255, 255, 255, 0.55);
+}
+html[data-tema="claro"] .cabecalho {
+  background: rgba(248, 250, 252, 0.82) !important;
+  border-color: rgba(15, 23, 42, 0.08) !important;
+}
+
+/* ------------------------------------------------------------------- texto */
+html[data-tema="claro"] .text-white       { color: #0f172a !important; }
+html[data-tema="claro"] .text-slate-100   { color: #0f172a !important; }
+html[data-tema="claro"] .text-slate-200   { color: #1e293b !important; }
+html[data-tema="claro"] .text-slate-300   { color: #334155 !important; }
+html[data-tema="claro"] .text-slate-400   { color: #475569 !important; }
+html[data-tema="claro"] .text-slate-500   { color: #64748b !important; }
+html[data-tema="claro"] .text-slate-600   { color: #64748b !important; }
+html[data-tema="claro"] .text-slate-950   { color: #ffffff !important; }
+html[data-tema="claro"] .text-cyan-100,
+html[data-tema="claro"] .text-cyan-200,
+html[data-tema="claro"] .text-cyan-300    { color: #0e7490 !important; }
+html[data-tema="claro"] .text-emerald-200,
+html[data-tema="claro"] .text-emerald-300 { color: #047857 !important; }
+html[data-tema="claro"] .text-amber-300   { color: #b45309 !important; }
+html[data-tema="claro"] .text-rose-100,
+html[data-tema="claro"] .text-rose-300    { color: #be123c !important; }
+html[data-tema="claro"] .text-blue-300,
+html[data-tema="claro"] .text-blue-400    { color: #1d4ed8 !important; }
+
+/* ------------------------------------------------------------- superfícies */
+html[data-tema="claro"] .bg-\[\#080c14\]\/70 { background: rgba(248, 250, 252, 0.82) !important; }
+html[data-tema="claro"] .bg-slate-950\/40,
+html[data-tema="claro"] .bg-slate-950\/65,
+html[data-tema="claro"] .bg-slate-950\/70 { background: rgba(255, 255, 255, 0.86) !important; }
+html[data-tema="claro"] .bg-\[\#0b1220\]\/95 { background: #ffffff !important; }
+html[data-tema="claro"] .bg-white\/\[0\.02\] { background: rgba(255, 255, 255, 0.75) !important; }
+html[data-tema="claro"] .bg-white\/\[0\.03\],
+html[data-tema="claro"] .bg-white\/\[0\.035\],
+html[data-tema="claro"] .bg-white\/\[0\.04\] { background: rgba(255, 255, 255, 0.9) !important; }
+html[data-tema="claro"] .bg-white\/\[0\.05\],
+html[data-tema="claro"] .bg-white\/\[0\.08\] { background: rgba(255, 255, 255, 1) !important; }
+html[data-tema="claro"] .bg-black\/20,
+html[data-tema="claro"] .bg-black\/25 { background: rgba(241, 245, 249, 0.9) !important; }
+html[data-tema="claro"] .bg-cyan-300\/10,
+html[data-tema="claro"] .bg-cyan-400\/10 { background: rgba(14, 116, 144, 0.10) !important; }
+html[data-tema="claro"] .bg-emerald-400\/10 { background: rgba(4, 120, 87, 0.10) !important; }
+html[data-tema="claro"] .bg-rose-500\/\[0\.08\] { background: rgba(190, 18, 60, 0.08) !important; }
+html[data-tema="claro"] .bg-amber-400\/\[0\.07\] { background: rgba(180, 83, 9, 0.09) !important; }
+
+/* gradientes dos painéis */
+html[data-tema="claro"] .from-white\/\[0\.05\] { --tw-gradient-from: rgba(255,255,255,1) !important; }
+html[data-tema="claro"] .via-white\/\[0\.04\]  { --tw-gradient-via: rgba(255,255,255,0.9) !important; }
+html[data-tema="claro"] .from-cyan-400\/\[0\.1\] { --tw-gradient-from: rgba(14,116,144,0.10) !important; }
+
+/* --------------------------------------------------------------- botão CTA */
+html[data-tema="claro"] .bg-cyan-100,
+html[data-tema="claro"] .bg-cyan-50 { background: #0e7490 !important; }
+html[data-tema="claro"] .hover\:bg-cyan-50:hover { background: #155e75 !important; }
+
+/* ----------------------------------------------------------------- bordas */
+html[data-tema="claro"] [class*="border-white/"] { border-color: rgba(15, 23, 42, 0.10) !important; }
+html[data-tema="claro"] .border-white\/\[0\.16\],
+html[data-tema="claro"] .border-white\/20 { border-color: rgba(15, 23, 42, 0.18) !important; }
+html[data-tema="claro"] .border-cyan-200\/20,
+html[data-tema="claro"] .border-cyan-200\/30,
+html[data-tema="claro"] .border-cyan-100\/10 { border-color: rgba(14, 116, 144, 0.28) !important; }
+html[data-tema="claro"] .border-emerald-300\/20 { border-color: rgba(4, 120, 87, 0.28) !important; }
+html[data-tema="claro"] .border-rose-400\/25 { border-color: rgba(190, 18, 60, 0.28) !important; }
+html[data-tema="claro"] .border-amber-300\/25 { border-color: rgba(180, 83, 9, 0.30) !important; }
+
+/* ---------------------------------------------------- formulários e tabelas */
+/* background-color, não o atalho `background`: o atalho apagaria o
+   background-image da seta do <select> e, pior, devolveria repeat/position/size
+   ao padrão — a seta aparecia ladrilhada por cima do texto. */
+html[data-tema="claro"] .campo {
+  background-color: #ffffff;
+  border-color: rgba(15, 23, 42, 0.14);
+  color: #0f172a;
+}
+html[data-tema="claro"] .campo::placeholder { color: #94a3b8; }
+html[data-tema="claro"] .campo:focus {
+  border-color: #0e7490;
+  background-color: #ffffff;
+  box-shadow: 0 0 0 3px rgba(14, 116, 144, 0.12);
+}
+html[data-tema="claro"] select.campo {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23475569' stroke-width='1.5'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.6rem center;
+  background-size: 1.1rem;
+}
+html[data-tema="claro"] select.campo option { background: #ffffff; color: #0f172a; }
+html[data-tema="claro"] .rotulo { color: #475569; }
+
+html[data-tema="claro"] .tabela-dados thead th {
+  background: rgba(248, 250, 252, 0.97);
+  color: #475569;
+  border-bottom-color: rgba(15, 23, 42, 0.12);
+}
+html[data-tema="claro"] .tabela-dados tbody td {
+  color: #334155;
+  border-bottom-color: rgba(15, 23, 42, 0.07);
+}
+html[data-tema="claro"] .tabela-dados tbody tr:hover td { background: rgba(14, 116, 144, 0.05); }
+html[data-tema="claro"] .rolagem::-webkit-scrollbar-thumb { background: rgba(15, 23, 42, 0.18); }
+
+/* -------------------------------------------------------------- gráficos */
+html[data-tema="claro"] svg text { fill: #64748b !important; }
+html[data-tema="claro"] svg line[stroke^="rgba(255"] { stroke: rgba(15, 23, 42, 0.10) !important; }
+html[data-tema="claro"] svg path[stroke="#a5f3fc"] { stroke: #0e7490 !important; }
+html[data-tema="claro"] svg circle[fill="#0b1220"] { fill: #ffffff !important; stroke: #0e7490 !important; }
+
+/* sombras profundas ficam pesadas no claro */
+html[data-tema="claro"] .shadow-2xl,
+html[data-tema="claro"] .shadow-lg { box-shadow: 0 12px 32px rgba(15, 23, 42, 0.08) !important; }
+
+/* ------------------------------------------------------ date picker próprio */
+html[data-tema="claro"] .campo-data-painel {
+  border-color: rgba(15, 23, 42, 0.12);
+  background: #ffffff;
+  box-shadow: 0 22px 60px rgba(15, 23, 42, 0.14);
+}
+html[data-tema="claro"] .campo-data-cabecalho { color: #0e7490; }
+html[data-tema="claro"] .campo-data-botao { color: #64748b; }
+html[data-tema="claro"] .campo-data-botao:hover {
+  color: #0e7490; background: rgba(14, 116, 144, 0.08);
+}
+html[data-tema="claro"] .campo-data-navegacao button { color: #64748b; }
+html[data-tema="claro"] .campo-data-navegacao button:hover {
+  background: rgba(15, 23, 42, 0.06); color: #0f172a;
+}
+html[data-tema="claro"] .campo-data-semana { color: #94a3b8; }
+html[data-tema="claro"] .campo-data-dia { color: #334155; }
+html[data-tema="claro"] .campo-data-dia:hover:not(:disabled) {
+  background: rgba(14, 116, 144, 0.10); color: #0f172a;
+}
+html[data-tema="claro"] .campo-data-dia.fora { color: #cbd5e1; }
+html[data-tema="claro"] .campo-data-dia.hoje { box-shadow: inset 0 0 0 1px rgba(14, 116, 144, 0.4); }
+html[data-tema="claro"] .campo-data-dia.escolhido { background: #0e7490; color: #ffffff; }
+html[data-tema="claro"] .campo-data-dia:disabled { color: #e2e8f0; }
+html[data-tema="claro"] .campo-data-rodape { border-top-color: rgba(15, 23, 42, 0.08); }
+html[data-tema="claro"] .campo-data-rodape button { color: #0e7490; }

@@ -1,0 +1,13 @@
+{# Ações do cabeçalho: idioma e tema. #}
+<div class="flex items-center gap-2">
+  <a href="{{ url_for(request.endpoint or 'principal.painel', **dict(request.view_args or {}, **dict(request.args, idioma=('en' if idioma == 'pt' else 'pt')))) }}"
+     class="inline-flex h-9 items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-3 text-xs font-medium text-slate-300 transition hover:border-white/20 hover:text-white font-geist"
+     title="{{ t("Trocar idioma") }}">
+    <iconify-icon height="15" icon="solar:global-linear" width="15"></iconify-icon>
+    {{ idioma | upper }}
+  </a>
+  <button type="button" id="btn-tema" aria-label="{{ t("Trocar tema") }}"
+          class="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-slate-300 transition hover:border-white/20 hover:text-white">
+    <iconify-icon height="17" icon="solar:sun-linear" width="17"></iconify-icon>
+  </button>
+</div>

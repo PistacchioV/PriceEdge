@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% from "_componentes.html" import alerta, estatistica, botao %}
+{% block titulo %}NI pro-rata{% endblock %}
+
+{% block conteudo %}
+<section class="sm:px-6 lg:px-8 pt-16 pr-5 pb-10 pl-5">
+  <div class="w-full max-w-[1600px] mr-auto ml-auto">
+    <div class="reveal grid gap-8 lg:grid-cols-[1fr_0.72fr] lg:items-end">
+      <div class="max-w-3xl">
+        <p class="text-sm font-medium text-cyan-100 font-geist">IPCA</p>
+        <h1 class="mt-4 text-4xl text-white sm:text-5xl tracking-tighter leading-[1.05] font-jakarta font-medium">{{ t("Número-índice pro-rata e VNA.") }}</h1>
+      </div>
+      <div class="lg:ml-auto lg:max-w-md">
+        <p class="text-base leading-7 text-slate-400 font-geist">
+          {{ t("Interpola o número-índice entre o dia 15 de um mês e o do seguinte, em dias úteis, com a projeção da ANBIMA.") }}
+        </p>
+      </div>
+    </div>
+
+    <form method="post" class="mt-12 grid gap-6 lg:grid-cols-[0.9fr_1.1fr] lg:items-start">
+      <div class="min-w-0 rounded-[2rem] border border-white/[0.09] bg-gradient-to-b from-white/[0.05] to-transparent p-6 backdrop-blur-xl sm:p-8">
+        <p class="text-[11px] font-semibold uppercase tracking-widest text-cyan-200 font-geist">{{ t("Insumos") }}</p>
+        <div class="mt-5 grid gap-4 sm:grid-cols-2">
+          <div class="sm:col-span-2">
+            <label class="rotulo" for="data">{{ t("Data de referência") }}</label>
+            <input class="campo" id="data" name="data" type="date" value="{{ form.data }}" required/>
+          </div>
+          <div>
+            <label class="rotulo" for="ni_anterior">{{ t("NIk−1 (IBGE)") }}</label>
+            <input class="campo" id="ni_anterior" name="ni_anterior" data-formato="indice" value="{{ form.ni_anterior }}" inputmode="decimal"/>
+          </div>
+          <div>
+            <label class="rotulo" for="projecao">{{ t("Projeção mensal ANBIMA (%)") }}</label>
+            <input class="campo" id="projecao" name="projecao" data-formato="percentual" value="{{ form.projecao }}" inputmode="decimal"/>
+          </div>
+          <div>
+            <label class="rotulo" for="vne">VNE</label>
+            <input class="campo" id="vne" name="vne" data-formato="moeda" value="{{ form.vne }}" inputmode="decimal"/>
+          </div>
+          <div>
+            <label class="rotulo" for="ni_partida">{{ t("NI de partida") }}</label>
+            <input class="campo" id="ni_partida" name="ni_partida" data-formato="indice" value="{{ form.ni_partida }}" inputmode="decimal"/>
+          </div>
+        </div>
+        <div class="mt-8">{{ botao(t('Calcular'), 'solar:calculator-minimalistic-linear') }}</div>
+        <p class="mt-5 text-xs leading-5 text-slate-600 font-geist">
+          {{ t("NIk−1 vem da tabela 1737 do SIDRA; a projeção mensal, da página de projeção de inflação da ANBIMA. Ambos os links estão em Metodologia → fontes.") }}
+        </p>
+      </div>
+
+      <div class="min-w-0">
+        {% if erro %}{{ alerta(erro) }}{% endif %}
+        {% if resultado %}
+        <div class="sem-reveal rounded-[2rem] border border-cyan-200/20 bg-gradient-to-b from-cyan-400/[0.1] via-white/[0.04] to-transparent p-6 backdrop-blur-xl sm:p-8">
+          <p class="text-[11px] font-semibold uppercase tracking-widest text-cyan-200 font-geist">VNA</p>
+          <p class="mt-3 text-5xl tracking-tight text-white font-jakarta font-medium tabular-nums">{{ resultado.vna | moeda(6) }}</p>
+          <p class="mt-2 text-sm text-slate-400 font-geist">correção acumulada de {{ resultado.correcao | moeda(8) }}</p>
+
+          <div class="mt-7 grid gap-3 sm:grid-cols-2">
+            {{ estatistica(t('NI atual (pro-rata)'), resultado.ni_atual | moeda(6), t('interpolado em dias úteis'), destaque=true) }}
+            {{ estatistica(t('NI cheio (projetado)'), resultado.ni_cheio | moeda(6), t('NIk−1 × (1 + projeção)')) }}
+            {{ estatistica(t('Data-base'), resultado.data_base | data_br, t('dia 15 de referência')) }}
+            {{ estatistica(t('Próxima base'), resultado.proxima_base | data_br, t('dia 15 do mês seguinte')) }}
+            {{ estatistica(t('dup'), resultado.dup, t('dias úteis decorridos')) }}
+            {{ estatistica(t('dut'), resultado.dut, t('dias úteis do período')) }}
+          </div>
+
+          <div class="mt-7 rounded-2xl border border-white/[0.08] bg-black/25 px-5 py-4">
+            <p class="text-xs text-slate-500 font-geist">{{ t("Fórmula aplicada") }}</p>
+            <p class="mt-2 font-mono text-xs leading-6 text-cyan-100">
+              NI = NIk−1 · (NIk / NIk−1) ^ (dup / dut)<br/>
+              VNA = VNE · NI / NI de partida
+            </p>
+          </div>
+        </div>
+        {% else %}
+        <div class="rounded-[2rem] border border-dashed border-white/[0.12] bg-white/[0.02] p-10 text-center">
+          <div class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-cyan-300/10 text-cyan-200">
+            <iconify-icon height="24" icon="solar:calendar-mark-linear" width="24"></iconify-icon>
+          </div>
+          <p class="text-sm text-slate-400 font-geist">{{ t("Informe o número-índice e a projeção do mês.") }}</p>
+        </div>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+</section>
+{% endblock %}

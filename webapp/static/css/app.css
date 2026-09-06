@@ -1,0 +1,179 @@
+/* `display` vindo de classe utilitária (grid, flex, block) ganha do atributo
+   `hidden`, que é só uma regra da folha do navegador. Sem isto, esconder um
+   bloco com `elemento.hidden = true` não faz nada quando ele tem `class="grid"`. */
+[hidden] { display: none !important; }
+
+/* Complementos ao design system Pulsedesk: controles de formulário e tabelas
+   de dados, que a landing original não tinha. Mesmas cores, mesmos raios,
+   mesmas bordas translúcidas. */
+
+.campo {
+  width: 100%;
+  border-radius: 0.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.25);
+  padding: 0.625rem 0.875rem;
+  font-size: 0.875rem;
+  color: #f1f5f9;
+  transition: border-color 200ms ease, background 200ms ease;
+}
+.campo::placeholder { color: #475569; }
+.campo:focus {
+  outline: none;
+  border-color: rgba(103, 232, 249, 0.45);
+  background: rgba(0, 0, 0, 0.4);
+}
+.campo:hover { border-color: rgba(255, 255, 255, 0.18); }
+
+select.campo {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='1.5'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.6rem center;
+  background-size: 1.1rem;
+  padding-right: 2.2rem;
+}
+select.campo option { background: #0b1220; color: #e2e8f0; }
+
+.rotulo {
+  display: block;
+  margin-bottom: 0.4rem;
+  font-size: 0.75rem;
+  color: #94a3b8;
+  letter-spacing: 0.01em;
+}
+
+.tabela-dados { width: 100%; border-collapse: collapse; font-size: 0.8125rem; }
+.tabela-dados thead th {
+  position: sticky; top: 0;
+  background: rgba(8, 17, 31, 0.96);
+  backdrop-filter: blur(8px);
+  color: #94a3b8;
+  font-weight: 500;
+  text-align: right;
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  white-space: nowrap;
+}
+.tabela-dados thead th:first-child,
+.tabela-dados tbody td:first-child { text-align: left; }
+.tabela-dados tbody td {
+  padding: 0.55rem 0.75rem;
+  text-align: right;
+  color: #cbd5e1;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.tabela-dados tbody tr:hover td { background: rgba(255, 255, 255, 0.03); }
+.tabela-dados tbody tr:last-child td { border-bottom: none; }
+
+.rolagem { overflow-x: auto; overflow-y: auto; }
+.rolagem::-webkit-scrollbar { height: 8px; width: 8px; }
+.rolagem::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12); border-radius: 999px;
+}
+.rolagem::-webkit-scrollbar-track { background: transparent; }
+
+/* o scroll-reveal do design system esconde parágrafos até entrarem na
+   viewport; dentro de painéis de resultado isso atrapalha, então esses
+   ficam de fora pela classe .sem-reveal */
+.sem-reveal p, .sem-reveal li { opacity: 1 !important; transform: none !important; }
+
+/* ------------------------------------------------------ date picker próprio */
+/* O calendário nativo segue o idioma do navegador, não o da página. Este é
+   desenhado aqui para poder ser traduzido — ver static/js/data-picker.js. */
+
+.campo-data { position: relative; }
+.campo-data > input[type="text"] { padding-right: 2.5rem; }
+
+.campo-data-botao {
+  position: absolute;
+  right: 0.55rem;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  height: 1.5rem;
+  width: 1.5rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.4rem;
+  color: #94a3b8;
+  transition: color 150ms ease, background 150ms ease;
+}
+.campo-data-botao:hover { color: #a5f3fc; background: rgba(255, 255, 255, 0.06); }
+.campo-data-botao svg { height: 1.05rem; width: 1.05rem; }
+
+.campo-data-painel {
+  position: absolute;
+  z-index: 60;
+  top: calc(100% + 0.5rem);
+  left: 0;
+  width: 17.5rem;
+  padding: 0.85rem;
+  border-radius: 1.1rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(11, 18, 32, 0.98);
+  box-shadow: 0 22px 60px rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(18px);
+}
+
+.campo-data-cabecalho {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.7rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: #a5f3fc;
+}
+.campo-data-navegacao { display: flex; gap: 0.25rem; }
+.campo-data-navegacao button {
+  height: 1.6rem;
+  width: 1.6rem;
+  border-radius: 0.45rem;
+  color: #94a3b8;
+  font-size: 0.9rem;
+  line-height: 1;
+  transition: background 150ms ease, color 150ms ease;
+}
+.campo-data-navegacao button:hover { background: rgba(255, 255, 255, 0.08); color: #e2e8f0; }
+
+.campo-data-grade {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0.15rem;
+}
+.campo-data-semana {
+  padding-bottom: 0.35rem;
+  text-align: center;
+  font-size: 0.6875rem;
+  color: #64748b;
+}
+.campo-data-dia {
+  height: 2rem;
+  border-radius: 0.5rem;
+  font-size: 0.8125rem;
+  color: #cbd5e1;
+  font-variant-numeric: tabular-nums;
+  transition: background 120ms ease, color 120ms ease;
+}
+.campo-data-dia:hover:not(:disabled) { background: rgba(255, 255, 255, 0.08); color: #fff; }
+.campo-data-dia.fora { color: #475569; }
+.campo-data-dia.hoje { box-shadow: inset 0 0 0 1px rgba(103, 232, 249, 0.35); }
+.campo-data-dia.escolhido { background: #a5f3fc; color: #0f172a; font-weight: 600; }
+.campo-data-dia:disabled { color: #334155; cursor: not-allowed; }
+
+.campo-data-rodape {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 0.7rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+.campo-data-rodape button {
+  font-size: 0.75rem;
+  color: #67e8f9;
+  transition: color 150ms ease;
+}
+.campo-data-rodape button:hover { color: #a5f3fc; }

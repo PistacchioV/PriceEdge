@@ -1,0 +1,10 @@
+Flask>=3.0
+pytest>=8.0
+
+# --- opcionais, para ambiente corporativo com SSO Kerberos -------------------
+# Nada aqui é necessário nas fontes públicas usadas por padrão; o pacote cai em
+# urllib quando não estão instalados. Ligue com PRECIFICADOR_SSO=1.
+#
+# requests>=2.31
+# requests-negotiate-sspi>=0.5 ; sys_platform == "win32"
+# requests-kerberos>=0.14      ; sys_platform != "win32"

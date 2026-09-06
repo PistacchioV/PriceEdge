@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% from "_componentes.html" import alerta, estatistica, botao, link_secundario %}
+{% block titulo %}Curvas B3{% endblock %}
+
+{% block conteudo %}
+<section class="sm:px-6 lg:px-8 pt-16 pr-5 pb-10 pl-5">
+  <div class="w-full max-w-[1600px] mr-auto ml-auto">
+    <div class="reveal grid gap-8 lg:grid-cols-[1fr_0.72fr] lg:items-end">
+      <div class="max-w-3xl">
+        <p class="text-sm font-medium text-cyan-100 font-geist">{{ t("Taxas Referenciais") }}</p>
+        <h1 class="mt-4 text-4xl text-white sm:text-5xl tracking-tighter leading-[1.05] font-jakarta font-medium">{{ t("Extrair curva da B3.") }}</h1>
+      </div>
+      <div class="lg:ml-auto lg:max-w-md">
+        <p class="text-base leading-7 text-slate-400 font-geist">
+          {{ t("Mesmo endpoint do link “Histórico de arquivos” da página oficial. O arquivo público cobre aproximadamente o último mês útil — datas anteriores não existem nessa API.") }}
+        </p>
+      </div>
+    </div>
+
+    <form method="get" class="mt-12 rounded-[2rem] border border-white/[0.09] bg-gradient-to-b from-white/[0.05] to-transparent p-6 backdrop-blur-xl sm:p-8">
+      <input type="hidden" name="extrair" value="1"/>
+      <div class="grid gap-5 sm:grid-cols-[1.4fr_1fr_auto] sm:items-end">
+        <div>
+          <label class="rotulo" for="curva">{{ t("Curva") }}</label>
+          <select class="campo" id="curva" name="curva">
+            <optgroup label="{{ t('Juros em real — exponencial 252') }}">
+              {% for cod, nome, conv, descricao in curvas_disponiveis %}{% if conv == 'EXP252' %}
+              <option value="{{ cod }}" {{ 'selected' if cod == codigo }}>{{ t(nome) }} · {{ cod }}</option>
+              {% endif %}{% endfor %}
+            </optgroup>
+            <optgroup label="{{ t('Cupom e spread — linear 360') }}">
+              {% for cod, nome, conv, descricao in curvas_disponiveis %}{% if conv == 'LIN360' %}
+              <option value="{{ cod }}" {{ 'selected' if cod == codigo }}>{{ t(nome) }} · {{ cod }}</option>
+              {% endif %}{% endfor %}
+            </optgroup>
+            <optgroup label="{{ t('Preço a termo — não é taxa') }}">
+              {% for cod, nome, conv, descricao in curvas_disponiveis %}{% if conv == 'PRECO' %}
+              <option value="{{ cod }}" {{ 'selected' if cod == codigo }}>{{ t(nome) }} · {{ cod }}</option>
+              {% endif %}{% endfor %}
+              {% for cod, nome, partes, descricao in derivadas %}
+              <option value="{{ cod }}" {{ 'selected' if cod == codigo }}>{{ t(nome) }} · {{ cod }}</option>
+              {% endfor %}
+            </optgroup>
+          </select>
+        </div>
+        <div>
+          <label class="rotulo" for="data">{{ t("Data (dia útil)") }}</label>
+          <input class="campo" id="data" name="data" type="date" value="{{ data }}" list="datas-recentes"/>
+          <datalist id="datas-recentes">
+            {% for d in datas_recentes %}<option value="{{ d.isoformat() }}"></option>{% endfor %}
+          </datalist>
+        </div>
+        <div class="flex gap-3">
+          {{ botao(t('Extrair'), 'solar:download-minimalistic-linear') }}
+        </div>
+      </div>
+      <p class="mt-4 text-xs text-slate-500 font-geist">
+        {% for cod, nome, conv, descricao in curvas_disponiveis %}{% if cod == codigo %}{{ t(descricao) }}{% endif %}{% endfor %}
+        {% for cod, nome, partes, descricao in derivadas %}{% if cod == codigo %}{{ t(descricao) }}{% endif %}{% endfor %}
+      </p>
+    </form>
+
+    {% if erro %}{{ alerta(erro) }}{% endif %}
+
+    {% if curva %}
+    <div class="sem-reveal mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      {{ estatistica(t('Vértices'), curva.vertices | length, t('linhas no arquivo da B3')) }}
+      {{ estatistica(t('Prazo máximo'), (curva.prazo_maximo | numero) ~ ' dc', ((curva.prazo_maximo / 365) | round(1)) ~ ' ' ~ t('anos')) }}
+      {{ estatistica(t('Convenção'), curva.convencao, t('interpolação: ') ~ curva.metodo) }}
+      {{ estatistica(t('Ponta longa'), curva.vertices[-1].taxa | percentual(3), t('em ') ~ (curva.vertices[-1].dias_corridos | numero) ~ ' ' ~ t('dias corridos'), destaque=true) }}
+    </div>
+
+    {% if grafico %}
+    <div class="sem-reveal mt-6 overflow-hidden rounded-[2rem] border border-white/[0.09] bg-slate-950/40 p-6 backdrop-blur-xl">
+      <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p class="text-sm font-medium text-white font-geist">{{ t(curva.nome) }}</p>
+          <p class="mt-0.5 text-xs text-slate-500 font-geist">{{ curva.data_referencia | data_br }} · {{ t("preço a termo por dias corridos") if curva.eh_preco else t("taxa (% a.a.) por dias corridos") }}</p>
+        </div>
+        {{ link_secundario(t('Baixar CSV'), url_for('principal.curvas_csv', curva=codigo, data=data), 'solar:file-download-linear') }}
+      </div>
+      <div class="rolagem">
+        <svg viewBox="0 0 {{ grafico.largura }} {{ grafico.altura }}" width="100%" height="{{ grafico.altura }}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Curva {{ curva.nome }}">
+          <defs>
+            <linearGradient id="areaCurva" x1="0" x2="0" y1="0" y2="1">
+              <stop offset="0%" stop-color="#67e8f9" stop-opacity="0.28"/>
+              <stop offset="100%" stop-color="#67e8f9" stop-opacity="0"/>
+            </linearGradient>
+          </defs>
+          {% for r in grafico.rotulos_y %}
+          <line x1="44" x2="{{ grafico.largura - 44 }}" y1="{{ r.y }}" y2="{{ r.y }}" stroke="rgba(255,255,255,0.06)" stroke-width="1"/>
+          <text x="8" y="{{ r.y + 4 }}" fill="#64748b" font-size="10" font-family="Geist, sans-serif">{{ (r.valor | moeda(4)) if curva.eh_preco else ((r.valor * 100) | round(2) ~ '%') }}</text>
+          {% endfor %}
+          {% for r in grafico.rotulos_x %}
+          <text x="{{ r.x }}" y="{{ grafico.altura - 14 }}" fill="#64748b" font-size="10" text-anchor="middle" font-family="Geist, sans-serif">{{ r.valor }}</text>
+          {% endfor %}
+          <path d="{{ grafico.area }}" fill="url(#areaCurva)"/>
+          <path d="{{ grafico.caminho }}" fill="none" stroke="#a5f3fc" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+          {% for p in grafico.pontos_vertices %}
+          <circle cx="{{ p.x }}" cy="{{ p.y }}" r="2.4" fill="#0b1220" stroke="#67e8f9" stroke-width="1.4">
+            <title>{{ p.dc }} dc · {{ p.du }} du · {{ (p.taxa | moeda(4)) if curva.eh_preco else ((p.taxa * 100) | round(3) ~ '%') }}</title>
+          </circle>
+          {% endfor %}
+        </svg>
+      </div>
+      <p class="mt-3 text-xs text-slate-600 font-geist">{{ t("A linha é a curva interpolada") }} ({{ curva.metodo }}); {{ t("os pontos são os vértices publicados.") }}</p>
+    </div>
+    {% endif %}
+
+    <div class="sem-reveal mt-6 rounded-[2rem] border border-white/[0.09] bg-slate-950/40 backdrop-blur-xl">
+      <div class="flex items-center justify-between border-b border-white/[0.07] px-6 py-4">
+        <p class="text-sm font-medium text-white font-geist">{{ t("Vértices publicados") }}</p>
+        <span class="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-slate-400 font-geist">{{ curva.vertices | length }} linhas</span>
+      </div>
+      <div class="rolagem max-h-[32rem] px-2">
+        <table class="tabela-dados">
+          <thead><tr><th>#</th><th>{{ t("Dias úteis (252)") }}</th><th>{{ t("Dias corridos (360)") }}</th><th>{{ t("Preço") if curva.eh_preco else t("Taxa (% a.a.)") }}</th>
+          {% if not curva.eh_preco %}<th>{{ t("Fator de desconto") }}</th>{% endif %}</tr></thead>
+          <tbody>
+          {% for v in curva.vertices %}
+            <tr>
+              <td class="text-slate-600">{{ loop.index }}</td>
+              <td>{{ v.dias_uteis | numero }}</td>
+              <td>{{ v.dias_corridos | numero }}</td>
+              <td class="text-cyan-100">{{ (v.taxa | moeda(4)) if curva.eh_preco else (v.taxa | percentual(3)) }}</td>
+              {% if not curva.eh_preco %}
+              <td class="text-slate-500">{{ curva.fator_desconto(v.dias_corridos, v.dias_uteis, v.taxa) | moeda(8) }}</td>
+              {% endif %}
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}

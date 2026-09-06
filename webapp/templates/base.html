@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="{{ 'pt-BR' if idioma == 'pt' else 'en' }}">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>{% block titulo %}{{ t("Precificação de swaps") }}{% endblock %} — PriceEdge</title>
+<link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}"/>
+
+<!-- fonts: Geist (corpo) e Plus Jakarta Sans (títulos) — do design system Pulsedesk -->
+<link href="{{ url_for('static', filename='vendor/4bcb63d746dc1754_css2.css') }}" rel="stylesheet"/>
+<link href="{{ url_for('static', filename='vendor/b626255d7795be45_css2.css') }}" rel="stylesheet"/>
+<link rel="stylesheet" href="{{ url_for('static', filename='vendor/css/fonts.css') }}"/>
+<link rel="stylesheet" href="{{ url_for('static', filename='vendor/css/animations.css') }}"/>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}"/>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/tema-claro.css') }}"/>
+
+<!-- aplica o tema antes da primeira pintura, para não piscar branco/escuro -->
+<script>
+  (function () {
+    try {
+      var salvo = localStorage.getItem("tema");
+      var claro = salvo ? salvo === "claro"
+        : window.matchMedia("(prefers-color-scheme: light)").matches;
+      if (claro) document.documentElement.setAttribute("data-tema", "claro");
+    } catch (e) { /* localStorage bloqueado: fica no tema escuro */ }
+  })();
+</script>
+
+<!-- runtime do Tailwind e do Iconify, iguais aos do design system -->
+<script src="{{ url_for('static', filename='vendor/176e894661aa9cdc_3.4.17') }}"></script>
+<script src="{{ url_for('static', filename='vendor/758d94838db0cafd_iconify-icon.min.js') }}"></script>
+</head>
+<body class="min-h-screen overflow-x-hidden antialiased selection:bg-cyan-300/20 selection:text-cyan-100 text-slate-100 font-sans bg-[#080c14]" style="font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">
+
+<!-- background-layers -->
+<div class="camada-gradiente pointer-events-none fixed inset-0 -z-50" style="background: radial-gradient(circle at 50% -10%, rgba(88, 166, 255, 0.16), transparent 36%), radial-gradient(circle at 82% 18%, rgba(103, 232, 249, 0.08), transparent 28%), linear-gradient(180deg, #0b1020 0%, #080c14 42%, #0a0d13 100%);"></div>
+<div class="camada-ruido pointer-events-none fixed inset-0 -z-40 opacity-[0.035]" style="background-image: url('data:image/svg+xml,%3Csvg viewBox=%220 0 256 256%22 xmlns=%22http://www.w3.org/2000/svg%22%3E%3Cfilter id=%22noiseFilter%22%3E%3CfeTurbulence type=%22fractalNoise%22 baseFrequency=%220.75%22 numOctaves=%223%22 stitchTiles=%22stitch%22/%3E%3C/filter%3E%3Crect width=%22100%25%22 height=%22100%25%22 filter=%22url(%23noiseFilter)%22/%3E%3C/svg%3E');"></div>
+
+<div class="moldura mx-auto min-h-screen w-full max-w-[1680px] border-x border-white/[0.06]">
+<div class="pointer-events-none fixed left-1/2 top-0 -z-30 hidden h-full w-full max-w-[1680px] -translate-x-1/2 grid-cols-4 md:grid">
+<div class="border-r border-white/[0.045]"></div><div class="border-r border-white/[0.045]"></div>
+<div class="border-r border-white/[0.045]"></div><div></div>
+</div>
+
+<header class="cabecalho sticky border-white/[0.06] [animation:animationIn_0.8s_ease-out_0.1s_both] z-50 bg-[#080c14]/70 border-b top-0 backdrop-blur-2xl">
+<nav class="mx-auto flex h-16 w-full max-w-[1600px] items-center justify-between px-5 sm:px-6 lg:px-8">
+  <a class="group flex shrink-0 items-center gap-3" href="{{ url_for('principal.painel') }}">
+    <span class="flex h-9 w-9 items-center justify-center rounded-2xl border border-cyan-100/10 bg-cyan-100/[0.06] text-cyan-100">
+      <iconify-icon height="18" icon="solar:chart-square-linear" width="18"></iconify-icon>
+    </span>
+    <span class="text-base font-semibold text-white tracking-[-0.035em] font-geist">PriceEdge</span>
+  </a>
+  <div class="hidden min-w-0 items-center gap-5 xl:flex">
+    {% set principais = [
+      ('principal.painel', 'Painel'),
+      ('principal.curvas', 'Curvas B3'),
+      ('principal.precificar', 'Precificar'),
+      ('principal.ndf', 'NDF'),
+      ('principal.term_sofr', 'Term SOFR'),
+      ('principal.sofr_indice', 'SOFR Index'),
+      ('principal.euribor_diario', 'EURIBOR'),
+      ('principal.metodologia', 'Metodologia'),
+    ] %}
+    {% set ferramentas = [
+      ('principal.calculadora_renda_fixa', 'Renda fixa'),
+      ('principal.interpolador', 'Interpolação'),
+      ('principal.ni_pro_rata', 'NI pro-rata'),
+    ] %}
+    {% for rota, rotulo in principais %}
+    <a class="relative whitespace-nowrap text-[13px] transition duration-300 ease-out hover:text-white font-geist {{ 'text-white' if request.endpoint == rota else 'text-slate-400' }}" href="{{ url_for(rota) }}">{{ t(rotulo) }}
+      {% if request.endpoint == rota %}<span class="absolute -bottom-2 left-0 h-px w-full bg-cyan-200/70"></span>{% endif %}
+    </a>
+    {% endfor %}
+    <details class="group relative">
+      <summary class="flex cursor-pointer list-none items-center gap-1 whitespace-nowrap text-[13px] transition hover:text-white font-geist {{ 'text-white' if request.endpoint in ferramentas|map(attribute=0)|list else 'text-slate-400' }}">
+        {{ t("Ferramentas") }}
+        <iconify-icon class="transition group-open:rotate-180" height="14" icon="solar:alt-arrow-down-linear" width="14"></iconify-icon>
+      </summary>
+      <div class="absolute right-0 z-50 mt-3 w-52 rounded-2xl border border-white/[0.1] bg-[#0b1220]/95 p-2 shadow-2xl shadow-black/50 backdrop-blur-2xl">
+        {% for rota, rotulo in ferramentas %}
+        <a class="block rounded-xl px-3 py-2 text-sm transition hover:bg-white/[0.06] font-geist {{ 'text-cyan-100' if request.endpoint == rota else 'text-slate-300' }}" href="{{ url_for(rota) }}">{{ t(rotulo) }}</a>
+        {% endfor %}
+      </div>
+    </details>
+  </div>
+  <div class="flex shrink-0 items-center gap-3">
+    {% include "_barra_acoes.html" %}
+    <a class="hidden rounded-full border border-cyan-200/20 bg-cyan-100 px-4 py-2 text-sm font-medium text-slate-950 shadow-lg shadow-cyan-950/20 transition duration-300 ease-out hover:scale-[1.03] hover:bg-cyan-50 xl:inline-flex font-geist" href="{{ url_for('principal.precificar') }}">{{ t("Novo swap") }}</a>
+  </div>
+</nav>
+</header>
+
+<main>{% block conteudo %}{% endblock %}</main>
+
+<footer class="overflow-hidden border-white/[0.06] sm:px-8 sm:py-16 lg:pl-10 lg:pr-10 lg:pt-20 lg:pb-10 border-t pt-20 pr-10 pb-10 pl-10 relative">
+  <div class="pointer-events-none absolute left-1/2 top-0 h-px w-[70%] -translate-x-1/2 bg-gradient-to-r from-transparent via-cyan-100/20 to-transparent"></div>
+  <div class="pointer-events-none absolute -right-32 top-20 h-80 w-80 rounded-full bg-cyan-300/10 blur-3xl"></div>
+  <div class="relative mx-auto w-full max-w-[1600px]">
+    <div class="grid gap-12 sm:grid-cols-2 lg:grid-cols-[1.2fr_0.6fr_0.6fr_0.6fr] lg:gap-16">
+      <div class="max-w-sm">
+        <span class="inline-flex items-center gap-3">
+          <span class="flex h-10 w-10 items-center justify-center rounded-2xl border border-cyan-100/10 bg-cyan-100/[0.06] text-cyan-100">
+            <iconify-icon height="20" icon="solar:chart-square-linear" width="20"></iconify-icon>
+          </span>
+          <span class="text-xl tracking-tight text-white font-jakarta font-medium">PriceEdge</span>
+        </span>
+        <p class="mt-5 text-sm leading-6 text-slate-500 font-geist">{{ t("Precificação de swaps de balcão: calendário ANBIMA, spline cúbica, curvas da B3 e as estruturas de mercado.") }}</p>
+      </div>
+      <div>
+        <p class="text-sm font-medium text-slate-500 font-geist">{{ t("Ferramentas") }}</p>
+        <nav class="mt-5 flex flex-col gap-3">
+          <a class="text-sm text-slate-300 transition hover:text-cyan-100 font-geist" href="{{ url_for('principal.curvas') }}">{{ t("Curvas B3") }}</a>
+          <a class="text-sm text-slate-300 transition hover:text-cyan-100 font-geist" href="{{ url_for('principal.precificar') }}">{{ t("Precificar swap") }}</a>
+          <a class="text-sm text-slate-300 transition hover:text-cyan-100 font-geist" href="{{ url_for('principal.ndf') }}">NDF</a>
+          <a class="text-sm text-slate-300 transition hover:text-cyan-100 font-geist" href="{{ url_for('principal.term_sofr') }}">Term SOFR</a>
+          <a class="text-sm text-slate-300 transition hover:text-cyan-100 font-geist" href="{{ url_for('principal.sofr_indice') }}">SOFR Index</a>
+          <a class="text-sm text-slate-300 transition hover:text-cyan-100 font-geist" href="{{ url_for('principal.euribor_diario') }}">EURIBOR</a>
+          <a class="text-sm text-slate-300 transition hover:text-cyan-100 font-geist" href="{{ url_for('principal.calculadora_renda_fixa') }}">{{ t("Renda fixa") }}</a>
+          <a class="text-sm text-slate-300 transition hover:text-cyan-100 font-geist" href="{{ url_for('principal.interpolador') }}">{{ t("Interpolação") }}</a>
+          <a class="text-sm text-slate-300 transition hover:text-cyan-100 font-geist" href="{{ url_for('principal.ni_pro_rata') }}">{{ t("NI pro-rata") }}</a>
+        </nav>
+      </div>
+      <div>
+        <p class="text-sm font-medium text-slate-500 font-geist">{{ t("Referência") }}</p>
+        <nav class="mt-5 flex flex-col gap-3">
+          <a class="text-sm text-slate-300 transition hover:text-cyan-100 font-geist" href="{{ url_for('principal.metodologia') }}">{{ t("Metodologia") }}</a>
+          <a class="text-sm text-slate-300 transition hover:text-cyan-100 font-geist" href="https://www.b3.com.br/pt_br/market-data-e-indices/servicos-de-dados/market-data/consultas/mercado-de-derivativos/precos-referenciais/taxas-referenciais-bm-fbovespa/" target="_blank" rel="noopener">{{ t("Taxas referenciais B3") }}</a>
+          <a class="text-sm text-slate-300 transition hover:text-cyan-100 font-geist" href="/api/curvas/PRE">{{ t("API JSON") }}</a>
+        </nav>
+      </div>
+      <div>
+        <p class="text-sm font-medium text-slate-500 font-geist">{{ t("Convenções") }}</p>
+        <div class="mt-5 flex flex-col gap-3 text-sm text-slate-400 font-geist">
+          <span>{{ t("DI · exponencial 252") }}</span>
+          <span>{{ t("Cupom cambial · linear 360") }}</span>
+          <span>{{ t("Feriados · ANBIMA") }}</span>
+        </div>
+      </div>
+    </div>
+    <div class="mt-12 border-t border-white/[0.06] pt-8 text-sm text-slate-500">
+      <p class="font-geist">{{ t("Dados públicos da B3. Ferramenta de estudo — confira contra a sua fonte oficial antes de operar.") }}</p>
+    </div>
+  </div>
+</footer>
+</div>
+
+<script src="{{ url_for('static', filename='vendor/js/reveal-and-parallax.js') }}"></script>
+<script src="{{ url_for('static', filename='js/reveal-fallback.js') }}"></script>
+<script src="{{ url_for('static', filename='js/data-picker.js') }}"></script>
+<script src="{{ url_for('static', filename='js/formatar-campos.js') }}"></script>
+<script src="{{ url_for('static', filename='js/tema.js') }}"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

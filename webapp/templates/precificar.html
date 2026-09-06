@@ -1,0 +1,320 @@
+{% extends "base.html" %}
+{% from "_componentes.html" import alerta, estatistica, botao %}
+{% block titulo %}{{ t("Precificar") }}{% endblock %}
+
+{% macro seletor_perna(nome_campo, escolhido, rotulo, tipos) %}
+<div>
+  <label class="rotulo" for="{{ nome_campo }}">{{ rotulo }}</label>
+  <select class="campo" id="{{ nome_campo }}" name="{{ nome_campo }}" onchange="this.form.submit()">
+    {% for tipo in tipos %}
+    <option value="{{ tipo.id }}" {{ 'selected' if escolhido == tipo.id }}>{{ t(tipo.nome) }}</option>
+    {% endfor %}
+  </select>
+</div>
+{% endmacro %}
+
+{% block conteudo %}
+<section class="sm:px-6 lg:px-8 pt-16 pr-5 pb-10 pl-5">
+  <div class="w-full max-w-[1600px] mr-auto ml-auto">
+    <div class="reveal grid gap-8 lg:grid-cols-[1fr_0.72fr] lg:items-end">
+      <div class="max-w-3xl">
+        <p class="text-sm font-medium text-cyan-100 font-geist">{{ t("Estruturação") }}</p>
+        <h1 class="mt-4 text-4xl text-white sm:text-5xl tracking-tighter leading-[1.05] font-jakarta font-medium">{{ t("Monte o swap ponta a ponta.") }}</h1>
+      </div>
+      <div class="lg:ml-auto lg:max-w-md">
+        <p class="text-base leading-7 text-slate-400 font-geist">
+          {{ t("Escolha o que se recebe e o que se paga. As curvas necessárias são carregadas conforme a combinação, e cada perna desconta pela curva da sua própria moeda.") }}
+        </p>
+      </div>
+    </div>
+
+    <div class="mt-10">
+      <p class="text-[11px] font-semibold uppercase tracking-widest text-slate-500 font-geist">{{ t("Templates") }}</p>
+      <div class="mt-3 flex flex-wrap gap-2">
+        <a href="{{ url_for('principal.precificar') }}"
+           class="inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition font-geist
+                  {{ 'border-cyan-200/30 bg-cyan-100 text-slate-950' if not template_ativo else 'border-white/[0.1] bg-white/[0.04] text-slate-300 hover:bg-white/[0.08] hover:text-white' }}">
+          <iconify-icon height="16" icon="solar:widget-add-linear" width="16"></iconify-icon>{{ t("Livre") }}
+        </a>
+        {% for tpl in templates %}
+        <a href="{{ url_for('principal.precificar', template=tpl.id) }}"
+           class="inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition font-geist
+                  {{ 'border-cyan-200/30 bg-cyan-100 text-slate-950' if template_ativo == tpl.id else 'border-white/[0.1] bg-white/[0.04] text-slate-300 hover:bg-white/[0.08] hover:text-white' }}"
+           title="{{ t(tpl.resumo) }}">
+          <iconify-icon height="16" icon="{{ tpl.icone }}" width="16"></iconify-icon>{{ t(tpl.nome) }}
+        </a>
+        {% endfor %}
+      </div>
+    </div>
+
+    <form method="post" class="mt-8 grid gap-6 lg:grid-cols-[0.95fr_1.05fr] lg:items-start">
+      <div class="min-w-0 rounded-[2rem] border border-white/[0.09] bg-gradient-to-b from-white/[0.05] to-transparent p-6 backdrop-blur-xl sm:p-8">
+        <p class="text-[11px] font-semibold uppercase tracking-widest text-cyan-200 font-geist">{{ t("Pontas") }}</p>
+
+        <div class="mt-5 grid gap-4 sm:grid-cols-2">
+          {{ seletor_perna('perna_ativa', form.perna_ativa, t('Ponta ativa (recebe)'), tipos) }}
+          {{ seletor_perna('perna_passiva', form.perna_passiva, t('Ponta passiva (paga)'), tipos) }}
+
+          {% for tipo in tipos %}
+            {% if tipo.id == form.perna_ativa %}
+            <div class="sm:col-span-2 rounded-xl border border-white/[0.06] bg-black/20 px-4 py-3">
+              <p class="text-xs leading-5 text-slate-400 font-geist">
+                <span class="text-cyan-100">{{ t("Recebe") }}:</span> {{ t(tipo.resumo) }}
+              </p>
+            </div>
+            {% endif %}
+          {% endfor %}
+          {% for tipo in tipos %}
+            {% if tipo.id == form.perna_passiva %}
+            <div class="sm:col-span-2 rounded-xl border border-white/[0.06] bg-black/20 px-4 py-3">
+              <p class="text-xs leading-5 text-slate-400 font-geist">
+                <span class="text-cyan-100">{{ t("Paga") }}:</span> {{ t(tipo.resumo) }}
+              </p>
+            </div>
+            {% endif %}
+          {% endfor %}
+
+          {% for tipo in tipos %}{% if tipo.id == form.perna_ativa %}
+          <div>
+            <label class="rotulo" for="valor_ativa">{{ t(tipo.parametro) }}</label>
+            <input class="campo" id="valor_ativa" name="valor_ativa" value="{{ form.valor_ativa }}"
+                   inputmode="decimal" data-formato="percentual"/>
+          </div>
+          {% endif %}{% endfor %}
+          {% for tipo in tipos %}{% if tipo.id == form.perna_passiva %}
+          <div>
+            <label class="rotulo" for="valor_passiva">{{ t(tipo.parametro) }}</label>
+            <input class="campo" id="valor_passiva" name="valor_passiva" value="{{ form.valor_passiva }}"
+                   placeholder="{{ t('deixe vazio para calcular') }}" inputmode="decimal" data-formato="percentual"/>
+          </div>
+          {% endif %}{% endfor %}
+
+          <div class="sm:col-span-2">
+            <label class="rotulo" for="resolver">{{ t("O que resolver") }}</label>
+            <select class="campo" id="resolver" name="resolver">
+              <option value="passiva" {{ 'selected' if form.resolver == 'passiva' }}>{{ t("A ponta passiva, dada a ativa") }}</option>
+              <option value="ativa" {{ 'selected' if form.resolver == 'ativa' }}>{{ t("A ponta ativa, dada a passiva") }}</option>
+            </select>
+          </div>
+
+          {% if form.perna_ativa == 'cdi' or form.perna_passiva == 'cdi' %}
+          <div class="sm:col-span-2">
+            <label class="rotulo">{{ t("Remuneração da ponta CDI") }}</label>
+            <div class="inline-flex rounded-full border border-white/[0.12] bg-white/[0.04] p-1">
+              <label class="cursor-pointer">
+                <input type="radio" name="modo_cdi" value="spread" class="peer sr-only" {{ 'checked' if form.modo_cdi != 'percentual' }}/>
+                <span class="block rounded-full px-4 py-1.5 text-sm font-medium text-slate-300 transition peer-checked:bg-cyan-100 peer-checked:text-slate-950 font-geist">{{ t("CDI ± spread") }}</span>
+              </label>
+              <label class="cursor-pointer">
+                <input type="radio" name="modo_cdi" value="percentual" class="peer sr-only" {{ 'checked' if form.modo_cdi == 'percentual' }}/>
+                <span class="block rounded-full px-4 py-1.5 text-sm font-medium text-slate-300 transition peer-checked:bg-cyan-100 peer-checked:text-slate-950 font-geist">{{ t("% do CDI") }}</span>
+              </label>
+            </div>
+          </div>
+          {% endif %}
+        </div>
+
+        <div class="my-7 h-px w-full bg-white/[0.08]"></div>
+        <p class="text-[11px] font-semibold uppercase tracking-widest text-cyan-200 font-geist">{{ t("Contrato") }}</p>
+
+        <div class="mt-5 grid gap-4 sm:grid-cols-2">
+          <div>
+            <label class="rotulo" for="inicio">{{ t("Data de início") }}</label>
+            <input class="campo" id="inicio" name="inicio" type="date" value="{{ form.inicio }}" required/>
+          </div>
+          <div>
+            <label class="rotulo" for="vencimento">{{ t("Vencimento") }}</label>
+            <input class="campo" id="vencimento" name="vencimento" type="date" value="{{ form.vencimento }}" required/>
+          </div>
+          <div>
+            <label class="rotulo" for="nocional">{{ t("Nocional") }} (R$)</label>
+            <input class="campo" id="nocional" name="nocional" value="{{ form.nocional }}"
+                   inputmode="decimal" data-formato="moeda" required/>
+          </div>
+          <div>
+            <label class="rotulo" for="meses_periodo">{{ t("Periodicidade") }}</label>
+            <select class="campo" id="meses_periodo" name="meses_periodo">
+              {% for meses, rotulo in [(1,'Mensal'),(3,'Trimestral'),(6,'Semestral'),(12,'Anual')] %}
+              <option value="{{ meses }}" {{ 'selected' if form.meses_periodo|string == meses|string }}>{{ t(rotulo) }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label class="rotulo" for="amortizacao">{{ t("Amortização") }}</label>
+            <select class="campo" id="amortizacao" name="amortizacao">
+              {% for valor, rotulo in amortizacoes %}
+              <option value="{{ valor }}" {{ 'selected' if form.amortizacao == valor }}>{{ t(rotulo) }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label class="rotulo" for="fee">{{ t("Fee upfront") }}</label>
+            <input class="campo" id="fee" name="fee" value="{{ form.fee }}" inputmode="decimal" data-formato="moeda"/>
+          </div>
+          <div>
+            <label class="rotulo" for="calendario">{{ t("Calendário") }}</label>
+            <select class="campo" id="calendario" name="calendario">
+              {% for valor, rotulo in calendarios %}
+              <option value="{{ valor }}" {{ 'selected' if form.calendario == valor }} title="{{ rotulo }}">{{ valor }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label class="rotulo" for="convencao_dia_util">{{ t("Convenção de dia útil") }}</label>
+            <select class="campo" id="convencao_dia_util" name="convencao_dia_util">
+              {% for valor, rotulo in convencoes %}
+              <option value="{{ valor }}" {{ 'selected' if form.convencao_dia_util == valor }}>{{ t(rotulo) }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="sm:col-span-2">
+            <label class="flex cursor-pointer items-start gap-3 rounded-xl border border-white/[0.08] bg-black/20 px-4 py-3 transition hover:border-white/[0.16]">
+              <input type="checkbox" name="sem_fluxo" value="1" class="mt-0.5 h-4 w-4 shrink-0 accent-cyan-300" {{ 'checked' if form.sem_fluxo }}/>
+              <span class="text-sm font-medium text-slate-200 font-geist">{{ t("Sem fluxo de caixa — só o pagamento final") }}</span>
+            </label>
+          </div>
+        </div>
+
+        {% if insumos %}
+        <div class="my-7 h-px w-full bg-white/[0.08]"></div>
+        <p class="text-[11px] font-semibold uppercase tracking-widest text-cyan-200 font-geist">{{ t("Mercado") }}</p>
+        <div class="mt-5 grid gap-4 sm:grid-cols-2">
+          {% if 'curvas_b3' in insumos %}
+          <div class="{{ 'sm:col-span-2' if 'cambio' not in insumos }}">
+            <label class="rotulo" for="data_curva">{{ t("Data das curvas da B3") }}</label>
+            <input class="campo" id="data_curva" name="data_curva" type="date" value="{{ form.data_curva }}"/>
+          </div>
+          {% endif %}
+          {% if 'cambio' in insumos %}
+          <div>
+            <label class="rotulo" for="spot">{{ t("Dólar de partida") }}</label>
+            <input class="campo" id="spot" name="spot" value="{{ form.spot }}" inputmode="decimal" data-formato="preco"/>
+          </div>
+          {% endif %}
+          {% if 'sofr' in insumos %}
+          <div class="sm:col-span-2">
+            <label class="rotulo" for="term_sofr">{{ t("Term SOFR CME — 1M, 3M, 6M, 12M (%)") }}</label>
+            <input class="campo font-mono text-xs" id="term_sofr" name="term_sofr" value="{{ form.term_sofr }}"/>
+          </div>
+          <div class="sm:col-span-2">
+            <label class="rotulo" for="sofr">{{ t("Preços dos futuros SR3 (SOFR 3 meses), do mais curto ao mais longo") }}</label>
+            <input class="campo font-mono text-xs" id="sofr" name="sofr" value="{{ form.sofr }}"/>
+          </div>
+          {% endif %}
+        </div>
+        {% else %}
+        {# nenhuma das pontas escolhidas pede insumo de mercado #}
+        {% endif %}
+
+        <div class="mt-8">{{ botao(t('Montar e precificar'), 'solar:widget-add-linear') }}</div>
+      </div>
+
+      <div class="min-w-0">
+        {% if erro %}{{ alerta(erro) }}{% endif %}
+
+        {% if resultado %}
+        {% set swap = resultado.swap %}
+        <div class="sem-reveal rounded-[2rem] border border-cyan-200/20 bg-gradient-to-b from-cyan-400/[0.1] via-white/[0.04] to-transparent p-6 backdrop-blur-xl sm:p-8">
+          <div class="flex items-start justify-between gap-4">
+            <div>
+              <p class="text-[11px] font-semibold uppercase tracking-widest text-cyan-200 font-geist">{{ t(resultado.solucao.rotulo) }}</p>
+              <p class="mt-3 text-5xl tracking-tight text-white font-jakarta font-medium tabular-nums">
+                {{ resultado.solucao.valor | percentual(4) }}
+              </p>
+              <p class="mt-2 text-sm text-slate-400 font-geist">
+                {{ resultado.solucao.valor | bps }} · {{ t("taxa que zera o MtM") }}
+              </p>
+            </div>
+            <span class="rounded-full border border-cyan-200/20 bg-cyan-400/10 px-3 py-1 text-xs font-medium text-cyan-100 font-geist">{{ t("par") }}</span>
+          </div>
+
+          <div class="mt-6 flex flex-wrap gap-2">
+            <span class="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-slate-300 font-geist">
+              <iconify-icon height="14" icon="{{ resultado.ativa.icone }}" width="14"></iconify-icon>
+              {{ t("Recebe") }}: {{ t(resultado.ativa.nome) }}
+            </span>
+            <span class="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-slate-300 font-geist">
+              <iconify-icon height="14" icon="{{ resultado.passiva.icone }}" width="14"></iconify-icon>
+              {{ t("Paga") }}: {{ t(resultado.passiva.nome) }}
+            </span>
+          </div>
+
+          <div class="mt-7 grid gap-3 sm:grid-cols-2">
+            {{ estatistica(t('MtM (diferença de VPs)'), (swap.mtm | moeda(2)), resultado.moeda) }}
+            {{ estatistica(t('Prazo médio'), (swap.prazo_medio | moeda(3)) ~ ' ' ~ t('anos'), t('ponderado pela amortização')) }}
+            {{ estatistica(t('VP ponta ativa'), swap.ativa.pv | moeda(2), swap.ativa.nome) }}
+            {{ estatistica(t('VP ponta passiva'), swap.passiva.pv | moeda(2), swap.passiva.nome) }}
+            {{ estatistica(t('Duration'), (swap.duration | moeda(3)) ~ ' ' ~ t('anos'), t('Macaulay, sobre o VP')) }}
+            {{ estatistica(t('Períodos'), swap.ativa.fluxos | length, t('pagamentos no cronograma')) }}
+          </div>
+
+          {% if resultado.curvas %}
+          <div class="mt-6 flex flex-wrap gap-2">
+            {% for c in resultado.curvas %}
+            <span class="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-slate-400 font-geist">
+              <span class="h-1.5 w-1.5 rounded-full bg-cyan-300"></span>
+              {{ t(c.nome) }} · {{ c.vertices }} {{ t("vértices") }} · {{ c.convencao }}
+            </span>
+            {% endfor %}
+          </div>
+          {% endif %}
+        </div>
+
+        {% for perna in [swap.ativa, swap.passiva] %}
+        <div class="sem-reveal mt-6 rounded-[2rem] border border-white/[0.09] bg-slate-950/40 backdrop-blur-xl">
+          <div class="flex flex-wrap items-center justify-between gap-3 border-b border-white/[0.07] px-6 py-4">
+            <div>
+              <p class="text-sm font-medium text-white font-geist">
+                {{ t('Ponta ativa') if loop.first else t('Ponta passiva') }} · {{ perna.nome }}
+              </p>
+              <p class="mt-0.5 text-xs text-slate-500 font-geist">{{ perna.moeda }}</p>
+            </div>
+            <span class="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-slate-300 font-geist tabular-nums">
+              {{ t("Valor presente") }} {{ perna.pv | moeda(2) }}
+            </span>
+          </div>
+          <div class="rolagem max-h-[24rem] px-2">
+            <table class="tabela-dados">
+              <thead>
+                <tr>
+                  <th>#</th><th>{{ t("Pagamento") }}</th><th>DC</th><th>DU</th>
+                  <th>{{ t("Saldo") }}</th><th>{{ t("Taxa período") }}</th><th>{{ t("Juros") }}</th>
+                  <th>{{ t("Amortização") }}</th><th>{{ t("Valor presente") }}</th>
+                </tr>
+              </thead>
+              <tbody>
+              {% for f in perna.fluxos %}
+                <tr>
+                  <td class="text-slate-600">{{ f.periodo.indice }}</td>
+                  <td>{{ f.periodo.data_pagamento | data_br }}</td>
+                  <td class="text-slate-500">{{ f.periodo.dc_total | numero }}</td>
+                  <td class="text-slate-500">{{ f.periodo.du_total | numero }}</td>
+                  <td>{{ f.saldo | moeda(0) }}</td>
+                  <td class="text-cyan-100">{{ f.taxa_periodo | percentual(4) }}</td>
+                  <td>{{ f.juros | moeda(2) }}</td>
+                  <td>{{ f.amortizacao | moeda(2) }}</td>
+                  <td class="text-white">{{ f.pv | moeda(2) }}</td>
+                </tr>
+              {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        {% endfor %}
+
+        {% else %}
+        <div class="rounded-[2rem] border border-dashed border-white/[0.12] bg-white/[0.02] p-10 text-center">
+          <div class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-cyan-300/10 text-cyan-200">
+            <iconify-icon height="24" icon="solar:widget-add-linear" width="24"></iconify-icon>
+          </div>
+          <p class="text-sm text-slate-400 font-geist">{{ t("Escolha as duas pontas e monte a estrutura.") }}</p>
+          <p class="mx-auto mt-2 max-w-sm text-xs leading-5 text-slate-600 font-geist">
+            {{ t("Combinações que não fazem sentido — mesmo indexador dos dois lados, curvas de desconto incompatíveis — são recusadas com o motivo.") }}
+          </p>
+        </div>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+</section>
+{% endblock %}

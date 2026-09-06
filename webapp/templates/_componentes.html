@@ -1,0 +1,58 @@
+{# Blocos reutilizáveis, todos derivados do design system Pulsedesk. #}
+
+{% macro cabecalho(numero, olho, titulo, texto) %}
+<div class="reveal grid w-full max-w-[1600px] gap-8 lg:grid-cols-[1fr_0.72fr] lg:items-end">
+  <div class="max-w-3xl">
+    <p class="text-sm font-medium text-cyan-100 font-geist">{{ numero }} · {{ olho }}</p>
+    <h1 class="mt-4 text-4xl text-white sm:text-5xl tracking-tighter leading-[1.05] font-jakarta font-medium">{{ titulo }}</h1>
+  </div>
+  {% if texto %}
+  <div class="lg:ml-auto lg:max-w-md">
+    <p class="text-base leading-7 text-slate-400 font-geist">{{ texto }}</p>
+  </div>
+  {% endif %}
+</div>
+{% endmacro %}
+
+{% macro painel_inicio(classes='') %}
+<div class="rounded-[2rem] border border-white/[0.09] bg-gradient-to-b from-white/[0.05] to-transparent p-6 backdrop-blur-xl sm:p-8 {{ classes }}">
+{% endmacro %}
+
+{% macro painel_fim() %}
+</div>
+{% endmacro %}
+
+{% macro estatistica(rotulo, valor, detalhe='', destaque=false) %}
+<div class="rounded-2xl border {{ 'border-cyan-200/25 bg-cyan-300/[0.07]' if destaque else 'border-white/[0.08] bg-white/[0.03]' }} p-4">
+  <p class="text-xs text-slate-400 font-geist">{{ rotulo }}</p>
+  <p class="mt-2 text-2xl tracking-tight {{ 'text-cyan-100' if destaque else 'text-white' }} font-jakarta font-medium tabular-nums">{{ valor }}</p>
+  {% if detalhe %}<p class="mt-1 text-xs text-slate-500 font-geist">{{ detalhe }}</p>{% endif %}
+</div>
+{% endmacro %}
+
+{% macro alerta(mensagem, tipo='erro') %}
+<div class="sem-reveal mt-6 flex items-start gap-3 rounded-2xl border {{ 'border-rose-400/25 bg-rose-500/[0.08]' if tipo == 'erro' else 'border-amber-300/25 bg-amber-400/[0.07]' }} px-5 py-4">
+  <iconify-icon class="mt-0.5 shrink-0 {{ 'text-rose-300' if tipo == 'erro' else 'text-amber-300' }}" height="18" width="18"
+    icon="{{ 'solar:danger-triangle-linear' if tipo == 'erro' else 'solar:info-circle-linear' }}"></iconify-icon>
+  <p class="text-sm leading-6 {{ 'text-rose-100' if tipo == 'erro' else 'text-amber-100' }} font-geist">{{ mensagem }}</p>
+</div>
+{% endmacro %}
+
+{% macro botao(texto, icone='solar:arrow-right-linear', tipo='submit') %}
+<button type="{{ tipo }}" class="group inline-flex items-center justify-center gap-2 rounded-full bg-cyan-100 px-5 py-3 text-sm font-semibold text-slate-950 shadow-2xl shadow-cyan-950/30 transition duration-300 ease-out hover:scale-[1.03] hover:bg-cyan-50 font-geist">
+  {{ texto }}
+  <iconify-icon class="transition duration-300 ease-out group-hover:translate-x-0.5" height="18" icon="{{ icone }}" width="18"></iconify-icon>
+</button>
+{% endmacro %}
+
+{% macro link_secundario(texto, href, icone='') %}
+<a class="inline-flex items-center justify-center gap-2 rounded-full border border-white/[0.1] bg-white/[0.04] px-5 py-3 text-sm font-medium text-slate-200 backdrop-blur-xl transition duration-300 ease-out hover:scale-[1.02] hover:border-white/[0.18] hover:bg-white/[0.07] font-geist" href="{{ href }}">
+  {{ texto }}{% if icone %}<iconify-icon height="18" icon="{{ icone }}" width="18"></iconify-icon>{% endif %}
+</a>
+{% endmacro %}
+
+{% macro etiqueta(texto, cor='cyan') %}
+<span class="inline-flex items-center gap-1.5 rounded-full border border-{{ cor }}-200/20 bg-{{ cor }}-400/10 px-3 py-1 text-xs font-medium text-{{ cor }}-100 font-geist">
+  <span class="h-1.5 w-1.5 rounded-full bg-{{ cor }}-200"></span>{{ texto }}
+</span>
+{% endmacro %}

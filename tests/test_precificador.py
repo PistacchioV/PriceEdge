@@ -1,0 +1,995 @@
+"""Testes de regressão contra os números das planilhas originais.
+
+Os arquivos ``*_ref.json`` foram extraídos das próprias planilhas com openpyxl;
+são a referência contra a qual o porte é conferido.
+"""
+
+import json
+import re
+from datetime import date
+from pathlib import Path
+
+import pytest
+
+from precificador import (BULLET, Curva, LINEAR, ParametrosSwap, calendario_anbima,
+                          cubic_spline, spread_par_cdi, swap_pre_x_cdi)
+from precificador.calendario import terceira_quarta
+from precificador.curvas import EXP252, LIN360, CurvaTermSOFR
+from precificador.instrumentos import agenda_periodica, pesos_amortizacao
+from precificador.produtos import (NumeroIndice, pre_brl_par, swap_ipca_x_cdi,
+                                   swap_pre_usd_x_pre_brl)
+
+REF = Path(__file__).parent
+CURVAS = json.loads((REF / "curvas_ref.json").read_text())
+AGENDA = json.loads((REF / "agenda_ref.json").read_text())
+
+
+# ------------------------------------------------------------- interpolação
+
+def test_spline_reproduz_a_udf_do_vba():
+    """A spline em Python bate com a ``cubic_spline`` do VBA em 1e-8.
+
+    Os alvos são a coluna "CDI futuro interpolado" da planilha *Pré USD x Pré
+    BRL*.  Os x usados ali são os **dias úteis** — ver ``test_eixo_da_curva``.
+    """
+    xs = [linha["J"] for linha in AGENDA]
+    alvos = [alvo[1] for alvo in CURVAS["alvos"]]
+    for x, alvo in zip(xs, alvos):
+        obtido = cubic_spline(CURVAS["dias"], CURVAS["cdi"], x,
+                              extrapolar="cubica") / 100.0
+        # 1e-6 relativo: o primeiro ponto (x=0) cai fora do domínio da curva
+        # e a extrapolação cúbica amplifica o arredondamento do valor gravado
+        # na célula.  Nos dez pontos internos o casamento é melhor que 1e-9.
+        assert obtido == pytest.approx(alvo, rel=1e-6)
+
+
+def test_eixo_da_curva_e_dias_corridos():
+    """O eixo da curva da B3 vai a 12.556 dias: é calendário, não útil.
+
+    A planilha *Pré USD x Pré BRL* interpola essa curva num valor de dias
+    úteis, o que devolve a taxa de um prazo mais curto.  O pacote interpola em
+    dias corridos, como faz a planilha de IPCA — que traz a fórmula explícita
+    ``cubic_spline(Curvas!A:A; Curvas!B:B; DC total)``.
+    """
+    assert max(CURVAS["dias"]) == 12556
+    assert CURVAS["dias"] == CURVAS["dc"]
+
+
+def test_spline_passa_pelos_vertices():
+    for i in (0, 40, 150, len(CURVAS["dias"]) - 1):
+        x, y = CURVAS["dias"][i], CURVAS["cdi"][i]
+        assert cubic_spline(CURVAS["dias"], CURVAS["cdi"], x) == pytest.approx(y, abs=1e-9)
+
+
+def test_extrapolacao_flat_trava_nas_pontas():
+    ultimo = CURVAS["cdi"][-1]
+    assert cubic_spline(CURVAS["dias"], CURVAS["cdi"], 99_999) == pytest.approx(ultimo)
+
+
+# -------------------------------------------------------------- calendário
+
+def test_agenda_bate_com_as_colunas_de_datas_da_planilha():
+    periodos = agenda_periodica(date(2026, 4, 1), date(2031, 4, 1), 6)
+    esperado = AGENDA[1:]                       # a linha 0 é a data de início
+    assert len(periodos) == len(esperado)
+    for periodo, linha in zip(periodos, esperado):
+        assert periodo.data_pagamento.isoformat() == linha["F"]
+        assert periodo.dc_total == linha["H"]
+        assert periodo.dc_periodo == linha["I"]
+        assert periodo.du_total == linha["J"]
+        assert periodo.du_periodo == linha["K"]
+
+
+def test_feriados_e_dias_uteis():
+    cal = calendario_anbima()
+    assert not cal.eh_dia_util(date(2026, 4, 3))       # Paixão de Cristo
+    assert not cal.eh_dia_util(date(2026, 4, 4))       # sábado
+    assert cal.eh_dia_util(date(2026, 4, 6))
+    assert cal.ajusta(date(2028, 4, 1)) == date(2028, 4, 3)
+    assert cal.workday(date(2026, 4, 1), 2) == date(2026, 4, 6)
+    assert cal.dias_uteis(date(2026, 4, 1), date(2026, 4, 1)) == 0
+
+
+def test_data_imm():
+    assert terceira_quarta(2026, 6) == date(2026, 6, 17)
+    assert terceira_quarta(2026, 12) == date(2026, 12, 16)
+    assert terceira_quarta(2027, 3) == date(2027, 3, 17)
+
+
+# ------------------------------------------------------------------ curvas
+
+def curva_di():
+    return Curva.de_listas(CURVAS["dias"], [t / 100 for t in CURVAS["cdi"]],
+                           "DI x Pré", date(2026, 4, 1), convencao=EXP252)
+
+
+def curva_cupom():
+    return Curva.de_listas(CURVAS["dc"], [t / 100 for t in CURVAS["doc"]],
+                           "Cupom Cambial", date(2026, 4, 1), convencao=LIN360,
+                           metodo="linear")
+
+
+def test_fra_encadeia_de_volta_no_spot():
+    """Capitalizar os FRAs de volta reproduz o fator spot do prazo final."""
+    curva = curva_di()
+    periodos = agenda_periodica(date(2026, 4, 1), date(2031, 4, 1), 6)
+    fator, dc_ant, du_ant = 1.0, 0, 0
+    for p in periodos:
+        fra = curva.forward(dc_ant, p.dc_total, du_ant, p.du_total)
+        fator *= (1 + fra) ** (p.du_periodo / 252)
+        dc_ant, du_ant = p.dc_total, p.du_total
+    ultimo = periodos[-1]
+    assert fator == pytest.approx(
+        curva.fator_capitalizacao(ultimo.dc_total, ultimo.du_total), rel=1e-12)
+
+
+def test_shift_paralelo():
+    curva = curva_di()
+    assert curva.deslocada(0.0001).taxa(365) == pytest.approx(curva.taxa(365) + 0.0001)
+
+
+# ----------------------------------------------------------------- produtos
+
+PARAMS = ParametrosSwap(inicio=date(2026, 4, 1), vencimento=date(2031, 4, 1),
+                        nocional=100_000_000, meses_periodo=6, amortizacao=BULLET)
+
+
+def test_amortizacao():
+    assert pesos_amortizacao(4, BULLET) == [0, 0, 0, 1]
+    assert sum(pesos_amortizacao(10, LINEAR)) == pytest.approx(1.0)
+    with pytest.raises(ValueError):
+        pesos_amortizacao(3, "personalizada", [0.5, 0.4, 0.2])
+
+
+def test_spread_par_zera_o_mtm():
+    """É o Atingir Meta das macros: a taxa devolvida tem que zerar o MtM."""
+    di = curva_di()
+    spread = spread_par_cdi(PARAMS, 0.17, di)
+    swap = swap_pre_x_cdi(PARAMS, 0.17, spread, di)
+    assert swap.mtm == pytest.approx(0.0, abs=1e-6)
+    assert 0.0 < spread < 0.10
+
+
+def test_cdi_com_spread_zero_replica_a_curva():
+    """Sem cupom no meio, pré par == taxa da curva; com cupom, o par se afasta.
+
+    Num swap de um período só (bullet, sem pagamento intermediário) a taxa pré
+    que zera o MtM contra CDI puro é exatamente a taxa spot da curva.  Com
+    cupom semestral aparece o efeito par-vs-zero, de ordem de 1 bp aqui — e
+    ele é real, não erro numérico.
+    """
+    di = curva_di()
+    from precificador.produtos import pre_par_cdi
+    zero_cupom = ParametrosSwap(inicio=date(2026, 4, 1), vencimento=date(2031, 4, 1),
+                                nocional=100_000_000, meses_periodo=120)
+    ultimo = zero_cupom.agenda()[-1]
+    assert pre_par_cdi(zero_cupom, 0.0, di) == pytest.approx(di.taxa(ultimo.dc_total),
+                                                             abs=1e-9)
+    com_cupom = pre_par_cdi(PARAMS, 0.0, di)
+    assert com_cupom == pytest.approx(di.taxa(PARAMS.agenda()[-1].dc_total), abs=5e-4)
+
+
+def test_spread_multiplicativo_nao_aditivo():
+    """(1+CDI)(1+spread) ≠ CDI+spread — o aviso em vermelho da planilha."""
+    di = curva_di()
+    pre = 0.17
+    spread = spread_par_cdi(PARAMS, pre, di)
+    ultimo = PARAMS.agenda()[-1]
+    cdi = di.taxa(ultimo.dc_total)
+    assert abs((pre - cdi) - spread) > 3e-4          # a diferença é material
+    assert (1 + cdi) * (1 + spread) == pytest.approx(1 + pre, abs=2e-3)
+
+
+def test_cross_currency_desconta_cada_perna_na_sua_curva():
+    di, cupom = curva_di(), curva_cupom()
+    taxa_brl = pre_brl_par(PARAMS, 0.10, di, cupom, 5.15)
+    swap = swap_pre_usd_x_pre_brl(PARAMS, 0.10, taxa_brl, di, cupom, 5.15)
+    assert swap.mtm == pytest.approx(0.0, abs=1e-6)
+    assert swap.ativa.moeda == "USD" and swap.passiva.moeda == "BRL"
+    assert 0.05 < taxa_brl < 0.25
+
+
+def test_prazo_medio_e_duration_de_um_bullet():
+    di = curva_di()
+    swap = swap_pre_x_cdi(PARAMS, 0.17, 0.02, di)
+    prazo = swap.ativa.fluxos[-1].periodo.dc_total / 365
+    assert swap.prazo_medio == pytest.approx(prazo, abs=1e-9)   # bullet: só uma amortização
+    assert swap.duration < swap.prazo_medio                     # cupom semestral encurta
+
+
+def test_ipca_precisa_das_duas_curvas():
+    di = curva_di()
+    ipca = Curva.de_listas(CURVAS["dias"], [0.07] * len(CURVAS["dias"]),
+                           "DI x IPCA", date(2026, 4, 1))
+    swap = swap_ipca_x_cdi(PARAMS, 0.07, 0.02, di, ipca)
+    inflacao_implicita = (1 + di.taxa(1826)) / 1.07 - 1
+    indice = swap.ativa.fluxos[-1].amortizacao / PARAMS.nocional
+    assert indice == pytest.approx((1 + inflacao_implicita) ** (1249 / 252), rel=1e-3)
+
+
+# --------------------------------------------------------------- Term SOFR
+
+def test_bootstrap_term_sofr():
+    """A curva é ancorada no spot: DF(spot) = 1, e cai daí em diante."""
+    datas = [terceira_quarta(2026, m) for m in (6, 9, 12)] + [terceira_quarta(2027, 3)]
+    spot = date(2026, 5, 1)
+    curva = CurvaTermSOFR(spot, datas, [0.03655, 0.0362, 0.0358])
+    assert curva.fator_desconto(spot) == pytest.approx(1.0)
+    dfs = [p["df"] for p in curva.pontos]
+    assert all(df < 1.0 for df in dfs)
+    assert all(a > b for a, b in zip(dfs, dfs[1:]))    # DF sempre decrescente
+    # o encadeamento entre datas IMM é o bootstrap dos futuros
+    dc = (datas[1] - datas[0]).days
+    assert dfs[1] == pytest.approx(dfs[0] / (1 + 0.03655 * dc / 360))
+
+
+def test_term_sofr_usa_as_taxas_da_cme_no_trecho_curto():
+    """As taxas Term SOFR de 1, 3, 6 e 12 meses montam a ponta curta da curva."""
+    spot = date(2026, 5, 1)
+    datas = [terceira_quarta(2026, m) for m in (6, 9, 12)]
+    taxas = {1: 0.0364637, 3: 0.0365811, 6: 0.0367358, 12: 0.0373148}
+    curva = CurvaTermSOFR(spot, datas, [0.03655, 0.0362], taxas_term=taxas)
+
+    tres_meses = date(2026, 8, 1)
+    dc = (tres_meses - spot).days
+    assert curva.fator_desconto(tres_meses) == pytest.approx(
+        1 / (1 + taxas[3] * dc / 360), rel=1e-12)
+
+    # o Term SOFR a termo de 3 meses no próprio spot volta a taxa de 3 meses
+    assert curva.term_forward(spot, 3) == pytest.approx(taxas[3], rel=1e-9)
+
+
+def test_term_forward_por_tenor():
+    """Cada tenor devolve a taxa linear 360 da sua própria janela."""
+    spot = date(2026, 5, 1)
+    datas = [terceira_quarta(2026, m) for m in (6, 9, 12)] + [terceira_quarta(2027, 3)]
+    taxas = {1: 0.0364637, 3: 0.0365811, 6: 0.0367358, 12: 0.0373148}
+    curva = CurvaTermSOFR(spot, datas, [0.03655, 0.0362, 0.0358], taxas_term=taxas)
+    for meses in (1, 3, 6, 12):
+        assert curva.term_forward(spot, meses) == pytest.approx(taxas[meses], rel=1e-9)
+    # a termo, seis meses à frente, a taxa muda
+    assert curva.term_forward(date(2026, 11, 1), 3) != pytest.approx(taxas[3], rel=1e-6)
+
+
+# --------------------------------------------------------------------- IPCA
+
+def test_ni_pro_rata():
+    """Aba "Cálculo NI Pro-Rata", com os mesmos insumos da planilha.
+
+    dup=19, dut=21 e NI=7591,937980031845 são os valores gravados nas células
+    M6, M7 e M5.  Eles só batem porque ``dias_uteis`` reproduz o
+    ``NETWORKDAYS − 1`` literal: a data-base 15/03/2026 é um domingo, e nesse
+    caso o −1 do Excel come um dia útil de verdade.
+    """
+    cal = calendario_anbima()
+    ni = NumeroIndice(ni_anterior=7545.53, projecao_mensal=0.0068,
+                      data_referencia=date(2026, 4, 13))
+    assert ni.data_base == date(2026, 3, 15)
+    assert ni.proxima_base == date(2026, 4, 15)
+    assert cal.dias_uteis(ni.data_base, ni.data_referencia) == 19
+    assert cal.dias_uteis(ni.data_base, ni.proxima_base) == 21
+    assert ni.ni_cheio == pytest.approx(7596.839603999999, abs=1e-9)
+    assert ni.ni_pro_rata() == pytest.approx(7591.937980031845, abs=1e-9)
+    assert ni.vna(1000, 7545.53) == pytest.approx(1000 * ni.ni_pro_rata() / 7545.53)
+
+
+def test_networkdays_e_dias_uteis_sao_coisas_diferentes():
+    """A distinção que faz o NI pro-rata bater com a planilha."""
+    cal = calendario_anbima()
+    domingo, segunda = date(2026, 3, 15), date(2026, 3, 16)
+    assert cal.networkdays(domingo, date(2026, 4, 13)) == 20
+    assert cal.dias_uteis(domingo, date(2026, 4, 13)) == 19
+    # partindo de um dia útil, as duas contagens voltam a coincidir
+    assert cal.dias_uteis(segunda, date(2026, 4, 13)) == cal.networkdays(segunda, date(2026, 4, 13)) - 1
+
+
+def test_swap_sofr_desconta_a_partir_do_inicio():
+    """O spread par tem que ser a diferença entre o pré e o forward médio.
+
+    Se os DFs forem tomados da primeira data IMM em vez da data de início do
+    swap, o primeiro forward sai inflado e o spread par erra por mais de 100 bp.
+    """
+    from precificador.produtos import spread_par_sofr, swap_pre_usd_x_term_sofr
+    meses = [(6, 2026), (9, 2026), (12, 2026), (3, 2027), (6, 2027),
+             (9, 2027), (12, 2027), (3, 2028), (6, 2028)]
+    precos = [96.345, 96.38, 96.42, 96.46, 96.49, 96.51, 96.52, 96.53]
+    curva = CurvaTermSOFR(date(2026, 5, 1), [terceira_quarta(a, m) for m, a in meses],
+                          [(100 - p) / 100 for p in precos])
+    params = ParametrosSwap(inicio=date(2026, 9, 8), vencimento=date(2029, 9, 10),
+                            nocional=50_000_000, meses_periodo=3)
+    spread = spread_par_sofr(params, 0.05, curva)
+    assert swap_pre_usd_x_term_sofr(params, 0.05, spread, curva).mtm == pytest.approx(0, abs=1e-6)
+    forward_medio = sum(curva.forwards) / len(curva.forwards)
+    assert spread == pytest.approx(0.05 - forward_medio, abs=2e-3)
+
+
+def test_df_entre_datas():
+    """``fator_desconto_entre`` é o que a precificação usa; DF isolado é do spot."""
+    spot = date(2026, 5, 1)
+    datas = [terceira_quarta(2026, m) for m in (6, 9, 12)]
+    curva = CurvaTermSOFR(spot, datas, [0.03655, 0.0362])
+    assert curva.fator_desconto_entre(datas[0], datas[0]) == pytest.approx(1.0)
+    assert curva.fator_desconto(spot) == pytest.approx(1.0)
+    # descontar de uma data posterior ao spot dá um DF maior que o do spot
+    assert (curva.fator_desconto_entre(datas[0], datas[1])
+            > curva.fator_desconto(datas[1]))
+
+
+# ------------------------------------------------------- leitura de formulário
+
+def test_parser_aceita_os_dois_padroes_decimais():
+    """Os campos voltam do navegador já formatados; o parser tem que ler isso.
+
+    ``formatar-campos.js`` escreve ``100.000.000,00`` e ``2,50000000 %`` de
+    volta no input, então o servidor precisa desfazer o separador de milhar sem
+    quebrar quem digita ``5.15`` no padrão americano.
+    """
+    from webapp.servicos import _decimal, taxa_do_form
+    assert _decimal("100.000.000,00", "nocional") == pytest.approx(100_000_000)
+    assert _decimal("100.000.000", "nocional") == pytest.approx(100_000_000)
+    assert _decimal("100000000", "nocional") == pytest.approx(100_000_000)
+    assert _decimal("1.500,50", "x") == pytest.approx(1500.50)
+    assert _decimal("1,500.50", "x") == pytest.approx(1500.50)
+    assert _decimal("5.15", "spot") == pytest.approx(5.15)      # ponto decimal
+    assert _decimal("5,15", "spot") == pytest.approx(5.15)      # vírgula decimal
+
+    assert taxa_do_form({"s": "2,50000000 %"}, "s", "spread") == pytest.approx(0.025)
+    assert taxa_do_form({"s": "0,50000000 %"}, "s", "spread") == pytest.approx(0.005)
+    assert taxa_do_form({"s": "-0,25000000 %"}, "s", "spread") == pytest.approx(-0.0025)
+    assert taxa_do_form({"s": "17"}, "s", "taxa") == pytest.approx(0.17)
+
+
+def test_formulario_aceita_ida_e_volta_do_formato():
+    """Enviar o formulário com os valores já formatados tem que funcionar."""
+    from webapp import create_app
+    cliente = create_app().test_client()
+    resposta = cliente.post("/precificar", data={
+        "produto": "pre_cdi", "inicio": "2026-09-04", "vencimento": "2031-09-04",
+        "nocional": "100.000.000,00", "meses_periodo": "6", "amortizacao": "bullet",
+        "fee": "0", "data_curva": "2026-09-04", "taxa_pre": "17",
+        "spread": "2,50000000 %", "resolver": "pre",
+    })
+    assert resposta.status_code == 200
+    assert "não é um número" not in resposta.data.decode()
+
+
+# ------------------------------------------------- convenções de dia útil --
+
+def test_convencoes_de_dia_util():
+    """Modified following não deixa o pagamento virar o mês."""
+    from precificador.calendario import (FOLLOWING, MODIFIED_FOLLOWING, PRECEDING,
+                                         UNADJUSTED)
+    cal = calendario_anbima()
+    domingo = date(2026, 5, 31)          # último dia do mês, domingo
+    assert cal.ajusta(domingo, convencao=FOLLOWING) == date(2026, 6, 1)
+    assert cal.ajusta(domingo, convencao=MODIFIED_FOLLOWING) == date(2026, 5, 29)
+    assert cal.ajusta(domingo, convencao=PRECEDING) == date(2026, 5, 29)
+    assert cal.ajusta(domingo, convencao=UNADJUSTED) == domingo
+    # em dia útil, nenhuma convenção mexe na data
+    util = date(2026, 5, 29)
+    for conv in (FOLLOWING, MODIFIED_FOLLOWING, PRECEDING, UNADJUSTED):
+        assert cal.ajusta(util, convencao=conv) == util
+
+
+def test_sem_fluxo_colapsa_a_agenda():
+    from precificador.produtos import ParametrosSwap
+    p = ParametrosSwap(inicio=date(2026, 9, 4), vencimento=date(2031, 9, 4),
+                       nocional=1e8, meses_periodo=6, sem_fluxo=True)
+    agenda = p.agenda()
+    assert len(agenda) == 1
+    assert agenda[0].data_pagamento >= date(2031, 9, 4)
+
+
+def test_calendarios_sofr_e_bce():
+    """SOFR vem do OTC Tracker; o TARGET2 do BCE é gerado pela regra."""
+    from precificador.calendario import calendario_bce, calendario_sofr, pascoa
+    assert pascoa(2026) == date(2026, 4, 5)
+    sofr_cal = calendario_sofr()
+    assert not sofr_cal.eh_dia_util(date(2026, 11, 26))       # Thanksgiving
+    assert not sofr_cal.eh_dia_util(date(2026, 7, 3))         # 4 de julho observado
+    bce = calendario_bce()
+    for feriado in (date(2026, 1, 1), date(2026, 4, 3), date(2026, 4, 6),
+                    date(2026, 5, 1), date(2026, 12, 25), date(2026, 12, 26)):
+        assert not bce.eh_dia_util(feriado)
+    assert bce.eh_dia_util(date(2026, 7, 14))    # feriado francês não é do TARGET
+
+
+# ------------------------------------------------------------ % do CDI ----
+
+def test_percentual_do_cdi_incide_na_taxa_diaria():
+    """110% do CDI não é 1,10 × a taxa anual."""
+    from precificador.instrumentos import perna_cdi_percentual
+    di = Curva.de_listas([1, 20000], [0.14, 0.14], "DI plana", date(2026, 9, 4),
+                         dias_uteis=[1, 14000])
+    params = ParametrosSwap(inicio=date(2026, 9, 4), vencimento=date(2027, 9, 6),
+                            nocional=1_000_000, sem_fluxo=True)
+    periodos = params.agenda()
+    perna = perna_cdi_percentual(1_000_000, 1.10, periodos, di, [1.0])
+    du = periodos[0].du_periodo
+    diaria = 1.14 ** (1 / 252) - 1
+    esperado = (1 + diaria * 1.10) ** du - 1
+    assert perna.fluxos[0].taxa_periodo == pytest.approx(esperado, rel=1e-12)
+    # o cálculo ingênuo (percentual sobre a taxa anual) dá outro número
+    ingenuo = (1 + 1.10 * 0.14) ** (du / 252) - 1
+    assert abs(perna.fluxos[0].taxa_periodo - ingenuo) > 1e-4
+
+
+# ------------------------------------------------------------------ NDF ---
+
+def test_ndf_pela_paridade_coberta():
+    from precificador.produtos import ndf_forward
+    ndf = ndf_forward(spot=5.10, di=0.14, cupom=0.05, dias_corridos=365, dias_uteis=252)
+    assert ndf == pytest.approx(5.10 * 1.14 / (1 + 0.05 * 365 / 360), rel=1e-12)
+    # sem juros dos dois lados, o termo é o próprio spot
+    assert ndf_forward(5.10, 0.0, 0.0, 180, 124) == pytest.approx(5.10)
+
+
+def test_escada_de_datas_cai_no_ultimo_dia_util_do_mes():
+    from precificador.produtos import escada_datas
+    cal = calendario_anbima()
+    datas = escada_datas(date(2026, 9, 4), "mensal", 4, cal)
+    assert len(datas) == 4
+    for d in datas:
+        assert cal.eh_dia_util(d)
+        seguinte = d + __import__("datetime").timedelta(days=1)
+        # não há dia útil depois dele dentro do mesmo mês
+        while seguinte.month == d.month:
+            assert not cal.eh_dia_util(seguinte)
+            seguinte += __import__("datetime").timedelta(days=1)
+
+
+# ---------------------------------------------------------- renda fixa ----
+
+def test_renda_fixa_ir_e_iof():
+    from precificador import renda_fixa as rf
+    assert rf.aliquota_ir(180) == 0.225
+    assert rf.aliquota_ir(181) == 0.20
+    assert rf.aliquota_ir(721) == 0.15
+    assert rf.aliquota_iof(30) == 0.0
+    assert rf.aliquota_iof(1) == 0.96
+
+    curto = rf.calcular(100_000, date(2026, 9, 8), date(2026, 9, 25),
+                        rf.PREFIXADO, 0.14)
+    assert curto.iof > 0 and curto.aliquota_ir == 0.225
+
+    isento = rf.calcular(100_000, date(2026, 9, 8), date(2031, 9, 8),
+                         rf.IPCA_MAIS, 0.06, ipca_projetado=0.045, produto="cri")
+    assert isento.ir == 0 and isento.isento
+
+
+def test_di_sem_arredondamento_e_o_padrao():
+    """O arredondamento na 8ª casa muda o fator — por isso ele é opcional."""
+    from precificador import renda_fixa as rf
+    cheio = rf.fator_di(0.14, 1250, percentual=1.10, arredondar=False)
+    truncado = rf.fator_di(0.14, 1250, percentual=1.10, arredondar=True)
+    assert cheio != truncado
+    assert abs(cheio - truncado) < 1e-4          # pequeno, mas não zero
+    diferenca = rf.diferenca_arredondamento(0.14, 1250, 1.10, valor=1_000_000)
+    assert abs(diferenca["diferenca_reais"]) > 0.5
+
+
+# --------------------------------------------------------------- montador --
+
+def test_montador_valida_combinacoes():
+    from precificador.montador import validar
+    assert validar("cdi", "cdi") is not None
+    assert validar("pre_usd", "pre_usd_sofr") is not None
+    assert validar("pre_brl", "cdi") is None
+    assert validar("ipca", "pre_brl") is None
+
+
+def test_montador_reproduz_o_produto_pronto():
+    """Montar Pré BRL × CDI à mão tem que dar o mesmo do produto de atalho."""
+    from precificador.montador import Mercado, montar, resolver
+    di = curva_di()
+    mercado = Mercado(di=di)
+    spread_montado = resolver(PARAMS, mercado, "pre_brl", 0.17, "cdi", 0.0, "passiva")
+    spread_pronto = spread_par_cdi(PARAMS, 0.17, di)
+    assert spread_montado == pytest.approx(spread_pronto, abs=1e-9)
+    swap = montar(PARAMS, mercado, "pre_brl", 0.17, "cdi", spread_montado)
+    assert swap.mtm == pytest.approx(0.0, abs=1e-6)
+
+
+# --------------------------------------------------------- CDI realizado ---
+
+def test_acumulo_do_cdi_segue_a_convencao_da_b3():
+    """Fator = Π(1 + ((1+DI)^(1/252) − 1)·p) sobre [início, fim).
+
+    A calculadora da B3 dá 1,09550031 para 01/01/2026 a 06/09/2026 a 100%. O
+    último DI que entra é o de 04/09 — a data final não conta, e é isso que a
+    janela [início, fim) garante.
+    """
+    from precificador import cdi
+    fixings = [cdi.FixingCDI(date(2026, 1, 2), 0.149),
+               cdi.FixingCDI(date(2026, 1, 5), 0.149),
+               cdi.FixingCDI(date(2026, 1, 6), 0.149)]
+    r = cdi.acumular(fixings, date(2026, 1, 1), date(2026, 1, 6), valor=1000.0)
+    # o fixing de 06/01 é o da data final: fica de fora
+    assert r.dias_uteis == 2
+    assert r.ultimo == date(2026, 1, 5)
+    esperado = (1.149 ** (1 / 252)) ** 2
+    assert r.fator == pytest.approx(esperado, rel=1e-12)
+    assert r.valor_calculado == pytest.approx(1000.0 * esperado)
+
+
+def test_acumulo_com_percentual_e_arredondamento():
+    from precificador import cdi
+    fixings = [cdi.FixingCDI(date(2026, 1, 2), 0.149),
+               cdi.FixingCDI(date(2026, 1, 5), 0.149)]
+    cheio = cdi.acumular(fixings, date(2026, 1, 2), date(2026, 1, 6), percentual=1.10)
+    truncado = cdi.acumular(fixings, date(2026, 1, 2), date(2026, 1, 6),
+                            percentual=1.10, arredondar=True)
+    diaria = 1.149 ** (1 / 252) - 1
+    assert cheio.fator == pytest.approx((1 + diaria * 1.10) ** 2, rel=1e-12)
+    assert cheio.fator != truncado.fator          # o arredondamento muda o número
+
+
+def test_acumulo_recusa_periodo_sem_publicacao():
+    from precificador import cdi
+    fixings = [cdi.FixingCDI(date(2026, 1, 2), 0.149)]
+    with pytest.raises(cdi.ErroBCB):
+        cdi.acumular(fixings, date(2027, 1, 1), date(2027, 2, 1))
+    with pytest.raises(ValueError):
+        cdi.acumular(fixings, date(2026, 1, 5), date(2026, 1, 5))
+
+
+def test_calculadora_aceita_fator_pronto():
+    """O CDI realizado entra como fator; IR e IOF seguem o mesmo caminho."""
+    from precificador import renda_fixa as rf
+    r = rf.calcular(1000, date(2026, 1, 1), date(2026, 9, 6), rf.CDI_REALIZADO,
+                    taxa=1.0, fator_pronto=1.09550031, dias_uteis=170)
+    assert r.valor_bruto == pytest.approx(1095.50031)
+    assert r.aliquota_ir == 0.20                  # 248 dias corridos
+    assert r.valor_liquido == pytest.approx(1095.50031 - 95.50031 * 0.20)
+    assert rf.CDI_REALIZADO in rf.RETROATIVOS
+
+
+# --------------------------------------------------------------- EURIBOR ---
+
+CSV_EURIBOR = (
+    "dundasChartControl1_DRG_DataRowGrouping1_label,"
+    "dundasChartControl1_DRG_DataRowGrouping1_dundasChartControl1_DCG_Period1_label,"
+    "dundasChartControl1_DRG_DataRowGrouping1_dundasChartControl1_DCG_Period1_Value_X,"
+    "dundasChartControl1_DRG_DataRowGrouping1_dundasChartControl1_DCG_Period1_Value_Y\n"
+    "1 week,September,09/03/2026 00:00:00,2.182\n"
+    "1 week,September,09/04/2026 00:00:00,2.154\n"
+    "3 month,September,09/03/2026 00:00:00,2.655\n"
+    "3 month,September,09/04/2026 00:00:00,2.679\n"
+    "12 month,September,09/04/2026 00:00:00,3.108\n"
+    "Date,4 Sep 2026,12 month,3.108\n"          # bloco da tabela: tem de ser ignorado
+)
+
+
+def test_parse_do_csv_do_banco_da_finlandia():
+    """A data vem em MM/DD/AAAA e o rodapé traz outro bloco, que sai fora."""
+    from precificador import euribor
+    fixings = euribor.parse_csv(CSV_EURIBOR)
+    assert len(fixings) == 5
+    assert fixings[0].data == date(2026, 9, 3)
+    assert fixings[0].tenor == "1 week"
+    assert fixings[0].taxa == pytest.approx(0.02182)
+    assert all(f.tenor in euribor.TENOR_MESES for f in fixings)
+
+
+def test_curva_euribor_organiza_por_data_e_prazo():
+    from precificador import euribor
+    curva = euribor.CurvaEuribor.de_fixings(euribor.parse_csv(CSV_EURIBOR))
+    assert curva.inicio == date(2026, 9, 3)
+    assert curva.fim == date(2026, 9, 4)
+    assert curva.tenores == ["1 week", "3 month", "12 month"]      # ordem de prazo
+    assert curva.ultima() == pytest.approx(
+        {"1 week": 0.02154, "3 month": 0.02679, "12 month": 0.03108})
+    prazos = [p["meses"] for p in curva.curva_do_dia(date(2026, 9, 4))]
+    assert prazos == sorted(prazos)              # a curva sai em ordem de prazo
+
+
+def test_curva_euribor_em_data_de_referencia():
+    """Sem publicação no dia pedido, vale a última anterior — é a taxa vigente."""
+    from precificador import euribor
+    curva = euribor.CurvaEuribor.de_fixings(euribor.parse_csv(CSV_EURIBOR))
+    vigente, taxas = curva.em(date(2026, 9, 6))       # domingo
+    assert vigente == date(2026, 9, 4)
+    assert taxas["1 week"] == pytest.approx(0.02154)
+    vigente, taxas = curva.em(date(2026, 9, 3))
+    assert vigente == date(2026, 9, 3)
+    assert taxas["1 week"] == pytest.approx(0.02182)
+    assert curva.em(date(2020, 1, 1)) == (None, {})   # antes da base
+
+
+def test_base_euribor_so_acrescenta():
+    """Mesclar nunca sobrescreve o que já está gravado."""
+    from precificador import euribor
+    base = {"2026-09-04": {"1 week": 0.02154}}
+    novos = euribor.mesclar(base, [
+        euribor.FixingEuribor(date(2026, 9, 4), "1 week", 0.99),     # ignorado
+        euribor.FixingEuribor(date(2026, 9, 4), "3 month", 0.02679), # entra
+        euribor.FixingEuribor(date(2026, 9, 7), "1 week", 0.02160),  # entra
+    ])
+    assert novos == 2
+    assert base["2026-09-04"]["1 week"] == pytest.approx(0.02154)
+    assert base["2026-09-04"]["3 month"] == pytest.approx(0.02679)
+    assert "2026-09-07" in base
+
+
+def test_url_de_exportacao():
+    from precificador import euribor
+    assert euribor.url_exportacao("csv").endswith("&output=CSV")
+    assert "EXCELOPENXML" in euribor.url_exportacao("excel")
+    with pytest.raises(ValueError):
+        euribor.url_exportacao("parquet")
+
+
+def test_calendario_euribor_do_arquivo():
+    """O calendário salvo traz 24 e 31/12, que a regra pura do TARGET2 não tem."""
+    from precificador.calendario import calendario_bce, calendario_target2
+    bce, regra = calendario_bce(), calendario_target2()
+    assert not bce.eh_dia_util(date(2026, 12, 24))
+    assert not bce.eh_dia_util(date(2026, 12, 31))
+    assert regra.eh_dia_util(date(2026, 12, 24))       # a regra não fecha nesse dia
+    # os feriados clássicos aparecem nos dois
+    for feriado in (date(2026, 1, 1), date(2026, 4, 3), date(2026, 5, 1), date(2026, 12, 25)):
+        assert not bce.eh_dia_util(feriado)
+        assert not regra.eh_dia_util(feriado)
+    # fora do alcance do arquivo, a regra assume
+    assert not bce.eh_dia_util(date(2010, 4, 2))       # Sexta-feira Santa de 2010
+
+
+# ------------------------------------------------------ cobertura de idioma --
+
+# Formulários que dão resultado — as telas onde a metade mais escorregadia do
+# texto só aparece depois do POST. Ficam aqui fora porque os dois testes de
+# idioma precisam dos mesmos: foi por a varredura de português só fazer GET que
+# "nenhuma" e "último fixing publicado" chegaram à tela em inglês.
+FORMULARIOS = {
+    "/renda-fixa": dict(valor="1.000,00", inicio="2026-01-01",
+                        vencimento="2026-09-06", produto="cdb",
+                        indexador="cdi_realizado", taxa="100"),
+    "/sofr": dict(inicio="2026-06-01", fim="2026-09-01", lookback="5", shift="2"),
+    "/sofr-sem-defasagem": dict(inicio="2026-06-01", fim="2026-09-01",
+                                lookback="0", shift="0"),
+    "/ndf": dict(data_curva="2026-09-04", moeda="USD", spot="5,10",
+                 progressao="mensal", quantidade="4", calendario="ANBIMA",
+                 datas="", vencimento="", primeiro_futuro="5125",
+                 segundo_futuro="5150"),
+    "/ndf-euro": dict(data_curva="2026-09-04", moeda="EUR", spot="5,95",
+                      progressao="mensal", quantidade="4", calendario="ANBIMA"),
+    "/ndf-cross": dict(data_curva="2026-09-04", moeda="EURUSD", spot="1,1618",
+                       progressao="mensal", quantidade="4", calendario="ANBIMA"),
+    "/ndf-livre": dict(data_curva="2026-09-04", moeda="LIVRE", spot="6,93",
+                       taxa_estrangeira="4,25", progressao="mensal",
+                       quantidade="4", calendario="ANBIMA"),
+    "/ni-pro-rata": dict(ni_anterior="7.545,53", projecao="0,68",
+                         data="2026-04-13", vne="1.000,00", ni_partida="7.545,53"),
+    "/interpolar": dict(x="1\n365\n1826", y="14\n13,5\n13,8", alvos="180, 900",
+                        metodo="spline", extrapolar="flat"),
+}
+
+# as chaves acima carregam um sufixo para poder repetir a mesma rota com outros
+# dados; a rota de verdade é o que vem antes do primeiro traço depois de "/ndf"
+def _rota_do_formulario(chave: str) -> str:
+    for base in ("/ndf", "/sofr"):
+        if chave.startswith(base + "-"):
+            return base
+    return chave
+
+
+def _exercitar_aplicacao(app):
+    """Passa por todas as telas e pelos formulários, para o audit ver tudo."""
+    gets = ["/", "/curvas", "/precificar", "/ndf", "/sofr", "/term-sofr", "/euribor",
+            "/renda-fixa", "/interpolar", "/ni-pro-rata", "/metodologia"]
+    for rota in gets:
+        app.test_client().get(rota + "?idioma=en")
+
+    from precificador import b3
+    from webapp.servicos import DERIVADAS
+    for codigo, *_ in b3.CURVAS_COMPLETAS:
+        app.test_client().get(f"/curvas?idioma=en&curva={codigo}&extrair=1")
+    for codigo, *_ in DERIVADAS:
+        app.test_client().get(f"/curvas?idioma=en&curva={codigo}&extrair=1")
+
+    for chave, dados in FORMULARIOS.items():
+        app.test_client().post(_rota_do_formulario(chave) + "?idioma=en", data=dados)
+
+    from precificador.montador import TEMPLATES
+    base = dict(inicio="2026-09-04", vencimento="2031-09-04",
+                nocional="100.000.000,00", meses_periodo="6", amortizacao="bullet",
+                fee="0", calendario="ANBIMA", convencao_dia_util="following",
+                data_curva="2026-09-04", spot="5,15", resolver="passiva",
+                modo_cdi="spread", valor_passiva="",
+                sofr="96.345, 96.38, 96.42, 96.46",
+                term_sofr="3,64637, 3,65811, 3,67358, 3,73148")
+    for tpl in TEMPLATES:
+        app.test_client().get(f"/precificar?idioma=en&template={tpl.id}")
+        app.test_client().post("/precificar?idioma=en", data=dict(
+            base, perna_ativa=tpl.ativa, perna_passiva=tpl.passiva,
+            valor_ativa=tpl.valor_ativa or "10"))
+
+
+def test_nenhuma_string_fica_sem_traducao():
+    """Em inglês, nenhuma frase pode cair de volta no português.
+
+    Sem esta trava a falta de tradução é silenciosa: ``t()`` devolve o original
+    e a frase em português se perde no meio de uma tela em inglês. O audit
+    registra cada falta e este teste as lista por nome, para não sobrar caça ao
+    tesouro.
+    """
+    from webapp import create_app, idiomas
+    idiomas.auditar(True)
+    try:
+        _exercitar_aplicacao(create_app())
+        faltando = sorted(idiomas.faltando())
+    finally:
+        idiomas.auditar(False)
+
+    assert not faltando, (
+        f"{len(faltando)} frases sem tradução em webapp/idiomas.py:\n  "
+        + "\n  ".join(repr(f) for f in faltando[:25]))
+
+
+# palavras que denunciam português na tela em inglês. Termos de mercado que o
+# inglês empresta do português ficam de fora de propósito — casado, Selic,
+# Ibovespa e os nomes de curva da B3 não se traduzem.
+_MARCADORES_PT = re.compile(
+    r"\b(taxa|taxas|dias|corridos|úteis|anos|meses|prazo|prazos|valor|valores|juros|"
+    r"vencimento|fluxo|fator|preço|preços|cupom|cambial|dólar|planilha|macro|"
+    r"rendimento|líquido|alíquota|período|equivalente|zerado|após|acúmulo|série|"
+    r"guardados|vigentes|publicação|anterior|defasagem|janela|não|são|com|para|uma|"
+    r"pelo|pela|dos|das|que|mas|também)\b", re.IGNORECASE)
+
+_PERMITIDO = {
+    "casado", "selic", "ibovespa", "libor", "euribor", "sofr", "anbima", "b3",
+    "cetip", "ptx", "ddi", "doc", "pré", "tbf", "igp-m", "ipca", "cdi", "di",
+    "ndf", "imm", "target2", "bcb",
+}
+
+
+def _texto_visivel(html: str):
+    corpo = re.sub(r"<script.*?</script>|<style.*?</style>|<!--.*?-->", "",
+                   html, flags=re.S)
+    for bruto in re.findall(r">([^<>]+)<", corpo):
+        texto = " ".join(bruto.split())
+        if len(texto) > 3 and "http" not in texto:
+            yield texto
+
+
+def test_nenhum_texto_em_portugues_sobra_na_tela_em_ingles():
+    """A outra metade da varredura: o que nunca passou por ``t()``.
+
+    ``test_nenhuma_string_fica_sem_traducao`` pega a frase que foi embrulhada e
+    não tinha tradução. Este pega a que nem chegou a ser embrulhada — literal
+    solto no template, rótulo concatenado, dado vindo do Python. Juntos, os dois
+    fecham o cerco: não há como uma frase em português chegar à tela em inglês.
+    """
+    from webapp import create_app
+    app = create_app()
+    suspeitas = []
+
+    paginas = ["/", "/curvas?curva=DOC&extrair=1", "/curvas?curva=PTX&extrair=1",
+               "/precificar", "/ndf", "/sofr", "/term-sofr", "/euribor",
+               "/renda-fixa", "/interpolar", "/ni-pro-rata", "/metodologia"]
+    def varrer(rotulo, html):
+        for texto in _texto_visivel(html):
+            achados = {p.lower() for p in _MARCADORES_PT.findall(texto)}
+            if achados - _PERMITIDO:
+                suspeitas.append(f"{rotulo}: {texto[:90]}")
+
+    for rota in paginas:
+        separador = "&" if "?" in rota else "?"
+        varrer(rota, app.test_client().get(rota + separador + "idioma=en").data.decode())
+
+    # metade do texto destas telas só existe depois do POST
+    for chave, dados in FORMULARIOS.items():
+        rota = _rota_do_formulario(chave)
+        varrer(chave, app.test_client().post(rota + "?idioma=en", data=dados).data.decode())
+
+    assert not suspeitas, (
+        f"{len(suspeitas)} trechos em português na tela em inglês:\n  "
+        + "\n  ".join(suspeitas[:20]))
+
+
+# --------------------------------------------------- câmbio e base do SOFR --
+
+def test_vencimentos_do_dol_caem_no_primeiro_dia_util_do_mes():
+    from precificador import cambio
+    cal = calendario_anbima()
+    vencs = cambio.vencimentos_dol(date(2026, 9, 4), 3, cal)
+    assert len(vencs) == 3
+    for v in vencs:
+        assert cal.eh_dia_util(v)
+        anterior = v - __import__("datetime").timedelta(days=1)
+        # não há dia útil antes dele dentro do mesmo mês
+        while anterior.month == v.month:
+            assert not cal.eh_dia_util(anterior)
+            anterior -= __import__("datetime").timedelta(days=1)
+    assert vencs == sorted(vencs)
+
+
+def test_futuro_de_dolar_sai_da_curva_de_preco_em_pontos():
+    """O DOL é cotado em milésimos: 5,16 na curva vira 5.160 pontos."""
+    from precificador import cambio
+    from precificador.curvas import PRECO
+    plana = Curva.de_listas([1, 20000], [5.16, 5.16], "PTX plana", date(2026, 9, 4),
+                            dias_uteis=[1, 14000], convencao=PRECO, metodo="linear")
+    futuros = cambio.futuros_dol(date(2026, 9, 4), plana, 2)
+    assert len(futuros) == 2
+    assert futuros[0].preco == pytest.approx(5160.0)
+    assert futuros[0].taxa == pytest.approx(5.16)
+    assert futuros[0].dias_corridos > 0
+
+
+def test_base_do_sofr_so_acrescenta():
+    from precificador import sofr
+    base = {"2026-09-04": {"overnight": 0.0366}}
+    novos = sofr._mesclar(base, {
+        "2026-09-04": {"overnight": 0.99, "media30": 0.0364},   # overnight ignorado
+        "2026-09-08": {"overnight": 0.0367},
+    })
+    assert novos == 2
+    assert base["2026-09-04"]["overnight"] == pytest.approx(0.0366)
+    assert base["2026-09-04"]["media30"] == pytest.approx(0.0364)
+    assert "2026-09-08" in base
+
+
+def test_historico_do_sofr_em_data_de_referencia():
+    from precificador import sofr
+    h = sofr.HistoricoSOFR({
+        "2026-09-03": {"overnight": 0.0365, "media30": 0.0364},
+        "2026-09-04": {"overnight": 0.0366, "media30": 0.0365},
+    })
+    assert h.inicio == date(2026, 9, 3) and h.fim == date(2026, 9, 4)
+    assert h.campos == ["overnight", "media30"]
+    vigente, taxas = h.em(date(2026, 9, 6))       # domingo
+    assert vigente == date(2026, 9, 4)
+    assert taxas["overnight"] == pytest.approx(0.0366)
+    assert h.em(date(2017, 1, 1)) == (None, {})
+
+
+def test_camada_de_rede_cai_para_urllib_sem_sso():
+    """Sem PRECIFICADOR_SSO a sessão é None e tudo vai por urllib."""
+    import os
+    from precificador import rede
+    anterior = os.environ.pop("PRECIFICADOR_SSO", None)
+    try:
+        assert not rede.sso_ligado()
+        assert rede.sessao() is None
+        estado = rede.diagnostico()
+        assert estado["sso_pedido"] is False
+        assert set(estado) >= {"sso_pedido", "sso_disponivel", "requests",
+                               "negotiate_sspi", "kerberos", "ca_bundle", "sem_proxy"}
+    finally:
+        if anterior is not None:
+            os.environ["PRECIFICADOR_SSO"] = anterior
+
+
+def test_camada_de_rede_exige_handler_quando_sso_ligado():
+    """Ligar o SSO sem o pacote Negotiate tem que falar isso, não falhar calado."""
+    import os
+    from precificador import rede
+    os.environ["PRECIFICADOR_SSO"] = "1"
+    try:
+        if rede.sso_disponivel():
+            pytest.skip("esta máquina tem handler Negotiate instalado")
+        with pytest.raises(rede.ErroRede) as erro:
+            rede.sessao()
+        assert "requests" in str(erro.value).lower()
+    finally:
+        os.environ.pop("PRECIFICADOR_SSO", None)
+
+
+# ------------------------------------------------------- NDF multi-moeda ----
+
+def _curva_plana(taxa, convencao, metodo="linear"):
+    from precificador.curvas import Curva, Vertice
+    return Curva(nome="teste", data_referencia=date(2026, 9, 4),
+                 vertices=[Vertice(du, dc, taxa)
+                           for du, dc in ((1, 1), (252, 365), (504, 730))],
+                 convencao=convencao, metodo=metodo)
+
+
+def test_moeda_com_cupom_publicado_usa_a_paridade_coberta():
+    from precificador.b3 import EXP252, LIN360
+    from precificador.produtos import curva_ndf, moeda_ndf, ndf_forward
+
+    di = _curva_plana(0.1354, EXP252)
+    cupom = _curva_plana(0.0557, LIN360)
+    p = curva_ndf(date(2026, 9, 4), 5.13, di, cupom, [date(2027, 9, 1)],
+                  moeda=moeda_ndf("USD"))[0]
+
+    assert p.ndf == pytest.approx(
+        ndf_forward(5.13, 0.1354, 0.0557, p.dias_corridos, p.dias_uteis))
+    assert p.pontos == pytest.approx((p.ndf - 5.13) * 10_000.0)
+
+
+def test_cupom_implicito_devolve_o_cupom_que_gerou_o_preco():
+    """Ida e volta: o cupom implícito na curva de preço é o que a criou."""
+    from precificador.produtos import cupom_implicito, ndf_forward
+
+    spot, di, cupom, dc, du = 5.13, 0.1354, 0.0557, 362, 247
+    termo = ndf_forward(spot, di, cupom, dc, du)
+    assert cupom_implicito(spot, termo, di, dc, du) == pytest.approx(cupom)
+
+
+def test_moeda_sem_curva_de_cupom_implica_o_cupom_no_preco():
+    from precificador.b3 import EXP252, PRECO
+    from precificador.produtos import curva_ndf, moeda_ndf
+
+    di = _curva_plana(0.1354, EXP252)
+    preco = _curva_plana(0.0345, PRECO)
+    p = curva_ndf(date(2026, 9, 4), 0.0340, di, None, [date(2027, 9, 1)],
+                  curva_preco=preco, moeda=moeda_ndf("JPY"))[0]
+
+    # o termo volta a ser o preço lido na curva, e o iene conta em pips de 1e6
+    assert p.ndf == pytest.approx(0.0345, abs=1e-9)
+    assert p.pontos == pytest.approx((0.0345 - 0.0340) * 1_000_000.0)
+
+
+def test_cross_de_precos_nao_passa_pelo_di():
+    from precificador.b3 import PRECO
+    from precificador.produtos import curva_ndf, moeda_ndf
+
+    preco = _curva_plana(1.1782, PRECO)
+    p = curva_ndf(date(2026, 9, 4), 1.1540, None, None, [date(2027, 9, 1)],
+                  curva_preco=preco, moeda=moeda_ndf("EURUSD"))[0]
+
+    assert p.di == 0.0
+    assert p.ndf == pytest.approx(1.1782)
+
+
+def test_moeda_livre_desconta_pela_taxa_digitada():
+    from precificador.b3 import EXP252
+    from precificador.produtos import curva_ndf, moeda_ndf, ndf_forward
+
+    di = _curva_plana(0.1354, EXP252)
+    p = curva_ndf(date(2026, 9, 4), 6.90, di, None, [date(2027, 9, 1)],
+                  moeda=moeda_ndf("LIVRE"), taxa_estrangeira=0.0425)[0]
+
+    assert p.cupom == pytest.approx(0.0425)
+    assert p.ndf == pytest.approx(
+        ndf_forward(6.90, 0.1354, 0.0425, p.dias_corridos, p.dias_uteis))
+
+
+def test_cada_moeda_cobra_a_curva_que_o_seu_modo_exige():
+    from precificador.produtos import curva_ndf, moeda_ndf
+
+    datas = [date(2027, 9, 1)]
+    with pytest.raises(ValueError):                       # cupom sem curva de cupom
+        curva_ndf(date(2026, 9, 4), 5.13, _curva_plana(0.13, "EXP252"), None,
+                  datas, moeda=moeda_ndf("USD"))
+    with pytest.raises(ValueError):                       # implícito sem curva de preço
+        curva_ndf(date(2026, 9, 4), 0.034, _curva_plana(0.13, "EXP252"), None,
+                  datas, moeda=moeda_ndf("JPY"))
+    with pytest.raises(ValueError):                       # cross sem curva de preço
+        curva_ndf(date(2026, 9, 4), 1.15, None, None, datas,
+                  moeda=moeda_ndf("EURUSD"))
+
+
+def test_moeda_desconhecida_cai_no_dolar():
+    from precificador.produtos import MOEDA_NDF_PADRAO, moeda_ndf
+    assert moeda_ndf("XYZ") is MOEDA_NDF_PADRAO
+    assert moeda_ndf(None) is MOEDA_NDF_PADRAO
+    assert moeda_ndf("usd").codigo == "USD"
+
+
+def test_escada_mensal_abre_no_mes_corrente():
+    """O primeiro degrau é o fim do mês em que a data-base está, não do seguinte."""
+    from precificador.produtos import escada_datas
+    cal = calendario_anbima()
+
+    datas = escada_datas(date(2026, 9, 4), "mensal", 5, cal)
+    assert datas[0] == date(2026, 9, 30)
+    assert datas[1] == date(2026, 10, 30)
+
+    # trimestral também abre no mês corrente, e só então salta de três em três
+    trimestral = escada_datas(date(2026, 9, 4), "trimestral", 3, cal)
+    assert trimestral == [date(2026, 9, 30), date(2026, 12, 31), date(2027, 3, 31)]
+
+
+def test_escada_pula_o_mes_corrente_quando_a_base_ja_o_alcancou():
+    """Na virada do mês o degrau sai, mas a contagem de vencimentos não encolhe."""
+    from precificador.produtos import escada_datas
+    cal = calendario_anbima()
+
+    datas = escada_datas(date(2026, 9, 30), "mensal", 5, cal)
+    assert len(datas) == 5
+    assert datas[0] == date(2026, 10, 30)
+    assert all(d > date(2026, 9, 30) for d in datas)

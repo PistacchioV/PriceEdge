@@ -1,0 +1,7 @@
+/* Font-family helper classes.
+   - .font-geist   -> body text (Geist)
+   - .font-jakarta -> headings (Plus Jakarta Sans)
+   The actual @font-face declarations come from the linked Google Fonts CSS. */
+
+.font-geist { font-family: 'Geist', sans-serif !important; }
+.font-jakarta { font-family: 'Plus Jakarta Sans', sans-serif !important; }

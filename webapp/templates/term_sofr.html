@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+{% from "_componentes.html" import alerta, estatistica, link_secundario, botao %}
+{% block titulo %}Term SOFR{% endblock %}
+
+{% block conteudo %}
+<section class="sm:px-6 lg:px-8 pt-16 pr-5 pb-10 pl-5">
+  <div class="w-full max-w-[1600px] mr-auto ml-auto">
+    <div class="reveal grid gap-8 lg:grid-cols-[1fr_0.72fr] lg:items-end">
+      <div class="max-w-3xl">
+        <p class="text-sm font-medium text-cyan-100 font-geist">{{ t("Juros em dólar") }}</p>
+        <h1 class="mt-4 text-4xl text-white sm:text-5xl tracking-tighter leading-[1.05] font-jakarta font-medium">{{ t("SOFR, estrutura a termo realizada.") }}</h1>
+      </div>
+      <div class="lg:ml-auto lg:max-w-md">
+        <p class="text-base leading-7 text-slate-400 font-geist">
+          {{ t("Overnight e médias compostas de 30, 90 e 180 dias, do Fed de Nova York, guardadas numa base local desde a criação do SOFR em 2018.") }}
+        </p>
+      </div>
+    </div>
+
+    <form method="get" class="mt-10 rounded-[2rem] border border-white/[0.09] bg-gradient-to-b from-white/[0.05] to-transparent p-6 backdrop-blur-xl sm:p-8">
+      <div class="grid gap-5 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+        <div>
+          <label class="rotulo" for="referencia">{{ t("Data de referência") }}</label>
+          <input class="campo" id="referencia" name="referencia" type="date"
+                 value="{{ referencia.isoformat() }}" max="{{ hoje }}"/>
+        </div>
+        <div>
+          <label class="rotulo" for="meses">{{ t("Janela do gráfico") }}</label>
+          <select class="campo" id="meses" name="meses">
+            {% for m, rotulo in [(1,'1 mês'),(3,'3 meses'),(6,'6 meses'),(12,'1 ano'),(60,'5 anos'),(240,'Tudo')] %}
+            <option value="{{ m }}" {{ 'selected' if meses == m }}>{{ t(rotulo) }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>{{ botao(t('Ver'), 'solar:calendar-search-linear') }}</div>
+      </div>
+      {% if base %}
+      <p class="mt-4 text-xs text-slate-500 font-geist">
+        {{ t("Base local") }}: {{ base.inicio | data_br }} {{ t("a") }} {{ base.fim | data_br }}
+        · {{ base.dias | numero }} {{ t("dias guardados") }}
+      </p>
+      {% endif %}
+    </form>
+
+    {% if erro %}{{ alerta(erro) }}{% endif %}
+
+    {% if historico %}
+    <div class="sem-reveal mt-8">
+      <div class="mb-4 flex flex-wrap items-baseline justify-between gap-3">
+        <p class="text-sm font-medium text-white font-geist">
+          {{ t("Taxas vigentes em") }} {{ vigente | data_br }}
+        </p>
+        {% if vigente != referencia %}
+        <p class="text-xs text-amber-300 font-geist">
+          {{ t("não houve publicação em") }} {{ referencia | data_br }} — {{ t("vale a última anterior") }}
+        </p>
+        {% endif %}
+      </div>
+      <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        {% for campo, rotulo in campos %}
+        {% if campo in taxas_vigentes %}
+        {{ estatistica(t(rotulo), taxas_vigentes[campo] | percentual(5),
+                       vigente | data_br, destaque=loop.first) }}
+        {% endif %}
+        {% endfor %}
+        {% if 'indice' in taxas_vigentes %}
+        {{ estatistica(t('SOFR Index'), taxas_vigentes['indice'] | moeda(8), t('índice acumulado')) }}
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="sem-reveal mt-6 overflow-hidden rounded-[2rem] border border-white/[0.09] bg-slate-950/40 p-6 backdrop-blur-xl">
+      <div class="mb-5 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p class="text-sm font-medium text-white font-geist">{{ t("SOFR — valores diários") }}</p>
+          <p class="mt-0.5 text-xs text-slate-500 font-geist">
+            {{ historico.inicio | data_br }} {{ t("a") }} {{ historico.fim | data_br }}
+            · {{ historico.datas | length }} {{ t("dias publicados") }}
+          </p>
+        </div>
+        {{ link_secundario(t('Baixar CSV'), url_for('principal.term_sofr_csv'), 'solar:file-download-linear') }}
+      </div>
+
+      <div class="rolagem">
+        <svg viewBox="0 0 900 320" width="100%" height="320" preserveAspectRatio="xMidYMid meet"
+             role="img" aria-label="{{ t('SOFR — valores diários') }}">
+          {% for r in escala_y %}
+          <line x1="52" x2="852" y1="{{ r.y }}" y2="{{ r.y }}" stroke="rgba(255,255,255,0.06)" stroke-width="1"/>
+          <text x="10" y="{{ r.y + 4 }}" fill="#64748b" font-size="10" font-family="Geist, sans-serif">{{ r.rotulo }}</text>
+          {% endfor %}
+          {% for r in escala_x %}
+          <text x="{{ r.x }}" y="308" fill="#64748b" font-size="10" text-anchor="middle" font-family="Geist, sans-serif">{{ r.rotulo }}</text>
+          {% endfor %}
+          {% for s in series %}
+          <path d="{{ s.caminho }}" fill="none" stroke="{{ s.cor }}" stroke-width="1.8"
+                stroke-linejoin="round" stroke-linecap="round"/>
+          {% endfor %}
+        </svg>
+      </div>
+
+      <div class="mt-4 flex flex-wrap gap-4">
+        {% for s in series %}
+        <span class="inline-flex items-center gap-2 text-xs text-slate-400 font-geist">
+          <span class="h-0.5 w-5 rounded-full" style="background: {{ s.cor }}"></span>{{ t(s.tenor) }}
+        </span>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="sem-reveal mt-6 rounded-[2rem] border border-white/[0.09] bg-slate-950/40 backdrop-blur-xl">
+      <div class="flex flex-wrap items-center justify-between gap-3 border-b border-white/[0.07] px-6 py-4">
+        <p class="text-sm font-medium text-white font-geist">{{ t("Valores publicados") }}</p>
+        <span class="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-slate-400 font-geist">
+          {{ historico.datas | length }} {{ t("dias") }}
+        </span>
+      </div>
+      <div class="rolagem max-h-[32rem] px-2">
+        <table class="tabela-dados">
+          <thead>
+            <tr>
+              <th>{{ t("Data") }}</th>
+              {% for campo, rotulo in campos %}{% if campo in historico.campos %}<th>{{ t(rotulo) }}</th>{% endif %}{% endfor %}
+              <th>{{ t("SOFR Index") }}</th>
+            </tr>
+          </thead>
+          <tbody>
+          {% for d in historico.datas | reverse %}
+            <tr>
+              <td>{{ d | data_br }}</td>
+              {% for campo, rotulo in campos %}{% if campo in historico.campos %}
+              <td class="{{ 'text-cyan-100' if loop.first else '' }}">
+                {{ (tabela[d][campo] | percentual(5)) if campo in tabela[d] else '—' }}
+              </td>
+              {% endif %}{% endfor %}
+              <td class="text-slate-500">{{ (tabela[d]['indice'] | moeda(8)) if 'indice' in tabela[d] else '—' }}</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="sem-reveal mt-6 rounded-2xl border border-amber-300/25 bg-amber-400/[0.07] px-5 py-4">
+      <p class="text-xs font-medium text-amber-100 font-geist">{{ t("Sobre o Term SOFR da CME") }}</p>
+      <p class="mt-2 text-xs leading-6 text-amber-100/80 font-geist">
+        {{ t("O Term SOFR forward-looking de 1, 3, 6 e 12 meses é administrado pela CME e licenciado — não há fonte pública que permita redistribuí-lo, então ele continua entrando digitado na tela de precificação. O que está aqui é a estrutura a termo realizada, que o Fed de Nova York publica aberta: o overnight e as médias compostas.") }}
+      </p>
+      <p class="mt-3 text-xs text-amber-100/60 font-geist">
+        <a class="transition hover:text-amber-100" href="https://markets.newyorkfed.org/api/rates/secured/sofr/search.json" target="_blank" rel="noopener">markets.newyorkfed.org — SOFR</a>
+      </p>
+    </div>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}

@@ -1,0 +1,222 @@
+{% extends "base.html" %}
+{% from "_componentes.html" import alerta, estatistica, botao %}
+{% block titulo %}Renda fixa{% endblock %}
+
+{% block conteudo %}
+<section class="sm:px-6 lg:px-8 pt-16 pr-5 pb-10 pl-5">
+  <div class="w-full max-w-[1600px] mr-auto ml-auto">
+    <div class="reveal grid gap-8 lg:grid-cols-[1fr_0.72fr] lg:items-end">
+      <div class="max-w-3xl">
+        <p class="text-sm font-medium text-cyan-100 font-geist">{{ t("Calculadora") }}</p>
+        <h1 class="mt-4 text-4xl text-white sm:text-5xl tracking-tighter leading-[1.05] font-jakarta font-medium">{{ t("Renda fixa, bruto e líquido.") }}</h1>
+      </div>
+      <div class="lg:ml-auto lg:max-w-md">
+        <p class="text-base leading-7 text-slate-400 font-geist">
+          {{ t("Prefixado, % do CDI, CDI + spread e IPCA+, com IR regressivo e IOF. O fator do DI roda em precisão plena — sem o arredondamento na 8ª casa.") }}
+        </p>
+      </div>
+    </div>
+
+    <form method="post" class="mt-12 grid gap-6 lg:grid-cols-[0.85fr_1.15fr] lg:items-start">
+      <div class="min-w-0 rounded-[2rem] border border-white/[0.09] bg-gradient-to-b from-white/[0.05] to-transparent p-6 backdrop-blur-xl sm:p-8">
+        <p class="text-[11px] font-semibold uppercase tracking-widest text-cyan-200 font-geist">{{ t("Aplicação") }}</p>
+        <div class="mt-5 grid gap-4 sm:grid-cols-2">
+          <div class="sm:col-span-2">
+            <label class="rotulo" for="valor">{{ t("Valor aplicado (R$)") }}</label>
+            <input class="campo" id="valor" name="valor" value="{{ form.valor }}"
+                   inputmode="decimal" data-formato="moeda" required/>
+          </div>
+          <div>
+            <label class="rotulo" for="inicio">{{ t("Data da aplicação") }}</label>
+            <input class="campo" id="inicio" name="inicio" type="date" value="{{ form.inicio }}" required/>
+          </div>
+          <div>
+            <label class="rotulo" for="vencimento">{{ t("Vencimento") }}</label>
+            <input class="campo" id="vencimento" name="vencimento" type="date" value="{{ form.vencimento }}"
+                   data-maximo-hoje="{{ hoje }}" required/>
+          </div>
+          <div>
+            <label class="rotulo" for="produto">{{ t("Produto") }}</label>
+            <select class="campo" id="produto" name="produto">
+              {% for valor, rotulo, isento in produtos_rf %}
+              <option value="{{ valor }}" {{ 'selected' if form.produto == valor }}>{{ t(rotulo) }}{{ (" · " ~ t("isento")) if isento }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label class="rotulo" for="indexador">{{ t("Indexador") }}</label>
+            <select class="campo" id="indexador" name="indexador"
+                    data-retroativos="{{ retroativos | join(',') }}">
+              {% for valor, rotulo in indexadores %}
+              <option value="{{ valor }}" {{ 'selected' if form.indexador == valor }}>{{ t(rotulo) }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="sm:col-span-2">
+            <label class="rotulo" for="taxa">{{ t("Taxa contratada") }}</label>
+            <input class="campo" id="taxa" name="taxa" data-formato="percentual" value="{{ form.taxa }}" inputmode="decimal" required/>
+            <p class="mt-2 text-xs leading-5 text-slate-600 font-geist">
+              {{ t("110 para 110% do CDI · 2 para CDI+2% · 14 para 14% a.a. prefixado · 6 para IPCA+6%") }}
+            </p>
+          </div>
+          <div id="bloco-projecao" class="sm:col-span-2 grid gap-4 sm:grid-cols-2"
+               {{ 'hidden' if form.indexador in retroativos }}>
+            <div>
+              <label class="rotulo" for="cdi">{{ t("CDI projetado (% a.a.)") }}</label>
+              <input class="campo" id="cdi" name="cdi" data-formato="percentual" value="{{ form.cdi }}" inputmode="decimal"/>
+            </div>
+            <div>
+              <label class="rotulo" for="ipca">{{ t("IPCA projetado (% a.a.)") }}</label>
+              <input class="campo" id="ipca" name="ipca" data-formato="percentual" value="{{ form.ipca }}" inputmode="decimal"/>
+            </div>
+          </div>
+          <div id="aviso-realizado" class="sm:col-span-2 rounded-xl border border-cyan-200/20 bg-cyan-400/[0.06] px-4 py-3"
+               {{ 'hidden' if form.indexador not in retroativos }}>
+            <p class="text-xs leading-5 text-cyan-100 font-geist">
+              {{ t("O CDI vem da série 4389 do Banco Central e o acúmulo é diário, sobre o que de fato aconteceu. Não há projeção, então o vencimento não passa de hoje.") }}
+            </p>
+          </div>
+          <div class="sm:col-span-2">
+            <label class="flex cursor-pointer items-start gap-3 rounded-xl border border-white/[0.08] bg-black/20 px-4 py-3 transition hover:border-white/[0.16]">
+              <input type="checkbox" name="arredondar_di" value="1" class="mt-0.5 h-4 w-4 shrink-0 accent-cyan-300"
+                     {{ 'checked' if form.arredondar_di }}/>
+              <span>
+                <span class="block text-sm font-medium text-slate-200 font-geist">{{ t("Arredondar o fator diário do DI na 8ª casa") }}</span>
+                <span class="mt-1 block text-xs leading-5 text-slate-500 font-geist">
+                  {{ t("Padrão B3/CETIP. Desligado, o fator roda em precisão plena — que é o padrão aqui.") }}
+                </span>
+              </span>
+            </label>
+          </div>
+        </div>
+        <div class="mt-8">{{ botao(t('Calcular'), 'solar:calculator-minimalistic-linear') }}</div>
+      </div>
+
+      <div class="min-w-0">
+        {% if erro %}{{ alerta(erro) }}{% endif %}
+
+        {% if resultado %}
+        {% set r = resultado.r %}
+        <div class="sem-reveal rounded-[2rem] border border-cyan-200/20 bg-gradient-to-b from-cyan-400/[0.1] via-white/[0.04] to-transparent p-6 backdrop-blur-xl sm:p-8">
+          <div class="flex items-start justify-between gap-4">
+            <div>
+              <p class="text-[11px] font-semibold uppercase tracking-widest text-cyan-200 font-geist">{{ t("Valor líquido no vencimento") }}</p>
+              <p class="mt-3 text-5xl tracking-tight text-white font-jakarta font-medium tabular-nums">R$ {{ r.valor_liquido | moeda(2) }}</p>
+              <p class="mt-2 text-sm text-slate-400 font-geist">
+                {{ t("rendimento líquido de") }} R$ {{ r.rendimento_liquido | moeda(2) }}
+                · {{ r.taxa_liquida_anual | percentual(4) }} {{ t("a.a. equivalente") }}
+              </p>
+            </div>
+            {% if r.isento %}
+            <span class="rounded-full border border-emerald-300/20 bg-emerald-400/10 px-3 py-1 text-xs font-medium text-emerald-200 font-geist">{{ t("isento de IR") }}</span>
+            {% endif %}
+          </div>
+
+          <div class="mt-7 grid gap-3 sm:grid-cols-2">
+            {{ estatistica(t('Valor bruto'), 'R$ ' ~ (r.valor_bruto | moeda(2)), t('rendimento de R$ ') ~ (r.rendimento_bruto | moeda(2))) }}
+            {{ estatistica(t('Taxa bruta equivalente'), r.taxa_anual_equivalente | percentual(4), t('ao ano, base 252')) }}
+            {{ estatistica(t('IR'), 'R$ ' ~ (r.ir | moeda(2)), (t('alíquota ') ~ (r.aliquota_ir | percentual(1))) if not r.isento else t('produto isento')) }}
+            {{ estatistica(t('IOF'), 'R$ ' ~ (r.iof | moeda(2)), (t('alíquota ') ~ (r.aliquota_iof | percentual(0))) if r.aliquota_iof else t('zerado após 30 dias')) }}
+            {{ estatistica(t('Dias úteis'), r.dias_uteis | numero, (r.dias_corridos | numero) ~ ' ' ~ t('dias corridos')) }}
+            {{ estatistica(t('Fator acumulado'), r.fator | moeda(10), t('rendimento de ') ~ (r.taxa_periodo | percentual(4)) ~ ' ' ~ t('no período')) }}
+          </div>
+        </div>
+
+        {% if resultado.acumulado %}
+        {% set a = resultado.acumulado %}
+        <div class="sem-reveal mt-6 rounded-[2rem] border border-white/[0.09] bg-slate-950/40 backdrop-blur-xl">
+          <div class="flex flex-wrap items-center justify-between gap-3 border-b border-white/[0.07] px-6 py-4">
+            <div>
+              <p class="text-sm font-medium text-white font-geist">{{ t("Acúmulo do CDI, dia a dia") }}</p>
+              <p class="mt-0.5 text-xs text-slate-500 font-geist">
+                {{ t("série 4389 do BCB") }} · {{ a.primeiro | data_br }} {{ t("a") }} {{ a.ultimo | data_br }}
+                · {{ a.dias_uteis }} {{ t("dias úteis") }}
+              </p>
+            </div>
+            <span class="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-slate-300 font-geist tabular-nums">
+              {{ t("Fator") }} {{ a.fator | moeda(8) }}
+            </span>
+          </div>
+
+          <div class="grid gap-3 border-b border-white/[0.07] p-6 sm:grid-cols-3">
+            {{ estatistica(t('Taxa no período'), a.taxa_periodo | percentual(4), (a.percentual | percentual(2)) ~ ' ' ~ t('do CDI')) }}
+            {{ estatistica(t('Valor base'), 'R$ ' ~ (a.valor_base | moeda(2)), t('antes do acúmulo')) }}
+            {{ estatistica(t('Valor calculado'), 'R$ ' ~ (a.valor_calculado | moeda(2)), t('bruto, antes dos impostos'), destaque=true) }}
+          </div>
+
+          <div class="border-b border-white/[0.07] px-6 py-4">
+            <p class="text-xs leading-5 text-slate-500 font-geist">
+              {{ t("O BCB publica o CDI com um dia de defasagem. Se a calculadora da B3 mostrar um fator um pouco maior, é porque ela já tem o fixing do último dia útil e a série ainda não.") }}
+            </p>
+          </div>
+
+          <div class="rolagem max-h-[26rem] px-2">
+            <table class="tabela-dados">
+              <thead>
+                <tr><th>{{ t("Data") }}</th><th>{{ t("CDI (% a.a.)") }}</th><th>{{ t("Fator do dia") }}</th><th>{{ t("Acumulado") }}</th></tr>
+              </thead>
+              <tbody>
+              {% for d in a.dias %}
+                <tr>
+                  <td>{{ d.data | data_br }}</td>
+                  <td class="text-cyan-100">{{ d.taxa | percentual(2) }}</td>
+                  <td class="text-slate-400">{{ d.fator_dia | moeda(10) }}</td>
+                  <td class="text-white">{{ d.fator_acumulado | moeda(10) }}</td>
+                </tr>
+              {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        {% endif %}
+
+        {% if resultado.comparacao %}
+        {% set c = resultado.comparacao %}
+        <div class="sem-reveal mt-6 rounded-[2rem] border border-white/[0.09] bg-slate-950/40 p-6 backdrop-blur-xl">
+          <p class="text-sm font-medium text-white font-geist">{{ t("O que o arredondamento na 8ª casa muda") }}</p>
+          <p class="mt-2 text-sm leading-6 text-slate-400 font-geist">
+            {{ t("O padrão B3/CETIP trunca o fator diário do DI na 8ª casa decimal antes de acumular. Em") }}
+            {{ r.dias_uteis | numero }} {{ t("dias úteis isso dá uma diferença de") }}
+            <strong class="text-cyan-100">R$ {{ c.diferenca_reais | moeda(4) }}</strong>
+            {{ t("sobre os") }} R$ {{ r.valor_aplicado | moeda(2) }} {{ t("aplicados") }}.
+          </p>
+          <div class="mt-5 rolagem">
+            <table class="tabela-dados">
+              <thead><tr><th>{{ t("Fator") }}</th><th>{{ t("Valor") }}</th><th>{{ t("Bruto no vencimento") }}</th></tr></thead>
+              <tbody>
+                <tr>
+                  <td class="text-white">{{ t("Precisão plena") }}</td>
+                  <td class="text-cyan-100">{{ '%.12f' | format(c.fator_sem_arredondar) }}</td>
+                  <td>R$ {{ (c.fator_sem_arredondar * r.valor_aplicado) | moeda(2) }}</td>
+                </tr>
+                <tr>
+                  <td class="text-slate-400">{{ t("Arredondado na 8ª casa") }}</td>
+                  <td class="text-slate-400">{{ '%.12f' | format(c.fator_arredondado) }}</td>
+                  <td class="text-slate-400">R$ {{ (c.fator_arredondado * r.valor_aplicado) | moeda(2) }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        {% endif %}
+
+        <div class="sem-reveal mt-6 rounded-2xl border border-white/[0.08] bg-black/25 px-5 py-4">
+          <p class="text-xs text-slate-500 font-geist">{{ t("Tabela regressiva do IR") }}</p>
+          <p class="mt-2 text-xs leading-6 text-slate-400 font-geist">
+            {{ t("até 180 dias 22,5% · 181 a 360 dias 20% · 361 a 720 dias 17,5% · acima de 720 dias 15%. IOF regressivo em resgate com menos de 30 dias corridos.") }}
+          </p>
+        </div>
+
+        {% else %}
+        <div class="rounded-[2rem] border border-dashed border-white/[0.12] bg-white/[0.02] p-10 text-center">
+          <div class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-cyan-300/10 text-cyan-200">
+            <iconify-icon height="24" icon="solar:wallet-money-linear" width="24"></iconify-icon>
+          </div>
+          <p class="text-sm text-slate-400 font-geist">{{ t("Informe o valor, o prazo e a taxa contratada.") }}</p>
+        </div>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+</section>
+{% endblock %}

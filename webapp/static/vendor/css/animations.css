@@ -1,0 +1,23 @@
+/* Keyframe animations used across the page.
+   - animationIn: sequenced entrance reveal (blur + slide up).
+     Apply with the Tailwind class [animation:animationIn_0.8s_ease-out_0.1s_both]
+   - progress-shimmer: sliding highlight over filled progress bars
+     in the product preview section. */
+
+@keyframes animationIn {
+  0% {
+    opacity: 0;
+    transform: translateY(30px);
+    filter: blur(8px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0px);
+  }
+}
+
+@keyframes progress-shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}

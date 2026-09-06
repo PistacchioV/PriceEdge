@@ -1,0 +1,249 @@
+{% extends "base.html" %}
+{% from "_componentes.html" import alerta, estatistica, botao, link_secundario %}
+{% block titulo %}NDF{% endblock %}
+
+{% block conteudo %}
+<section class="sm:px-6 lg:px-8 pt-16 pr-5 pb-10 pl-5">
+  <div class="w-full max-w-[1600px] mr-auto ml-auto">
+    <div class="reveal grid gap-8 lg:grid-cols-[1fr_0.72fr] lg:items-end">
+      <div class="max-w-3xl">
+        <p class="text-sm font-medium text-cyan-100 font-geist">{{ t("Câmbio a termo") }}</p>
+        <h1 class="mt-4 text-4xl text-white sm:text-5xl tracking-tighter leading-[1.05] font-jakarta font-medium">{{ t("Non Deliverable Forward.") }}</h1>
+      </div>
+      <div class="lg:ml-auto lg:max-w-md">
+        <p class="text-base leading-7 text-slate-400 font-geist">
+          {{ t("Paridade coberta de juros com as curvas da B3: DI exponencial em dias úteis no numerador, o juro da moeda escolhida linear em dias corridos no denominador. Trocar a moeda troca a curva e a convenção que descontam a ponta estrangeira.") }}
+        </p>
+      </div>
+    </div>
+
+    <form method="post" class="mt-12 grid gap-6 lg:grid-cols-[0.85fr_1.15fr] lg:items-start">
+      <div class="min-w-0 rounded-[2rem] border border-white/[0.09] bg-gradient-to-b from-white/[0.05] to-transparent p-6 backdrop-blur-xl sm:p-8">
+        <div class="mb-6 flex flex-wrap items-center justify-between gap-3 border-b border-white/[0.08] pb-6">
+          {{ botao(t('Montar curva'), 'solar:course-up-linear') }}
+          <button type="button" id="btn-cambio"
+                  class="inline-flex items-center gap-1.5 rounded-full border border-white/[0.12] bg-white/[0.04] px-4 py-2 text-sm font-medium text-slate-200 transition hover:bg-white/[0.08] font-geist">
+            <iconify-icon height="16" icon="solar:refresh-linear" width="16"></iconify-icon>{{ t("Buscar cotações") }}
+          </button>
+        </div>
+        <p id="aviso-cambio" class="mb-5 text-xs leading-5 text-slate-600 font-geist" hidden></p>
+
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <p class="text-[11px] font-semibold uppercase tracking-widest text-cyan-200 font-geist">{{ t("Mercado") }}</p>
+        </div>
+        <div class="mt-5 grid gap-4 sm:grid-cols-2">
+          <div class="sm:col-span-2">
+            <label class="rotulo" for="moeda">{{ t("Moeda") }}</label>
+            <select class="campo" id="moeda" name="moeda">
+              {% for m in moedas %}
+              <option value="{{ m.codigo }}" {{ 'selected' if form.moeda == m.codigo }}
+                      data-casas="{{ m.casas }}" data-manual="{{ 1 if m.pede_taxa_digitada else 0 }}"
+                      data-dolar="{{ 1 if m.codigo == 'USD' else 0 }}">
+                {{ m.par }} · {{ t(m.nome) }}
+              </option>
+              {% endfor %}
+            </select>
+            {% for m in moedas %}{% if m.nota %}
+            <p class="mt-2 text-xs leading-5 text-slate-600 font-geist nota-moeda"
+               data-moeda="{{ m.codigo }}" {{ 'hidden' if form.moeda != m.codigo }}>{{ t(m.nota) }}</p>
+            {% endif %}{% endfor %}
+          </div>
+          <div class="sm:col-span-2">
+            <label class="rotulo" for="data_curva">{{ t("Data-base das curvas") }}</label>
+            <input class="campo" id="data_curva" name="data_curva" type="date" value="{{ form.data_curva }}" required/>
+          </div>
+          <div class="sm:col-span-2">
+            <label class="rotulo" for="vencimento">{{ t("Vencimento do NDF") }}</label>
+            <input class="campo" id="vencimento" name="vencimento" type="date" value="{{ form.vencimento }}"/>
+            <p class="mt-2 text-xs leading-5 text-slate-600 font-geist">
+              {{ t("Preenchido, a curva é montada só para esta data — é o NDF de um contrato específico. Vazio, vale a escada abaixo.") }}
+            </p>
+          </div>
+          <div>
+            <label class="rotulo" for="spot">{{ t("Spot D+2") }}</label>
+            <input class="campo" id="spot" name="spot" data-formato="preco" value="{{ form.spot }}" inputmode="decimal" required/>
+            <p class="mt-2 text-xs leading-5 text-slate-600 font-geist">
+              {{ t("Vem da âncora curta da curva de preço da B3, que é o ponto de onde ela constrói o termo — arredondada em duas casas. O spot D+2 interbancário não tem fonte pública: sobrescreva com a cotação de tela quando tiver.") }}
+            </p>
+          </div>
+          <div>
+            <label class="rotulo" for="ptax">{{ t("PTAX de fechamento") }}</label>
+            <input class="campo" id="ptax" name="ptax" data-formato="preco" value="{{ form.ptax }}" inputmode="decimal"/>
+            <p class="mt-2 text-xs leading-5 text-slate-600 font-geist">
+              {{ t("A média que o Banco Central apura em quatro janelas e publica às 13h. É contra ela que o NDF liquida no vencimento — não é o spot com que ele é precificado.") }}
+            </p>
+          </div>
+          <div>
+            <label class="rotulo" for="calendario">{{ t("Calendário") }}</label>
+            <select class="campo" id="calendario" name="calendario">
+              {% for valor, rotulo in calendarios %}
+              <option value="{{ valor }}" {{ 'selected' if form.calendario == valor }}>{{ valor }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="sm:col-span-2 so-manual" {{ 'hidden' if form.moeda != 'LIVRE' }}>
+            <label class="rotulo" for="taxa_estrangeira">{{ t("Juro da moeda estrangeira (% a.a., linear 360)") }}</label>
+            <input class="campo" id="taxa_estrangeira" name="taxa_estrangeira" data-formato="percentual"
+                   value="{{ form.taxa_estrangeira }}" inputmode="decimal"/>
+          </div>
+          <div class="so-dolar" {{ 'hidden' if form.moeda not in ('USD', '') }}>
+            <label class="rotulo" for="primeiro_futuro">{{ t("1º futuro DOL") }}</label>
+            <input class="campo" id="primeiro_futuro" name="primeiro_futuro" data-formato="moeda" value="{{ form.primeiro_futuro }}" inputmode="decimal"/>
+          </div>
+          <div class="so-dolar" {{ 'hidden' if form.moeda not in ('USD', '') }}>
+            <label class="rotulo" for="segundo_futuro">{{ t("2º futuro DOL") }}</label>
+            <input class="campo" id="segundo_futuro" name="segundo_futuro" data-formato="moeda" value="{{ form.segundo_futuro }}" inputmode="decimal"/>
+          </div>
+        </div>
+
+        <div class="my-7 h-px w-full bg-white/[0.08]"></div>
+        <p class="text-[11px] font-semibold uppercase tracking-widest text-cyan-200 font-geist">{{ t("Vencimentos") }}</p>
+        <div class="mt-5 grid gap-4 sm:grid-cols-2">
+          <div>
+            <label class="rotulo" for="progressao">{{ t("Progressão") }}</label>
+            <select class="campo" id="progressao" name="progressao">
+              {% for valor, rotulo in progressoes %}
+              <option value="{{ valor }}" {{ 'selected' if form.progressao == valor }}>{{ t(rotulo) }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label class="rotulo" for="quantidade">{{ t("Quantidade") }}</label>
+            <input class="campo" id="quantidade" name="quantidade" data-formato="inteiro" value="{{ form.quantidade }}" inputmode="numeric"/>
+          </div>
+          <div class="sm:col-span-2">
+            <label class="rotulo" for="datas">{{ t("Ou datas específicas (opcional)") }}</label>
+            <input class="campo font-mono text-xs" id="datas" name="datas" value="{{ form.datas }}"
+                   placeholder="2026-10-06, 2027-01-04"/>
+            <p class="mt-2 text-xs leading-5 text-slate-600 font-geist">
+              {{ t("Preenchido, ignora a progressão. As demais datas caem no último dia útil do mês de vencimento.") }}
+            </p>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="min-w-0">
+        {% if erro %}{{ alerta(erro) }}{% endif %}
+
+        {% if resultado %}
+        {# casado e rolagem são do pregão de dólar: fora dele as duas colunas somem #}
+        <div class="sem-reveal grid gap-3 sm:grid-cols-2 {{ 'lg:grid-cols-4' if resultado.casado is not none else '' }}">
+          {{ estatistica(t('Spot D+2'), resultado.spot | moeda(resultado.moeda.casas), resultado.moeda.par, destaque=true) }}
+          {{ estatistica(t('D−1'), resultado.d_menos_1 | data_br, t('calendário ') ~ resultado.calendario) }}
+          {% if resultado.casado is not none %}
+          {{ estatistica(t('Casado'), resultado.casado | moeda(2), t('1º futuro − spot×1.000')) }}
+          {{ estatistica(t('Rolagem'), (resultado.rolagem | moeda(2)) if resultado.rolagem is not none else '—', t('(2º − 1º futuro) × 10')) }}
+          {% endif %}
+        </div>
+
+        {% if resultado.grafico %}
+        {% set g = resultado.grafico %}
+        <div class="sem-reveal mt-6 overflow-hidden rounded-[2rem] border border-white/[0.09] bg-slate-950/40 p-6 backdrop-blur-xl">
+          <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p class="text-sm font-medium text-white font-geist">{{ t("NDF fx curve") }} · {{ resultado.moeda.par }}</p>
+              <p class="mt-0.5 text-xs text-slate-500 font-geist">{{ t("a linha tracejada é o spot") }}</p>
+            </div>
+            <span class="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-slate-400 font-geist">{{ resultado.pontos | length }} {{ t("vencimentos") }}</span>
+          </div>
+          <div class="rolagem">
+            <svg viewBox="0 0 {{ g.largura }} {{ g.altura }}" width="100%" height="{{ g.altura }}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="{{ t('NDF fx curve') }}">
+              <defs>
+                <linearGradient id="areaNdf" x1="0" x2="0" y1="0" y2="1">
+                  <stop offset="0%" stop-color="#67e8f9" stop-opacity="0.26"/>
+                  <stop offset="100%" stop-color="#67e8f9" stop-opacity="0"/>
+                </linearGradient>
+              </defs>
+              {% for r in g.rotulos_y %}
+              <line x1="52" x2="{{ g.largura - 52 }}" y1="{{ r.y }}" y2="{{ r.y }}" stroke="rgba(255,255,255,0.06)" stroke-width="1"/>
+              <text x="8" y="{{ r.y + 4 }}" fill="#64748b" font-size="10" font-family="Geist, sans-serif">{{ r.valor | moeda(resultado.moeda.casas) }}</text>
+              {% endfor %}
+              {% for r in g.rotulos_x %}
+              <text x="{{ r.x }}" y="{{ g.altura - 14 }}" fill="#64748b" font-size="10" text-anchor="middle" font-family="Geist, sans-serif">{{ r.valor }} dc</text>
+              {% endfor %}
+              <path d="{{ g.area }}" fill="url(#areaNdf)"/>
+              <path d="{{ g.caminho }}" fill="none" stroke="#a5f3fc" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+              {% if g.linha_spot %}
+              <line x1="52" x2="{{ g.largura - 52 }}" y1="{{ g.linha_spot }}" y2="{{ g.linha_spot }}"
+                    stroke="#fb7185" stroke-width="1.2" stroke-dasharray="5 4" opacity="0.75"/>
+              {% endif %}
+              {% for p in g.pontos_vertices %}
+              <circle cx="{{ p.x }}" cy="{{ p.y }}" r="2.6" fill="#0b1220" stroke="#67e8f9" stroke-width="1.4">
+                <title>{{ p.data | data_br }} · {{ p.dc }} dc · {{ p.taxa | moeda(resultado.moeda.casas) }}</title>
+              </circle>
+              {% endfor %}
+            </svg>
+          </div>
+        </div>
+        {% endif %}
+
+        <div class="sem-reveal mt-6 rounded-[2rem] border border-white/[0.09] bg-slate-950/40 backdrop-blur-xl">
+          <div class="flex flex-wrap items-center justify-between gap-3 border-b border-white/[0.07] px-6 py-4">
+            <p class="text-sm font-medium text-white font-geist">{{ t("Vencimentos") }}</p>
+            <div class="flex flex-wrap gap-2">
+              {% for c in resultado.curvas %}
+              <span class="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-slate-400 font-geist">{{ t(c.nome) }} · {{ c.vertices | length }} {{ t("vértices") }}</span>
+              {% endfor %}
+            </div>
+          </div>
+          <div class="rolagem max-h-[30rem] px-2">
+            <table class="tabela-dados">
+              <thead>
+                <tr>
+                  <th>{{ t("Data") }}</th><th>DC</th><th>DU</th>
+                  <th>{{ t("Juro da moeda") }}</th>
+                  {% if not resultado.sem_di %}<th>DI</th><th>{{ t("Carry") }}</th>{% endif %}
+                  <th>NDF</th><th>{{ t("Pontos") }}</th>
+                </tr>
+              </thead>
+              <tbody>
+              {% for p in resultado.pontos %}
+                <tr>
+                  <td>{{ p.data | data_br }}</td>
+                  <td class="text-slate-500">{{ p.dias_corridos | numero }}</td>
+                  <td class="text-slate-500">{{ p.dias_uteis | numero }}</td>
+                  <td>{{ p.cupom | percentual(4) }}</td>
+                  {% if not resultado.sem_di %}
+                  <td>{{ p.di | percentual(4) }}</td>
+                  <td class="text-slate-400">{{ p.carry | percentual(4) }}</td>
+                  {% endif %}
+                  <td class="text-cyan-100">{{ p.ndf | moeda(resultado.moeda.casas) }}</td>
+                  <td class="text-white">{{ p.pontos | moeda(1) }}</td>
+                </tr>
+              {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="sem-reveal mt-6 rounded-2xl border border-white/[0.08] bg-black/25 px-5 py-4">
+          <p class="text-xs text-slate-500 font-geist">{{ t("Fórmula aplicada") }}</p>
+          <p class="mt-2 font-mono text-xs leading-6 text-cyan-100">
+            {% if resultado.sem_di %}
+            NDF = {{ resultado.moeda.par }} a termo = {{ t("euro a termo") }} ÷ {{ t("dólar a termo") }}<br/>
+            pontos = (NDF − spot) × {{ resultado.moeda.fator_pontos | numero }}
+            {% else %}
+            NDF = spot · (1 + DI)<sup>DU/252</sup> / (1 + {{ t("juro da moeda") }} · DC/360)<br/>
+            pontos = (NDF − spot) × {{ resultado.moeda.fator_pontos | numero }}
+            &nbsp;·&nbsp; carry = (1 + DI)/(1 + {{ t("juro da moeda") }}) − 1
+            {% endif %}
+          </p>
+        </div>
+
+        {% else %}
+        <div class="rounded-[2rem] border border-dashed border-white/[0.12] bg-white/[0.02] p-10 text-center">
+          <div class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-cyan-300/10 text-cyan-200">
+            <iconify-icon height="24" icon="solar:dollar-minimalistic-linear" width="24"></iconify-icon>
+          </div>
+          <p class="text-sm text-slate-400 font-geist">{{ t("Escolha a moeda, informe o spot e monte a escada de vencimentos.") }}</p>
+          <p class="mx-auto mt-2 max-w-sm text-xs leading-5 text-slate-600 font-geist">
+            {{ t("As curvas da moeda escolhida são baixadas da B3 para a data-base.") }}
+          </p>
+        </div>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+</section>
+{% endblock %}
