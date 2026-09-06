@@ -30,34 +30,55 @@ REM     profundidade, sem precisar adivinhar o nome da pasta de versao.
 REM ---------------------------------------------------------------------------
 set "PY="
 
+REM  QuickEdit: um clique dentro do console poe a janela em modo de selecao e
+REM  CONGELA o processo ate um Esc. O titulo passa a comecar com "Select". Como
+REM  a tela fica parada sem explicacao, o aviso vem antes de qualquer espera.
+echo [DICA] Se o titulo da janela comecar com "Select", o console esta em modo
+echo        de selecao e o processo fica congelado. Aperte Esc para destravar.
+echo.
+echo [INFO] Procurando o Python...
+
 call :TESTAR_PYTHON "%PRICEEDGE_PYTHON%"
 call :TESTAR_PYTHON "%BASE%.venv\Scripts\python.exe"
 call :TESTAR_PYTHON "%BASE%Scripts\python.exe"
 
-REM  arvore de ferramentas da estacao -- e onde mora o Python aqui, sem venv
-call :VARRER "%USERPROFILE%\ds\tools"
-call :VARRER "%USERPROFILE%\ds"
-call :VARRER "%LOCALAPPDATA%\Programs\Python"
-call :VARRER "%LOCALAPPDATA%\Programs\Python\Python312"
-call :VARRER "%ProgramFiles%\Python312"
-call :VARRER "%ProgramFiles(x86)%\Python312"
-call :VARRER "C:\Python312"
-call :VARRER "C:\Python311"
+REM  ---- caminhos exatos primeiro: acerto instantaneo, sem varrer nada -------
+REM  layout da estacao: ds\tools\python3.NN\latest (ou a pasta da versao)
+for %%n in (3.13 3.12 3.11 3.10) do (
+    call :TESTAR_PYTHON "%USERPROFILE%\ds\tools\python%%n\latest\python.exe"
+    call :TESTAR_PYTHON "%USERPROFILE%\ds\tools\python%%n\python.exe"
+)
+for %%n in (313 312 311 310) do (
+    call :TESTAR_PYTHON "%LOCALAPPDATA%\Programs\Python\Python%%n\python.exe"
+    call :TESTAR_PYTHON "%ProgramFiles%\Python%%n\python.exe"
+    call :TESTAR_PYTHON "C:\Python%%n\python.exe"
+)
 
 REM  o launcher py resolve a versao sozinho; passa pelo mesmo teste de execucao
 call :TESTAR_PYTHON "py"
 call :TESTAR_PYTHON "python"
 call :TESTAR_PYTHON "python3"
 
+REM  ---- so agora varre, e so pastas pequenas e locais --------------------
+REM  NUNCA varra %USERPROFILE% inteiro nem %USERPROFILE%\ds: essas arvores
+REM  costumam ter junction para share de rede, e `dir /s` entra nelas -- a
+REM  busca some por minutos numa tela preta, sem imprimir nada, com cara de
+REM  travada. Aqui a varredura e o ultimo recurso e cobre so a pasta de
+REM  ferramentas e a de instalacao do Python.
+if not defined PY echo [INFO] Nao achei nos caminhos usuais; varrendo ds\tools...
+call :VARRER "%USERPROFILE%\ds\tools"
+call :VARRER "%LOCALAPPDATA%\Programs\Python"
+
 if not defined PY (
     echo.
     echo [ERRO] Nenhum Python que responda foi encontrado.
     echo.
-    echo        Procurei python.exe, recursivamente, em:
-    echo          %USERPROFILE%\ds\tools
-    echo          %LOCALAPPDATA%\Programs\Python
-    echo          %ProgramFiles%\Python312   e   C:\Python312
-    echo        e tentei py, python e python3 no PATH.
+    echo        Procurei em:
+    echo          %USERPROFILE%\ds\tools\python3.1x\latest\python.exe
+    echo          %LOCALAPPDATA%\Programs\Python\Python31x\python.exe
+    echo          %ProgramFiles%\Python31x   e   C:\Python31x
+    echo          py, python e python3 no PATH
+    echo        e varri %USERPROFILE%\ds\tools e a pasta Programs\Python.
     echo.
     echo        Aponte o caminho e rode de novo:
     echo          set PRICEEDGE_PYTHON=C:\Users\seu.usuario\ds\tools\python3.12\latest\python.exe
@@ -91,6 +112,7 @@ if not exist "%~1" (
     if defined PRICEEDGE_DEBUG echo [DEBUG] pasta inexistente: %~1
     exit /b 0
 )
+echo [INFO]   varrendo %~1 ...
 for /f "usebackq delims=" %%p in (`dir /b /s "%~1\python.exe" 2^>nul`) do call :TESTAR_PYTHON "%%p"
 exit /b 0
 
@@ -107,9 +129,11 @@ echo %~1 | findstr /I /C:"\WindowsApps\" >nul && (
     exit /b 0
 )
 set "MARCA="
-REM  max(m,9)==m e nao m>=9: para o cmd, o ">" dentro de um `for /f` e
-REM  redirecionamento de saida, mesmo entre aspas. Escrito com ">=", o teste
-REM  falharia calado e TODO candidato seria recusado -- inclusive o Python certo.
+REM  max(m,9)==m e nao uma comparacao de maior-ou-igual: para o cmd, o sinal
+REM  de maior e redirecionamento de saida dentro de um `for /f`, mesmo entre
+REM  aspas -- escrito da forma obvia, o teste falharia calado e recusaria TODO
+REM  candidato, inclusive o Python certo. E REM nao protege: o cmd processa
+REM  redirecionamento tambem em linha de comentario.
 for /f "usebackq delims=" %%r in (`"%~1" -c "import sys;v=sys.version_info;print('PY3OK' if v[0]==3 and max(v[1],9)==v[1] else 'VELHO')" 2^>nul`) do set "MARCA=%%r"
 if /I not "%MARCA%"=="PY3OK" (
     if defined PRICEEDGE_DEBUG echo [DEBUG] recusado ^(nao respondeu^): %~1
@@ -233,7 +257,7 @@ REM  Werkzeug com auto-reload, porta 5051, so em localhost.
 REM  Abre  http://127.0.0.1:5051/  no navegador sozinho.
 REM
 REM  Uso:  duplo clique.
-REM        start-uat.bat noinstall   -> pula a instalacao (util offline)
+REM        start-uat.bat noinstall   ... pula a instalacao (util offline)
 REM
 REM  Nao instala Python. Se o desta estacao estiver num lugar que o script nao
 REM  procura, aponte:   set PRICEEDGE_PYTHON=C:\\caminho\\para\\python.exe""",
@@ -251,10 +275,10 @@ PROD = montar(
 REM
 REM  Waitress (servidor WSGI), porta 5050, em todas as interfaces.
 REM  Abre  http://127.0.0.1:5050/  no navegador sozinho; a rede chega pelo
-REM  http://<IP-da-maquina>:5050/
+REM  http://IP-da-maquina:5050/
 REM
 REM  Uso:  duplo clique.
-REM        start-prod.bat noinstall   -> pula a instalacao (util offline)
+REM        start-prod.bat noinstall   ... pula a instalacao (util offline)
 REM
 REM  Nao instala Python. Se o desta estacao estiver num lugar que o script nao
 REM  procura, aponte:   set PRICEEDGE_PYTHON=C:\\caminho\\para\\python.exe""",
