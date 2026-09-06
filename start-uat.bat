@@ -15,6 +15,8 @@ REM ============================================================================
 setlocal
 set "PORTA=5051"
 set "URL=http://127.0.0.1:%PORTA%/"
+REM  porta do agente de proxy local da estacao (localproxy-cfg)
+set "PROXY_LOCAL_PORTA=9443"
 
 REM ---------------------------------------------------------------------------
 REM  Reentrada: chamado com --abrir, este mesmo .bat nao sobe nada. So espera a
@@ -116,6 +118,57 @@ if not defined PY (
 )
 echo [INFO] Python: %PY%
 for /f "usebackq delims=" %%v in (`"%PY%" -c "import sys;print(sys.version.split()[0])" 2^>nul`) do echo [INFO] Versao: %%v
+
+REM ---------------------------------------------------------------------------
+REM  Proxy. Numa rede corporativa a saida direta nao existe: sem proxy a chamada
+REM  morre em WinError 10060 -- timeout de TCP, nao erro de HTTP.
+REM
+REM  O detalhe que engana: a estacao pode ter HTTP_PROXY definido e ESTE
+REM  processo nao enxergar. Variavel exportada pelo perfil de um terminal vive
+REM  naquele terminal; o cmd que o duplo clique abre nao a recebe. Por isso o
+REM  valor visto e impresso aqui -- em branco quer dizer saida direta.
+REM
+REM  PRICEEDGE_PROXY define o proxy so para esta sessao. Para fixar de vez:
+REM      setx HTTP_PROXY  http://127.0.0.1:9443
+REM      setx HTTPS_PROXY http://127.0.0.1:9443
+REM ---------------------------------------------------------------------------
+if defined PRICEEDGE_PROXY (
+    set "HTTP_PROXY=%PRICEEDGE_PROXY%"
+    set "HTTPS_PROXY=%PRICEEDGE_PROXY%"
+    set "PRECIFICADOR_PROXY=%PRICEEDGE_PROXY%"
+)
+REM  Sem proxy na sessao, procura o agente local: o localproxy-cfg da estacao
+REM  sobe um proxy em 127.0.0.1:9443 e exporta as variaveis, mas elas ficam no
+REM  terminal que rodou o setup -- nao chegam ao cmd do duplo clique. Se a porta
+REM  estiver escutando, o agente esta de pe e da para usa-lo.
+REM
+REM  Detectar e usar, sim; instalar, nao. Se o agente nao estiver instalado,
+REM  quem resolve e o bootstrap da estacao (`ds tool install localproxy-cfg`),
+REM  nao um script de subida de aplicacao.
+if not defined HTTPS_PROXY if not defined HTTP_PROXY (
+    netstat -an | findstr /C:":%PROXY_LOCAL_PORTA% " | findstr /I /C:"LISTENING" >nul 2>&1
+    if not errorlevel 1 (
+        set "HTTP_PROXY=http://127.0.0.1:%PROXY_LOCAL_PORTA%"
+        set "HTTPS_PROXY=http://127.0.0.1:%PROXY_LOCAL_PORTA%"
+        echo [INFO] Agente de proxy local detectado na porta %PROXY_LOCAL_PORTA%.
+    )
+)
+
+if defined HTTPS_PROXY (
+    echo [INFO] Proxy: %HTTPS_PROXY%
+) else (
+    if defined HTTP_PROXY (
+        echo [INFO] Proxy: %HTTP_PROXY%
+    ) else (
+        echo [AVISO] Nenhum proxy nesta sessao -- a saida vai direto.
+        echo         Se as fontes derem timeout ^(WinError 10060^):
+        echo           1. confirme que o agente local esta de pe
+        echo              ^(ds tool list ^| findstr localproxy-cfg^)
+        echo           2. ou aponte o proxy a mao:
+        echo              set PRICEEDGE_PROXY=http://127.0.0.1:9443
+        echo         Depois confira em Metodologia, botao "Testar as fontes".
+    )
+)
 
 REM ---------------------------------------------------------------------------
 REM  Dependencias, best-effort: se o pypi estiver bloqueado, avisa e segue com o

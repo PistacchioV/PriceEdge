@@ -795,6 +795,17 @@ def metodologia():
                            rede=rede.diagnostico())
 
 
+@bp.route("/api/rede/testar")
+def api_testar_rede():
+    """Bate em cada fonte e devolve o que aconteceu, uma por uma.
+
+    "Deu erro na api" não diz qual api, nem se o problema é a fonte, a saída da
+    rede ou a autenticação. Lado a lado, o resultado responde sozinho.
+    """
+    return jsonify({"fontes": rede.testar_fontes(),
+                    "diagnostico": rede.diagnostico()})
+
+
 @bp.route("/ni-pro-rata", methods=["GET", "POST"])
 def ni_pro_rata():
     contexto = {"resultado": None, "erro": None,

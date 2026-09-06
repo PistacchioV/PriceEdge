@@ -127,6 +127,36 @@ def sso_disponivel() -> bool:
                                      or HTTPKerberosAuth is not None)
 
 
+FONTES_PARA_TESTE = [
+    ("B3", "https://www2.bmf.com.br/pages/portal/bmfbovespa/lumis/lum-taxas-referenciais-bmf-ptBR.asp"),
+    ("Banco Central — SGS", "https://api.bcb.gov.br/dados/serie/bcdata.sgs.4389/dados?formato=json&dataInicial=01/09/2026&dataFinal=02/09/2026"),
+    ("Banco Central — PTAX", "https://olinda.bcb.gov.br/olinda/servico/PTAX/versao/v1/odata/Moedas?$format=json&$top=1"),
+    ("Fed de Nova York", "https://markets.newyorkfed.org/api/rates/secured/sofr/last/1.json"),
+    ("Banco da Finlândia", "https://www.suomenpankki.fi/en/"),
+]
+
+
+def testar_fontes(timeout: int = 8) -> list:
+    """Bate em cada fonte e diz o que aconteceu, uma por uma.
+
+    Existe porque "deu erro na api" não diz qual API, nem se o problema é a
+    fonte, a saída da rede ou a autenticação. Com o resultado lado a lado a
+    resposta aparece sozinha: todas falhando com timeout é bloqueio de saída;
+    uma só falhando é a fonte.
+    """
+    saida = []
+    for nome, url in FONTES_PARA_TESTE:
+        try:
+            obter(url, timeout=timeout)
+            saida.append({"fonte": nome, "ok": True, "detalhe": "respondeu"})
+        except ErroDeFonte as exc:
+            saida.append({"fonte": nome, "ok": False, "detalhe": str(exc)[:280]})
+        except Exception as exc:                  # nenhuma fonte derruba o teste
+            saida.append({"fonte": nome, "ok": False,
+                          "detalhe": f"{type(exc).__name__}: {exc}"[:280]})
+    return saida
+
+
 def diagnostico() -> dict:
     """O que está e o que não está disponível — para a tela de metodologia."""
     return {
@@ -139,6 +169,12 @@ def diagnostico() -> dict:
         "sem_proxy": os.getenv("PRECIFICADOR_SEM_PROXY", "").lower() in ("1", "true"),
         "proxy": proxy_configurado(),
         "proxy_do_windows": proxy_do_windows(),
+        "no_proxy": os.getenv("NO_PROXY") or os.getenv("no_proxy") or None,
+        "variaveis_de_proxy": {
+            nome: os.getenv(nome) for nome in
+            ("PRECIFICADOR_PROXY", "HTTPS_PROXY", "HTTP_PROXY",
+             "https_proxy", "http_proxy") if os.getenv(nome)
+        },
     }
 
 
@@ -160,7 +196,11 @@ def sessao():
         s.verify = ca                    # o certifi não traz a raiz interna
     proxy = proxy_configurado()
     if proxy:
-        s.proxies = {"http": proxy, "https": proxy}
+        # NO_PROXY tem que continuar valendo: com trust_env desligado o requests
+        # ignora a variável, e um host interno que deveria ir direto passaria a
+        # sair pelo proxy — que costuma recusá-lo.
+        s.proxies = {"http": proxy, "https": proxy,
+                     "no_proxy": os.getenv("NO_PROXY") or os.getenv("no_proxy") or ""}
 
     if HttpNegotiateAuth is not None:
         s.auth = HttpNegotiateAuth()

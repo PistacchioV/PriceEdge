@@ -1216,6 +1216,11 @@ TRADUCOES: Dict[str, str] = {
     'Proxy de saída': 'Outbound proxy',
     'O que o Windows tem configurado': 'What Windows has configured',
     'A saída é resolvida por um arquivo PAC, que é um script e escolhe o proxy por destino — nem o urllib nem o requests sabem interpretá-lo. Abra a URL acima, leia o endereço do proxy e informe-o em PRECIFICADOR_PROXY.': 'Egress is resolved by a PAC file, which is a script that picks the proxy per destination — neither urllib nor requests can interpret it. Open the URL above, read the proxy address and set it in PRECIFICADOR_PROXY.',
+    'Testar as fontes': 'Test the sources',
+    'Bate em cada fonte e diz o que aconteceu. Todas falhando com timeout é bloqueio de saída; uma só falhando é a fonte.': 'Hits each source and reports what happened. All of them timing out means egress is blocked; a single one failing means that source.',
+    'Proxy visto por este processo': 'Proxy seen by this process',
+    'Nenhuma variável de proxy neste processo': 'No proxy variable in this process',
+    'A estação pode ter o proxy configurado e este processo não enxergá-lo: variável definida no perfil de um terminal não chega ao cmd que o .bat abre. Defina antes de subir, ou grave de vez com setx.': "The workstation may have a proxy configured that this process cannot see: a variable set in one terminal's profile never reaches the cmd the .bat opens. Set it before starting, or make it permanent with setx.",
 }
 
 

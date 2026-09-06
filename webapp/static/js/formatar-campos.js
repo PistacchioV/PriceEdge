@@ -209,3 +209,41 @@
   if (data) data.addEventListener("change", () => aplicar(false));
   aplicar(false);
 })();
+
+/* Testa cada fonte externa e mostra o resultado lado a lado.
+ * Existe porque "deu erro na api" nao diz qual api, nem se o problema e a
+ * fonte, a saida da rede ou a autenticacao. Todas falhando com timeout e
+ * bloqueio de saida; uma so falhando e a fonte. */
+(function () {
+  const botao = document.getElementById("btn-testar-rede");
+  if (!botao) return;
+  const caixa = document.getElementById("resultado-rede");
+  const original = botao.innerHTML;
+
+  botao.addEventListener("click", async () => {
+    botao.disabled = true;
+    botao.textContent = "...";
+    caixa.hidden = false;
+    caixa.innerHTML = '<p class="text-xs text-slate-500 font-geist">testando…</p>';
+    try {
+      const dados = await (await fetch("/api/rede/testar")).json();
+      caixa.innerHTML = dados.fontes.map((f) => `
+        <div class="flex flex-wrap items-start gap-3 rounded-xl border px-4 py-3
+                    ${f.ok ? "border-emerald-300/20 bg-emerald-400/[0.06]"
+                           : "border-rose-300/20 bg-rose-400/[0.06]"}">
+          <span class="mt-0.5 shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium
+                       ${f.ok ? "bg-emerald-400/15 text-emerald-200"
+                              : "bg-rose-400/15 text-rose-200"}">${f.ok ? "OK" : "FALHA"}</span>
+          <div class="min-w-0">
+            <p class="text-sm font-medium text-white font-geist">${f.fonte}</p>
+            <p class="mt-0.5 break-words font-mono text-[11px] leading-5 text-slate-400">${f.detalhe}</p>
+          </div>
+        </div>`).join("");
+    } catch (erro) {
+      caixa.innerHTML = `<p class="text-xs text-rose-300 font-geist">${erro.message}</p>`;
+    } finally {
+      botao.disabled = false;
+      botao.innerHTML = original;
+    }
+  });
+})();
