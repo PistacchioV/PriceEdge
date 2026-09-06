@@ -49,6 +49,10 @@
 
     <form method="post" class="mt-8 grid gap-6 lg:grid-cols-[0.95fr_1.05fr] lg:items-start">
       <div class="min-w-0 rounded-[2rem] border border-white/[0.09] bg-gradient-to-b from-white/[0.05] to-transparent p-6 backdrop-blur-xl sm:p-8">
+        <div class="mb-6 flex flex-wrap items-center justify-between gap-3 border-b border-white/[0.08] pb-6">
+          {{ botao(t('Montar e precificar'), 'solar:widget-add-linear') }}
+        </div>
+
         <p class="text-[11px] font-semibold uppercase tracking-widest text-cyan-200 font-geist">{{ t("Pontas") }}</p>
 
         <div class="mt-5 grid gap-4 sm:grid-cols-2">
@@ -206,7 +210,6 @@
         {# nenhuma das pontas escolhidas pede insumo de mercado #}
         {% endif %}
 
-        <div class="mt-8">{{ botao(t('Montar e precificar'), 'solar:widget-add-linear') }}</div>
       </div>
 
       <div class="min-w-0">

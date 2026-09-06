@@ -19,6 +19,10 @@
 
     <form method="post" class="mt-12 grid gap-6 lg:grid-cols-[1fr_0.85fr] lg:items-start">
       <div class="min-w-0 rounded-[2rem] border border-white/[0.09] bg-gradient-to-b from-white/[0.05] to-transparent p-6 backdrop-blur-xl sm:p-8">
+        <div class="mb-6 flex flex-wrap items-center justify-between gap-3 border-b border-white/[0.08] pb-6">
+          {{ botao(t('Interpolar'), 'solar:graph-new-linear') }}
+        </div>
+
         <div class="flex flex-wrap items-center justify-between gap-3">
           <p class="text-[11px] font-semibold uppercase tracking-widest text-cyan-200 font-geist">{{ t("Pontos conhecidos") }}</p>
           <div class="flex items-center gap-2">
@@ -66,7 +70,6 @@
           </div>
         </div>
 
-        <div class="mt-8">{{ botao(t('Interpolar'), 'solar:graph-new-linear') }}</div>
       </div>
 
       <div class="min-w-0">
