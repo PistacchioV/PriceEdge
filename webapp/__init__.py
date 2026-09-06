@@ -2,12 +2,28 @@
 
 from __future__ import annotations
 
+import os
+import secrets
+
 from flask import Flask
+
+
+def _chave_de_sessao() -> str:
+    """Chave de sessão do ambiente, ou uma nova a cada subida.
+
+    Fica fora do código de propósito: uma constante versionada num repositório
+    é uma chave que qualquer um lê, e com ela se forja o cookie de sessão de
+    qualquer instância que rode este código. O sorteio a cada subida custa
+    apenas invalidar os cookies num restart — aqui a sessão só guarda o idioma
+    escolhido, então ninguém perde nada. Para mantê-la estável entre restarts,
+    defina PRECIFICADOR_SECRET_KEY no ambiente.
+    """
+    return os.getenv("PRECIFICADOR_SECRET_KEY") or secrets.token_hex(32)
 
 
 def create_app(config=None) -> Flask:
     app = Flask(__name__)
-    app.config.update(SECRET_KEY="precificador-swap-local", JSON_SORT_KEYS=False)
+    app.config.update(SECRET_KEY=_chave_de_sessao(), JSON_SORT_KEYS=False)
     if config:
         app.config.update(config)
 
