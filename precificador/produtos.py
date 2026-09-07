@@ -559,9 +559,45 @@ def curva_ndf(data_base, spot: float, curva_di: Optional[Curva],
     return pontos
 
 
+SAIDA = "saida"
+ENTRADA = "entrada"
+
+DIRECOES = [
+    (SAIDA, "Saída de moeda estrangeira — soma o casado"),
+    (ENTRADA, "Entrada de moeda estrangeira — desconta o casado"),
+]
+
+
 def casado(primeiro_futuro: float, spot: float) -> float:
     """Casado em pips: 1º futuro de dólar menos o spot (DOL cota × 1.000)."""
     return primeiro_futuro - spot * 1000.0
+
+
+def sinal_do_casado(direcao: str) -> int:
+    """+1 quando a moeda sai, −1 quando entra."""
+    return -1 if direcao == ENTRADA else 1
+
+
+def spot_com_casado(spot: float, casado_pips: Optional[float],
+                    direcao: str = SAIDA) -> float:
+    """O spot que de fato precifica o NDF, já com o casado no sinal do fluxo.
+
+    O casado é a distância entre o mercado à vista e o futuro, cotada em pips do
+    DOL (milésimos de real). Ele entra no preço com o sinal do fluxo: **saída de
+    moeda estrangeira soma, entrada desconta**.
+
+    Vale notar a identidade que sai disso. Como ``casado = 1º futuro − spot ×
+    1000``, uma saída dá ``spot + casado/1000 = 1º futuro / 1000`` — ou seja,
+    precificar uma saída pelo casado é precificar pelo futuro em vez de pelo
+    à vista, que é exatamente o que o casado significa. A entrada reflete a
+    mesma distância para o outro lado.
+
+    Sem casado — as moedas que não têm futuro na B3 — não há o que ajustar e o
+    spot passa direto.
+    """
+    if not casado_pips:
+        return spot
+    return spot + sinal_do_casado(direcao) * casado_pips / 1000.0
 
 
 def rolagem(primeiro_futuro: float, segundo_futuro: float) -> float:

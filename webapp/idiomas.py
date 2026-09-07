@@ -1436,6 +1436,34 @@ TRADUCOES: Dict[str, str] = {
         "{ativo} moved {retorno}% plus a {taxa}% spread",
     "fator digitado": "factor typed in",
 
+
+    # ------------------------------------------ NDF: direção do fluxo e casado
+    "Direção do fluxo": "Flow direction",
+    "Saída de moeda estrangeira — soma o casado":
+        "Foreign currency going out — adds the casado",
+    "Entrada de moeda estrangeira — desconta o casado":
+        "Foreign currency coming in — subtracts the casado",
+    "Saída de moeda estrangeira": "Foreign currency going out",
+    "Entrada de moeda estrangeira": "Foreign currency coming in",
+    "O casado entra no preço com o sinal do fluxo: saída soma, entrada desconta. É o "
+    "spot já ajustado que precifica a curva.":
+        "The casado enters the price with the flow's sign: outgoing adds, incoming "
+        "subtracts. It is the adjusted spot that prices the curve, not the one typed.",
+    "Spot que precificou": "Spot used for pricing",
+    "É este o spot que entrou na curva, e não o digitado.":
+        "This is the spot that went into the curve, not the one typed.",
+    "Numa saída ele coincide com o 1º futuro dividido por 1.000 — precificar pelo "
+    "casado é precificar pelo futuro, que é o que o casado significa.":
+        "On an outflow it equals the 1st future divided by 1,000 — pricing off the "
+        "casado is pricing off the future, which is what the casado means.",
+    "Spot": "Spot",
+    "spot ": "spot ",
+    "casado": "casado",
+    "casado de": "casado of",
+    "pips": "pips",
+    "saída · soma": "outflow · adds",
+    "entrada · desconta": "inflow · subtracts",
+
 }
 
 

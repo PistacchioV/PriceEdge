@@ -94,6 +94,17 @@
             <label class="rotulo" for="segundo_futuro">{{ t("2º futuro DOL") }}</label>
             <input class="campo" id="segundo_futuro" name="segundo_futuro" data-formato="moeda" value="{{ form.segundo_futuro }}" inputmode="decimal"/>
           </div>
+          <div class="sm:col-span-2 so-dolar" {{ 'hidden' if form.moeda not in ('USD', '') }}>
+            <label class="rotulo" for="direcao">{{ t("Direção do fluxo") }}</label>
+            <select class="campo" id="direcao" name="direcao">
+              {% for valor, rotulo in direcoes %}
+              <option value="{{ valor }}" {{ 'selected' if form.direcao == valor }}>{{ t(rotulo) }}</option>
+              {% endfor %}
+            </select>
+            <p class="mt-2 text-xs leading-5 text-slate-600 font-geist">
+              {{ t("O casado entra no preço com o sinal do fluxo: saída soma, entrada desconta. É o spot já ajustado que precifica a curva.") }}
+            </p>
+          </div>
         </div>
 
         <div class="my-7 h-px w-full bg-white/[0.08]"></div>
@@ -129,13 +140,39 @@
         {% if resultado %}
         {# casado e rolagem são do pregão de dólar: fora dele as duas colunas somem #}
         <div class="sem-reveal grid gap-3 sm:grid-cols-2 {{ 'lg:grid-cols-4' if resultado.casado is not none else '' }}">
+          {% if resultado.ajustado %}
+          {{ estatistica(t('Spot que precificou'), resultado.spot_efetivo | moeda(resultado.moeda.casas),
+                         (t('spot ') ~ (resultado.spot | moeda(resultado.moeda.casas)) ~ ' '
+                          ~ ('+' if resultado.sinal > 0 else '−') ~ ' '
+                          ~ t('casado')), destaque=true) }}
+          {% else %}
           {{ estatistica(t('Spot D+2'), resultado.spot | moeda(resultado.moeda.casas), resultado.moeda.par, destaque=true) }}
+          {% endif %}
           {{ estatistica(t('D−1'), resultado.d_menos_1 | data_br, t('calendário ') ~ resultado.calendario) }}
           {% if resultado.casado is not none %}
-          {{ estatistica(t('Casado'), resultado.casado | moeda(2), t('1º futuro − spot×1.000')) }}
+          {{ estatistica(t('Casado'), resultado.casado_com_sinal | moeda(2),
+                         t('saída · soma') if resultado.sinal > 0 else t('entrada · desconta')) }}
           {{ estatistica(t('Rolagem'), (resultado.rolagem | moeda(2)) if resultado.rolagem is not none else '—', t('(2º − 1º futuro) × 10')) }}
           {% endif %}
         </div>
+
+        {% if resultado.ajustado %}
+        <div class="sem-reveal mt-4 rounded-2xl border border-cyan-200/20 bg-cyan-400/[0.06] px-5 py-4">
+          <p class="text-xs font-medium text-cyan-100 font-geist">
+            {{ t("Saída de moeda estrangeira") if resultado.sinal > 0 else t("Entrada de moeda estrangeira") }}
+          </p>
+          <p class="mt-2 text-xs leading-6 text-cyan-100/80 font-geist">
+            {{ t("Spot") }} {{ resultado.spot | moeda(resultado.moeda.casas) }}
+            {{ '+' if resultado.sinal > 0 else '−' }}
+            {{ t("casado de") }} {{ (resultado.casado | abs) | moeda(2) }} {{ t("pips") }}
+            = <strong class="text-cyan-100">{{ resultado.spot_efetivo | moeda(resultado.moeda.casas) }}</strong>.
+            {{ t("É este o spot que entrou na curva, e não o digitado.") }}
+            {% if resultado.sinal > 0 %}
+            {{ t("Numa saída ele coincide com o 1º futuro dividido por 1.000 — precificar pelo casado é precificar pelo futuro, que é o que o casado significa.") }}
+            {% endif %}
+          </p>
+        </div>
+        {% endif %}
 
         {% if resultado.grafico %}
         {% set g = resultado.grafico %}

@@ -1544,3 +1544,87 @@ def test_fixings_das_duas_fontes_chegam_na_mesma_forma():
         assert primeiro.fator_dia > 0 and primeiro.fator_acumulado > 0
     assert de_cdi.fixings[0].data_observacao is None      # o CDI não tem defasagem
     assert de_sofr.fixings[0].data_observacao is not None
+
+
+def test_casado_entra_no_preco_com_o_sinal_do_fluxo():
+    """Saída de moeda estrangeira soma o casado; entrada desconta.
+
+    O casado é a distância entre o à vista e o futuro. Ele não é uma estatística
+    de tela: entra no spot que precifica a curva, e o sinal vem da direção do
+    fluxo. Sem isso, uma exportação e uma importação sairiam pelo mesmo preço.
+    """
+    from precificador.produtos import (ENTRADA, SAIDA, casado, sinal_do_casado,
+                                       spot_com_casado)
+    spot, primeiro = 5.4012, 5425.0
+    pips = casado(primeiro, spot)
+    assert abs(pips - 23.8) < 1e-9
+
+    saida = spot_com_casado(spot, pips, SAIDA)
+    entrada = spot_com_casado(spot, pips, ENTRADA)
+    assert saida > spot > entrada
+    assert abs((saida - spot) - (spot - entrada)) < 1e-12   # mesma distância
+
+    # a identidade: numa saída o spot ajustado é o próprio 1º futuro em reais
+    assert abs(saida - primeiro / 1000.0) < 1e-12
+    assert sinal_do_casado(SAIDA) == 1 and sinal_do_casado(ENTRADA) == -1
+
+
+def test_sem_casado_o_spot_passa_direto():
+    """As moedas sem futuro na B3 não têm o que ajustar."""
+    from precificador.produtos import ENTRADA, SAIDA, spot_com_casado
+    for direcao in (SAIDA, ENTRADA):
+        assert spot_com_casado(5.95, None, direcao) == 5.95
+        assert spot_com_casado(5.95, 0.0, direcao) == 5.95
+
+
+def test_direcao_do_fluxo_muda_a_curva_de_ndf_inteira():
+    """O ajuste é no spot, então ele atravessa todos os vencimentos."""
+    from webapp import create_app
+    app = create_app()
+    base = dict(data_curva="2026-09-04", moeda="USD", spot="5,4012",
+                progressao="mensal", quantidade="4", calendario="ANBIMA",
+                primeiro_futuro="5425", segundo_futuro="5450")
+    telas = {}
+    for direcao in ("saida", "entrada"):
+        html = app.test_client().post("/ndf", data=dict(base, direcao=direcao)).data.decode()
+        telas[direcao] = re.findall(r'tabular-nums">([\d.,\-]+)</p>', html)
+
+    # o spot que precificou e o casado saem com sinais opostos
+    assert telas["saida"][0] == "5,4250"      # = 1º futuro / 1.000
+    assert telas["entrada"][0] == "5,3774"
+    assert telas["saida"][1] == "23,80" and telas["entrada"][1] == "-23,80"
+    assert telas["saida"] != telas["entrada"]
+
+
+def test_toda_cor_usada_nos_templates_tem_regra_no_tema_claro():
+    """Cor sem regra no tema claro é texto que some no fundo branco.
+
+    A paleta é escrita para o escuro: ``text-cyan-100`` é quase branco, e no
+    claro ele precisa virar um tom escuro. O arquivo de tema faz isso classe por
+    classe, e por isso uma classe nova passa despercebida — foi o que aconteceu
+    com as variantes de opacidade (``text-cyan-100/80``), dez trechos em cinco
+    telas, todos ilegíveis no claro até alguém abrir a tela e olhar.
+
+    Este teste varre os templates e cobra uma regra para cada cor clara usada.
+    """
+    from pathlib import Path
+    raiz = Path(__file__).resolve().parent.parent / "webapp"
+    css = (raiz / "static" / "css" / "tema-claro.css").read_text(encoding="utf-8")
+
+    # tons claros da paleta: no fundo branco eles não têm contraste nenhum
+    claros = re.compile(r"text-(cyan|amber|emerald|rose|sky|violet)-(50|100|200)"
+                        r"(/\d+)?")
+    sem_regra = set()
+    for template in sorted((raiz / "templates").glob("*.html")):
+        for cor, tom, opacidade in claros.findall(template.read_text(encoding="utf-8")):
+            classe = f"text-{cor}-{tom}"
+            if opacidade:
+                # a variante com opacidade é coberta pelo seletor de atributo
+                coberta = f'[class*="{classe}/"]' in css
+            else:
+                coberta = f".{classe}" in css
+            if not coberta:
+                sem_regra.add(classe + (opacidade or ""))
+
+    assert not sem_regra, ("estas cores não têm regra em tema-claro.css e somem "
+                           f"no fundo branco: {sorted(sem_regra)}")

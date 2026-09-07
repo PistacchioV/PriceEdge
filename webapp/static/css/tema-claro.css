@@ -53,11 +53,29 @@ html[data-tema="claro"] .text-slate-950   { color: #ffffff !important; }
 html[data-tema="claro"] .text-cyan-100,
 html[data-tema="claro"] .text-cyan-200,
 html[data-tema="claro"] .text-cyan-300    { color: #0e7490 !important; }
+html[data-tema="claro"] .text-emerald-100,
 html[data-tema="claro"] .text-emerald-200,
 html[data-tema="claro"] .text-emerald-300 { color: #047857 !important; }
+html[data-tema="claro"] .text-amber-100,
+html[data-tema="claro"] .text-amber-200,
 html[data-tema="claro"] .text-amber-300   { color: #b45309 !important; }
 html[data-tema="claro"] .text-rose-100,
+html[data-tema="claro"] .text-rose-200,
 html[data-tema="claro"] .text-rose-300    { color: #be123c !important; }
+
+/* As variantes com opacidade — text-cyan-100/80, text-amber-100/70 — não são
+   alcançadas pelos seletores acima, e no claro elas somem no fundo: eram dez
+   trechos em cinco telas, todos ilegíveis. O seletor de atributo casa a classe
+   crua, com a barra e tudo, e vale para as que ainda vierem. O tom é um passo
+   mais claro que o cheio, para o texto secundário continuar secundário. */
+html[data-tema="claro"] [class*="text-cyan-100/"],
+html[data-tema="claro"] [class*="text-cyan-200/"]   { color: #0f7c93 !important; }
+html[data-tema="claro"] [class*="text-amber-100/"],
+html[data-tema="claro"] [class*="text-amber-200/"]  { color: #a1560a !important; }
+html[data-tema="claro"] [class*="text-emerald-100/"],
+html[data-tema="claro"] [class*="text-emerald-200/"] { color: #056f4e !important; }
+html[data-tema="claro"] [class*="text-rose-100/"],
+html[data-tema="claro"] [class*="text-rose-200/"]   { color: #b81a45 !important; }
 html[data-tema="claro"] .text-blue-300,
 html[data-tema="claro"] .text-blue-400    { color: #1d4ed8 !important; }
 

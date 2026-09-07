@@ -17,10 +17,10 @@ from precificador.instrumentos import (BULLET, LINEAR, PERCENTUAL,
                                        PERSONALIZADA, SPREAD)
 from precificador.interpolacao import METODOS, interpolar
 from precificador.erros import ErroDeFonte
-from precificador.produtos import (MOEDAS_NDF, MODO_MANUAL, MODO_PRECO,
-                                   PROGRESSOES, NumeroIndice, casado, curva_ndf,
-                                   moeda_ndf,
-                                   escada_datas, rolagem)
+from precificador.produtos import (DIRECOES, MOEDAS_NDF, MODO_MANUAL, MODO_PRECO,
+                                   PROGRESSOES, SAIDA, NumeroIndice, casado,
+                                   curva_ndf, moeda_ndf, escada_datas, rolagem,
+                                   sinal_do_casado, spot_com_casado)
 from precificador.solver import SemConvergencia
 
 from . import servicos
@@ -284,6 +284,7 @@ def ndf():
         "progressoes": [(chave, rotulo) for chave, (rotulo, _) in PROGRESSOES.items()],
         "calendarios": CALENDARIOS,
         "moedas": MOEDAS_NDF,
+        "direcoes": DIRECOES,
         "resultado": None, "erro": None,
     }
     if request.method == "POST":
@@ -333,25 +334,36 @@ def _montar_ndf(form) -> dict:
         datas = escada_datas(base, form.get("progressao") or "mensal",
                              max(1, min(quantidade, 120)), cal)
 
-    pontos = curva_ndf(base, spot, fontes["di"], fontes["cupom"], datas, cal,
-                       fontes["preco"], moeda, estrangeira)
-    if not pontos:
-        raise servicos.ErroFormulario("nenhum vencimento posterior à data-base")
-
     # casado e rolagem são do pregão de dólar: não existem para as outras moedas
     dolar = moeda.codigo == "USD"
     primeiro = servicos.numero_do_form(form, "primeiro_futuro", "1º futuro", 0.0)
     segundo = servicos.numero_do_form(form, "segundo_futuro", "2º futuro", 0.0)
+    valor_casado = casado(primeiro, spot) if dolar and primeiro else None
+
+    # o casado entra no preço com o sinal do fluxo, então ele é calculado antes
+    # da curva: quem precifica é o spot já ajustado, não o spot digitado
+    direcao = form.get("direcao") or SAIDA
+    spot_efetivo = spot_com_casado(spot, valor_casado, direcao)
+
+    pontos = curva_ndf(base, spot_efetivo, fontes["di"], fontes["cupom"], datas,
+                       cal, fontes["preco"], moeda, estrangeira)
+    if not pontos:
+        raise servicos.ErroFormulario("nenhum vencimento posterior à data-base")
 
     return {
-        "base": base, "spot": spot, "pontos": pontos, "moeda": moeda,
+        "base": base, "spot": spot, "spot_efetivo": spot_efetivo,
+        "pontos": pontos, "moeda": moeda,
         "d_menos_1": cal.workday(base, -1),
-        "casado": casado(primeiro, spot) if dolar and primeiro else None,
+        "casado": valor_casado,
+        "casado_com_sinal": (valor_casado * sinal_do_casado(direcao)
+                             if valor_casado is not None else None),
+        "direcao": direcao, "sinal": sinal_do_casado(direcao),
+        "ajustado": valor_casado is not None and spot_efetivo != spot,
         "rolagem": rolagem(primeiro, segundo) if dolar and primeiro and segundo else None,
         "curvas": fontes["usadas"],
         "sem_di": moeda.modo == MODO_PRECO,
         "calendario": cal.nome,
-        "grafico": servicos.grafico_ndf(pontos, spot),
+        "grafico": servicos.grafico_ndf(pontos, spot_efetivo),
     }
 
 
