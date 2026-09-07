@@ -1314,6 +1314,11 @@ TRADUCOES: Dict[str, str] = {
     "Yuan onshore": "Onshore yuan",
     "fixing digitado": "fixing typed in",
     "Moeda — só a variação cambial": "Currency — the currency move alone",
+    "Acúmulo do SOFR, dia a dia": "SOFR accrual, day by day",
+    "SOFR do Fed de Nova York": "SOFR from the New York Fed",
+    "SOFR (% a.a.)": "SOFR (% p.a.)",
+    "janela de observação": "observation window",
+    "Observação": "Observation",
     "variação de {variacao}%, sem cupom": "a {variacao}% currency move, no coupon",
     "Só a variação da moeda entre as duas datas, sem cupom e sem índice. Não há taxa "
     "para capitalizar, então contagem de dias e regime não se aplicam.":

@@ -134,6 +134,9 @@ DECLARAM_MOEDA = COM_MOEDA | QUANTO
 # e regime não se aplicam — τ não entra em lugar nenhum da conta
 SEM_TAXA = {MOEDA, FATOR}
 
+# teto de lookback e observation shift, o mesmo da tela de SOFR Index
+LIMITE_DEFASAGEM = 15
+
 # a moeda de cada índice, quando ele tem uma só
 MOEDA_DO_INDEXADOR = {SOFR: "USD", TERM_SOFR: "USD", EURIBOR: "EUR"}
 
@@ -263,6 +266,36 @@ class Ponta:
     shift: int = 0                         # SOFR composto
 
 
+@dataclass(frozen=True)
+class DiaDoFator:
+    """Um dia do acúmulo, na mesma forma venha ele do CDI ou do SOFR.
+
+    As duas fontes têm formatos próprios — ``cdi.DiaCDI`` traz ``data``,
+    ``sofr.DiaComposicao`` traz ``data_juros`` e ``data_observacao``. A tela não
+    tem por que saber disso, e enquanto soube ela quebrou: a tabela do resultado
+    lia ``.data`` num objeto de SOFR e derrubava a página inteira.
+    """
+    data: date                              # o dia que rende
+    taxa: float
+    fator_dia: float
+    fator_acumulado: float
+    data_observacao: Optional[date] = None  # de onde a taxa veio, se for outra
+
+    @property
+    def defasado(self) -> bool:
+        return bool(self.data_observacao and self.data_observacao != self.data)
+
+
+def _dias_do_cdi(acumulado) -> List[DiaDoFator]:
+    return [DiaDoFator(d.data, d.taxa, d.fator_dia, d.fator_acumulado)
+            for d in acumulado.dias]
+
+
+def _dias_do_sofr(composto) -> List[DiaDoFator]:
+    return [DiaDoFator(d.data_juros, d.taxa, d.fator_dia, d.fator_acumulado,
+                       d.data_observacao) for d in composto.dias]
+
+
 @dataclass
 class PontaLiquidada:
     """A ponta depois da conta: fator, valor e de onde o fator saiu."""
@@ -292,7 +325,10 @@ class PontaLiquidada:
     ativo: Optional[str] = None
     preco_inicial: Optional[float] = None
     preco_final: Optional[float] = None
-    fixings: List = field(default_factory=list)
+    defasagem: tuple = ("", {})        # (molde, valores) — lookback e shift
+    obs_inicio: Optional[date] = None  # janela de observação do SOFR
+    obs_fim: Optional[date] = None
+    fixings: List["DiaDoFator"] = field(default_factory=list)
 
     @property
     def juros(self) -> float:
@@ -424,7 +460,7 @@ def liquidar_ponta(ponta: Ponta, nocional: float, inicio, fim,
         else:
             molde = "{taxa}% do CDI em {du} dias úteis publicados"
             valores = {"taxa": _numero(ponta.taxa * 100, 2), "du": acumulado.dias_uteis}
-        return montar(indice, (molde, valores), fixings=acumulado.dias,
+        return montar(indice, (molde, valores), fixings=_dias_do_cdi(acumulado),
                       contagem_vale_para_spread=com_spread)
 
     if ponta.indexador == MOEDA:
@@ -443,8 +479,16 @@ def liquidar_ponta(ponta: Ponta, nocional: float, inicio, fim,
               "tau": _numero(tau, 6)}))
 
     if ponta.indexador == SOFR:
-        composto = sofr.compor(sofr.serie_sofr(d0, d1), d0, d1,
-                               lookback=ponta.lookback, shift=ponta.shift,
+        for nome, valor in (("lookback", ponta.lookback), ("observation shift", ponta.shift)):
+            if valor < 0 or valor > LIMITE_DEFASAGEM:
+                raise ErroLiquidacao(
+                    f"o {nome} tem que ficar entre 0 e {LIMITE_DEFASAGEM} dias úteis")
+        # shift e lookback empurram a janela de observação para trás do início
+        # do fluxo: buscar só o período deixaria a composição sem os fixings
+        # que ela vai ler, e o erro apareceria na fonte, não aqui
+        margem = timedelta(days=40 + (ponta.lookback + ponta.shift) * 2)
+        composto = sofr.compor(sofr.serie_sofr(d0 - margem, d1 + timedelta(days=1)),
+                               d0, d1, lookback=ponta.lookback, shift=ponta.shift,
                                calendario=calendario_sofr())
         indice = composto.fator * capitalizar(ponta.taxa)
         return montar(
@@ -452,7 +496,9 @@ def liquidar_ponta(ponta: Ponta, nocional: float, inicio, fim,
             ("SOFR composto de {sofr}% mais spread de {taxa}% em {dc} dias corridos",
              {"sofr": _numero(composto.taxa_composta * 100),
               "taxa": _numero(ponta.taxa * 100), "dc": composto.dias_corridos}),
-            fixings=composto.dias, taxa_do_fixing=composto.taxa_composta)
+            fixings=_dias_do_sofr(composto), taxa_do_fixing=composto.taxa_composta,
+            defasagem=sofr.convencao(ponta.lookback, ponta.shift),
+            obs_inicio=composto.obs_inicio, obs_fim=composto.obs_fim)
 
     if ponta.indexador in (TERM_SOFR, EURIBOR):
         quando = ponta.data_fixing or data_de_fixing(d0, cal)

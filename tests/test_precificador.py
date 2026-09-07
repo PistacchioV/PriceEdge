@@ -672,6 +672,18 @@ FORMULARIOS = {
                        passiva_convencao="du_252", passiva_regime="composto",
                        passiva_moeda="BRL", passiva_tenor="3 month",
                        passiva_lookback="0", passiva_shift="0"),
+    "/liquidacao-sofr": dict(data_operacao="2025-09-08", inicio="2025-09-08",
+                       fim="2026-09-04", nocional="30.000.000,00",
+                       calendario="ANBIMA", reter_ir="1",
+                       ativa_indexador="sofr", ativa_taxa="1,5",
+                       ativa_moeda="USD", ativa_ptax_inicial="5,4012",
+                       ativa_ptax_final="5,3188", ativa_convencao="act_360",
+                       ativa_regime="simples", ativa_lookback="5",
+                       ativa_shift="2", ativa_tenor="3 month",
+                       passiva_indexador="cdi_percentual", passiva_taxa="100",
+                       passiva_convencao="du_252", passiva_regime="composto",
+                       passiva_moeda="BRL", passiva_tenor="3 month",
+                       passiva_lookback="0", passiva_shift="0"),
     "/liquidacao-moeda": dict(data_operacao="2025-09-08", inicio="2025-09-08",
                        fim="2026-09-04", nocional="30.000.000,00",
                        calendario="ANBIMA", reter_ir="1",
@@ -1451,3 +1463,84 @@ def test_resultado_serializa_para_quem_chama_de_fora():
     assert isinstance(d["passiva"]["fixings"], int)    # a contagem, não a lista
     assert d["ativa"]["convencao"] is None             # ponta sem taxa
     assert '"quem_recebe"' in texto
+
+
+def test_lookback_e_shift_mudam_o_sofr_da_liquidacao():
+    """As duas defasagens entram na conta — e não são a mesma coisa.
+
+    ``lookback`` desloca só a leitura da taxa; ``shift`` desloca a janela
+    inteira, datas e pesos. Se os campos existirem na tela mas não chegarem ao
+    motor, os quatro números abaixo saem iguais e ninguém percebe.
+    """
+    from precificador import liquidacao as L
+    comum = dict(data_operacao="2025-09-08", inicio="2025-09-08", fim="2026-09-04",
+                 nocional=30e6, ponta_passiva=L.Ponta(L.PRE, 0.14), reter_ir=False)
+
+    def sofr(lookback, shift):
+        r = L.liquidar(ponta_ativa=L.Ponta(L.SOFR, taxa=0.015, moeda=L.SEM_CONVERSAO,
+                                           convencao="act_360", regime="simples",
+                                           lookback=lookback, shift=shift), **comum)
+        return r.ativa
+
+    puro, com_lb, com_sh, com_ambos = sofr(0, 0), sofr(5, 0), sofr(0, 2), sofr(5, 2)
+    taxas = {p.taxa_do_fixing for p in (puro, com_lb, com_sh, com_ambos)}
+    assert len(taxas) == 4, "as defasagens não chegaram ao cálculo"
+
+    # o shift move a janela; o lookback não
+    assert com_sh.obs_inicio < puro.obs_inicio and com_sh.obs_fim < puro.obs_fim
+    assert com_lb.obs_inicio == puro.obs_inicio and com_lb.obs_fim == puro.obs_fim
+    # e é o lookback que faz a taxa vir de outro dia
+    assert any(d.defasado for d in com_lb.fixings)
+    assert not any(d.defasado for d in com_sh.fixings)
+
+
+def test_sofr_com_defasagem_busca_os_fixings_anteriores_ao_fluxo():
+    """A janela de observação começa antes do fluxo, e a série tem que cobri-la.
+
+    Buscar só o período deixava a composição sem os fixings que ela ia ler, e o
+    erro estourava lá na fonte — mandando procurar o problema no NY Fed quando
+    o problema era o intervalo pedido.
+    """
+    from precificador import liquidacao as L
+    r = L.liquidar("2025-09-08", "2025-09-08", "2026-09-04", 30e6,
+                   L.Ponta(L.SOFR, taxa=0.015, moeda=L.SEM_CONVERSAO,
+                           convencao="act_360", regime="simples",
+                           lookback=10, shift=5),
+                   L.Ponta(L.PRE, 0.14), reter_ir=False)
+    a = r.ativa
+    assert a.obs_inicio < date(2025, 9, 8)          # a janela recuou
+    assert min(d.data_observacao for d in a.fixings) < date(2025, 9, 8)
+
+
+def test_defasagem_do_sofr_tem_teto():
+    from precificador import liquidacao as L
+    for campo in ("lookback", "shift"):
+        with pytest.raises(L.ErroLiquidacao) as exc:
+            L.liquidar("2025-09-08", "2025-09-08", "2026-09-04", 30e6,
+                       L.Ponta(L.SOFR, taxa=0.015, moeda=L.SEM_CONVERSAO,
+                               **{campo: L.LIMITE_DEFASAGEM + 1}),
+                       L.Ponta(L.PRE, 0.14))
+        assert "dias úteis" in str(exc.value)
+
+
+def test_fixings_das_duas_fontes_chegam_na_mesma_forma():
+    """CDI e SOFR têm formatos próprios; a tela recebe um só.
+
+    Enquanto a tela leu o objeto cru, uma ponta de SOFR derrubava a página
+    inteira: a tabela pedia ``.data`` num ``DiaComposicao``, que tem
+    ``data_juros``. Um 500 em vez de um resultado.
+    """
+    from precificador import liquidacao as L
+    comum = dict(data_operacao="2025-09-08", inicio="2025-09-08", fim="2026-09-04",
+                 nocional=30e6, ponta_passiva=L.Ponta(L.PRE, 0.14), reter_ir=False)
+    de_cdi = L.liquidar(ponta_ativa=L.Ponta(L.CDI_PERCENTUAL, 1.0), **comum).ativa
+    de_sofr = L.liquidar(ponta_ativa=L.Ponta(L.SOFR, taxa=0.0, moeda=L.SEM_CONVERSAO,
+                                             convencao="act_360", regime="simples",
+                                             lookback=5), **comum).ativa
+    for ponta in (de_cdi, de_sofr):
+        assert ponta.fixings and all(isinstance(d, L.DiaDoFator) for d in ponta.fixings)
+        primeiro = ponta.fixings[0]
+        assert isinstance(primeiro.data, date)
+        assert primeiro.fator_dia > 0 and primeiro.fator_acumulado > 0
+    assert de_cdi.fixings[0].data_observacao is None      # o CDI não tem defasagem
+    assert de_sofr.fixings[0].data_observacao is not None

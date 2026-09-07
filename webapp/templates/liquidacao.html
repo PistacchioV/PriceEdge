@@ -474,25 +474,49 @@
         </div>
 
         {% if r.ativa.fixings or r.passiva.fixings %}
-        {% set com_cdi = r.ativa if r.ativa.fixings else r.passiva %}
+        {% set p = r.ativa if r.ativa.fixings else r.passiva %}
+        {% set de_sofr = p.indexador == 'sofr' %}
         <div class="sem-reveal mt-6 rounded-[2rem] border border-white/[0.09] bg-slate-950/40 backdrop-blur-xl">
           <div class="flex flex-wrap items-center justify-between gap-3 border-b border-white/[0.07] px-6 py-4">
             <div>
-              <p class="text-sm font-medium text-white font-geist">{{ t("Acúmulo do CDI, dia a dia") }}</p>
+              <p class="text-sm font-medium text-white font-geist">
+                {{ t("Acúmulo do SOFR, dia a dia") if de_sofr else t("Acúmulo do CDI, dia a dia") }}
+              </p>
               <p class="mt-0.5 text-xs text-slate-500 font-geist">
-                {{ t("série 4389 do BCB") }} · {{ com_cdi.fixings | length }} {{ t("dias úteis") }}
+                {{ t("SOFR do Fed de Nova York") if de_sofr else t("série 4389 do BCB") }}
+                · {{ p.fixings | length }} {{ t("dias úteis") }}
+                {% if de_sofr and p.obs_inicio %}
+                · {{ t("janela de observação") }} {{ p.obs_inicio | data_br }} {{ t("a") }} {{ p.obs_fim | data_br }}
+                {% endif %}
               </p>
             </div>
+            {% if de_sofr %}
+            {% set molde, valores = p.defasagem %}
+            <span class="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-slate-300 font-geist">
+              {{ t(molde).format(**valores) }}
+            </span>
+            {% endif %}
           </div>
           <div class="rolagem max-h-[24rem] px-2">
             <table class="tabela-dados">
               <thead>
-                <tr><th>{{ t("Data") }}</th><th>{{ t("CDI (% a.a.)") }}</th><th>{{ t("Fator do dia") }}</th><th>{{ t("Acumulado") }}</th></tr>
+                <tr>
+                  <th>{{ t("Data") }}</th>
+                  {% if de_sofr %}<th>{{ t("Observação") }}</th>{% endif %}
+                  <th>{{ t("SOFR (% a.a.)") if de_sofr else t("CDI (% a.a.)") }}</th>
+                  <th>{{ t("Fator do dia") }}</th>
+                  <th>{{ t("Acumulado") }}</th>
+                </tr>
               </thead>
               <tbody>
-              {% for d in com_cdi.fixings %}
+              {% for d in p.fixings %}
                 <tr>
                   <td>{{ d.data | data_br }}</td>
+                  {% if de_sofr %}
+                  <td class="{{ 'text-amber-200/80' if d.defasado else 'text-slate-500' }}">
+                    {{ (d.data_observacao or d.data) | data_br }}
+                  </td>
+                  {% endif %}
                   <td class="text-cyan-100">{{ d.taxa | percentual(2) }}</td>
                   <td class="text-slate-400">{{ '%.10f' | format(d.fator_dia) }}</td>
                   <td class="text-white">{{ '%.10f' | format(d.fator_acumulado) }}</td>
