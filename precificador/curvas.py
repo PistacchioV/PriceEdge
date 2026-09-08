@@ -25,6 +25,7 @@ from datetime import date
 from typing import Dict, Iterable, List, Optional, Sequence
 
 from . import interpolacao
+from .erros import ErroDeDado
 from .calendario import Calendario, calendario_anbima, para_data, soma_meses
 
 EXP252 = "EXP252"
@@ -118,7 +119,7 @@ class Curva:
         pensar em qual deles vai.
         """
         if not self.vertices:
-            raise ValueError(f"curva {self.nome} sem vértices")
+            raise ErroDeDado("curva {curva} sem vértices", curva=self.nome)
         if len(self.vertices) == 1:
             return self.vertices[0].taxa
         return interpolacao.interpolar(
@@ -136,8 +137,9 @@ class Curva:
         """
         if self.eixo == "du":
             if dias_uteis is None:
-                raise ValueError(
-                    f"a curva {self.nome} é interpolada em dias úteis; informe dias_uteis")
+                raise ErroDeDado(
+                    "a curva {curva} é interpolada em dias úteis; informe dias_uteis",
+                    curva=self.nome)
             return self.taxa(dias_uteis)
         return self.taxa(dias_corridos)
 
@@ -151,13 +153,13 @@ class Curva:
         nada, e deixar passar silenciosamente daria um número plausível e errado.
         """
         if self.convencao == PRECO:
-            raise ValueError(
-                f"{self.nome} é uma curva de preço a termo, não de taxa — "
-                "não há fator de capitalização. Use taxa_para() para o preço.")
+            raise ErroDeDado(
+                "{curva} é uma curva de preço a termo, não de taxa — não há fator "
+                "de capitalização. Use taxa_para() para o preço.", curva=self.nome)
         i = self.taxa_para(dias_corridos, dias_uteis) if taxa is None else taxa
         if self.convencao == EXP252:
             if dias_uteis is None:
-                raise ValueError("convenção EXP252 exige dias úteis")
+                raise ErroDeDado("convenção EXP252 exige dias úteis")
             return (1.0 + i) ** (float(dias_uteis) / 252.0)
         return 1.0 + i * float(dias_corridos) / 360.0
 
@@ -175,7 +177,7 @@ class Curva:
         """
         if self.convencao == EXP252:
             if du1 is None or du2 is None:
-                raise ValueError("FRA exponencial exige dias úteis")
+                raise ErroDeDado("FRA exponencial exige dias úteis")
             if du2 == du1:
                 return self.taxa_para(dc2, du2)
             f1 = self.fator_capitalizacao(dc1, du1)

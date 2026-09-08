@@ -86,8 +86,8 @@ class ErroRede(ErroDeFonte):
     muda. Um 429 do Yahoo pede esperar; um 10060 pede olhar o proxy.
     """
 
-    def __init__(self, mensagem: str, status: Optional[int] = None) -> None:
-        super().__init__(mensagem)
+    def __init__(self, molde: str, status: Optional[int] = None, **valores) -> None:
+        super().__init__(molde, **valores)
         self.status = status
 
 
@@ -320,7 +320,8 @@ def obter(url: str, cabecalho: Optional[dict] = None, timeout: int = TIMEOUT) ->
     # chamada recomeçar pela ordem natural em vez de insistir na que morreu
     _rota_boa["nome"] = None
     detalhe = "; ".join(tentativas) or "nenhuma saída disponível"
-    raise ErroRede(f"falha de conexão com {url}: {detalhe}{_pista_de_proxy(detalhe)}")
+    raise ErroRede("falha de conexão com {url}: {detalhe}{pista}",
+                   url=url, detalhe=detalhe, pista=_pista_de_proxy(detalhe))
 
 
 def _obter_por(url: str, cabecalho: dict, timeout: int, proxies: dict) -> bytes:
@@ -333,9 +334,10 @@ def _obter_por(url: str, cabecalho: dict, timeout: int, proxies: dict) -> bytes:
             raise _ErroDeRota(str(exc)) from exc
         codigo = resposta.status_code
         if codigo in (407, 502, 504):
-            raise _ErroDeRota(f"o proxy respondeu HTTP {codigo}")
+            raise _ErroDeRota("o proxy respondeu HTTP {codigo}", codigo=codigo)
         if codigo >= 400:
-            raise ErroRede(f"HTTP {codigo} em {url}", status=codigo)
+            raise ErroRede("HTTP {codigo} em {url}", status=codigo,
+                           codigo=codigo, url=url)
         return resposta.content
 
     abridor = urllib.request.urlopen
@@ -349,8 +351,9 @@ def _obter_por(url: str, cabecalho: dict, timeout: int, proxies: dict) -> bytes:
             return r.read()
     except urllib.error.HTTPError as exc:
         if exc.code in (407, 502, 504):
-            raise _ErroDeRota(f"o proxy respondeu HTTP {exc.code}") from exc
-        raise ErroRede(f"HTTP {exc.code} em {url}", status=exc.code) from exc
+            raise _ErroDeRota("o proxy respondeu HTTP {codigo}", codigo=exc.code) from exc
+        raise ErroRede("HTTP {codigo} em {url}", status=exc.code,
+                       codigo=exc.code, url=url) from exc
     except OSError as exc:
         raise _ErroDeRota(str(exc)) from exc
 
@@ -423,9 +426,10 @@ class SessaoNavegada:
             except Exception as exc:                    # noqa: BLE001
                 raise _ErroDeRota(str(exc)) from exc
             if r.status_code in (407, 502, 504):
-                raise _ErroDeRota(f"o proxy respondeu HTTP {r.status_code}")
+                raise _ErroDeRota("o proxy respondeu HTTP {codigo}", codigo=r.status_code)
             if r.status_code >= 400:
-                raise ErroRede(f"HTTP {r.status_code} em {url}", status=r.status_code)
+                raise ErroRede("HTTP {codigo} em {url}", status=r.status_code,
+                               codigo=r.status_code, url=url)
             return r.content
 
         corpo = urllib.parse.urlencode(dados).encode() if dados is not None else None
@@ -435,8 +439,9 @@ class SessaoNavegada:
                 return r.read()
         except urllib.error.HTTPError as exc:
             if exc.code in (407, 502, 504):
-                raise _ErroDeRota(f"o proxy respondeu HTTP {exc.code}") from exc
-            raise ErroRede(f"HTTP {exc.code} em {url}", status=exc.code) from exc
+                raise _ErroDeRota("o proxy respondeu HTTP {codigo}", codigo=exc.code) from exc
+            raise ErroRede("HTTP {codigo} em {url}", status=exc.code,
+                       codigo=exc.code, url=url) from exc
         except OSError as exc:
             raise _ErroDeRota(str(exc)) from exc
 
@@ -461,7 +466,8 @@ class SessaoNavegada:
             _rota_boa["nome"] = nome
             return conteudo
         detalhe = "; ".join(tentativas) or "nenhuma saída disponível"
-        raise ErroRede(f"falha de conexão com {url}: {detalhe}{_pista_de_proxy(detalhe)}")
+        raise ErroRede("falha de conexão com {url}: {detalhe}{pista}",
+                   url=url, detalhe=detalhe, pista=_pista_de_proxy(detalhe))
 
     def get(self, url: str, referer: Optional[str] = None) -> bytes:
         return self._pedir(url, None, {"Referer": referer} if referer else None)
@@ -481,4 +487,5 @@ def obter_json(url: str, cabecalho: Optional[dict] = None, timeout: int = TIMEOU
             pista = (" — a resposta veio em HTML, não JSON. Num ambiente com SSO "
                      "isso costuma ser a página de login do ADFS: confira "
                      "PRECIFICADOR_SSO e o pacote Negotiate.")
-        raise ErroRede(f"resposta ilegível de {url}: {exc}{pista}") from exc
+        raise ErroRede("resposta ilegível de {url}: {motivo}{pista}",
+                       url=url, motivo=str(exc), pista=pista) from exc

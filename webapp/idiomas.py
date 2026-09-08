@@ -1530,10 +1530,11 @@ TRADUCOES: Dict[str, str] = {
         "the quotes are kept on this machine.",
     "Arraste o relatório da B3 aqui, ou clique para escolher":
         "Drop the B3 report here, or click to choose one",
-    "Ticker na coluna L, data na O e valor na P — .xlsx ou .csv. O valor vem como "
-    "número (3,74231) e é convertido para taxa na importação.":
-        "Ticker in column L, date in O and value in P — .xlsx or .csv. The value "
-        "arrives as a plain number (3.74231) and is converted to a rate on import.",
+    "Ticker na coluna L, data na O e valor na P — .xlsx, .csv ou .tsv. O valor vem "
+    "como número (3,74231) e é convertido para taxa na importação.":
+        "Ticker in column L, date in O and value in P — .xlsx, .csv or .tsv. The "
+        "value arrives as a plain number (3.74231) and is converted to a rate on "
+        "import.",
     "dias na base": "days on file",
     "Term SOFR 1 mês": "Term SOFR 1 month",
     "Term SOFR 3 meses": "Term SOFR 3 months",
@@ -1548,6 +1549,278 @@ TRADUCOES: Dict[str, str] = {
         "forward-looking curve is licensed and comes from the file you import "
         "above — the two live on the same screen because they answer different "
         "questions.",
+
+
+    # ---------------------------------------- o que liquida num fluxo de swap
+    "Vencimento do swap": "Swap maturity",
+    "O que liquida": "What settles",
+    "Pelas datas — juros no fluxo intermediário, valor futuro no vencimento":
+        "By the dates — interest on an interim flow, future value at maturity",
+    "Só os juros — fluxo intermediário, o principal segue":
+        "Interest only — interim flow, the principal carries on",
+    "Valor futuro das duas pontas — liquidação final":
+        "Future value of both legs — final settlement",
+    "Fluxo intermediário — liquida só o diferencial de juros":
+        "Interim flow — only the interest differential settles",
+    "Liquidação final — liquida o valor futuro das duas pontas":
+        "Final settlement — the future value of both legs settles",
+    "A data da operação conta o prazo do IR; o fluxo é onde os índices acumulam. Um "
+    "fluxo que termina antes do vencimento é intermediário: nele só o diferencial de "
+    "juros muda de mãos, e o principal segue para o período seguinte.":
+        "The trade date sets the withholding-tax horizon; the flow is where the "
+        "indices accrue. A flow ending before maturity is an interim one: only the "
+        "interest differential changes hands there, and the principal carries on to "
+        "the next period.",
+    "As duas liquidações, lado a lado": "Both settlements, side by side",
+    "O que separa as duas é a variação cambial sobre o principal. Num fluxo "
+    "intermediário ela não muda de mãos, porque o principal não liquida ali — ele "
+    "segue de pé para o período seguinte.":
+        "What separates them is the currency move on the principal. On an interim "
+        "flow it does not change hands, because the principal does not settle "
+        "there — it stays standing for the next period.",
+    "Só os juros": "Interest only",
+    "Valor futuro": "Future value",
+    "Conta": "Arithmetic",
+    "Diferença": "Difference",
+    "juros da ativa − juros da passiva":
+        "receiving-leg interest − paying-leg interest",
+    "VF da ativa − VF da passiva": "receiving-leg FV − paying-leg FV",
+    "câmbio sobre o principal": "currency move on the principal",
+
+
+    # ------------------------------------------- mensagens de erro do motor
+    # Elas viram frase pela chave do MOLDE: os números entram depois, então uma
+    # entrada aqui vale para todas as datas, moedas e curvas que a preencherem.
+    "{data} não é dia útil (fim de semana ou feriado)":
+        "{data} is not a business day (weekend or holiday)",
+    "não foi possível obter {curva} em {data}: {motivo}":
+        "could not fetch {curva} for {data}: {motivo}",
+    "resposta da B3 ilegível para {curva}: {motivo}":
+        "B3 returned something unreadable for {curva}: {motivo}",
+    "a B3 não publicou a curva {curva} para {data}. O histórico público cobre "
+    "aproximadamente o último mês útil.":
+        "B3 published no {curva} curve for {data}. The public archive covers "
+        "roughly the last business month.",
+    "as curvas {a} e {b} não têm prazos em comum":
+        "curves {a} and {b} share no tenors",
+    "data inválida: {valor}": "invalid date: {valor}",
+    "convenção de dia útil desconhecida: {convencao}":
+        "unknown business-day convention: {convencao}",
+    "calendário desconhecido: {nome}": "unknown calendar: {nome}",
+    "o Banco Central não publicou PTAX entre {inicio} e {fim}. A cotação sai por "
+    "volta das 13h do dia útil.":
+        "the central bank published no PTAX between {inicio} and {fim}. The rate "
+        "comes out around 1pm on a business day.",
+    "o Banco Central não publicou boletim de {moeda} entre {inicio} e {fim}. O "
+    "fechamento sai por volta das 13h do dia útil.":
+        "the central bank published no {moeda} bulletin between {inicio} and "
+        "{fim}. The close comes out around 1pm on a business day.",
+    "não foi possível obter a cotação: {motivo}":
+        "could not fetch the quote: {motivo}",
+    "a data final não pode ser anterior à inicial":
+        "the end date cannot precede the start date",
+    "a data final tem que ser posterior à inicial":
+        "the end date must come after the start date",
+    "a data final é anterior à inicial": "the end date precedes the start date",
+    "o Banco Central não publicou CDI entre {inicio} e {fim}. A série tem um dia "
+    "de defasagem e não cobre datas futuras.":
+        "the central bank published no CDI between {inicio} and {fim}. The series "
+        "runs a day behind and does not cover future dates.",
+    "não foi possível obter a série {codigo} do BCB: {motivo}":
+        "could not fetch central bank series {codigo}: {motivo}",
+    "{campo} inválida: {valor}. Use dd/mm/aaaa.":
+        "invalid {campo}: {valor}. Use dd/mm/yyyy.",
+    "{moeda} não é publicada no boletim PTAX do BCB":
+        "{moeda} is not published in the central bank PTAX bulletin",
+    "nenhum símbolo de mercado informado": "no market symbol given",
+    "o Yahoo Finance recusou {simbolo}: {motivo}":
+        "Yahoo Finance refused {simbolo}: {motivo}",
+    "não há dado para {simbolo} no período":
+        "no data for {simbolo} in the period",
+    "tipo de cotação desconhecido: {tipo}": "unknown quote kind: {tipo}",
+    "{instrumento} não tem símbolo de mercado no cadastro de {cadastro}":
+        "{instrumento} has no market symbol registered under {cadastro}",
+    "{fonte}: {motivo}": "{fonte}: {motivo}",
+    "{fonte} recusou por excesso de consultas (HTTP 429). O limite é por endereço "
+    "de rede e passa sozinho — tente de novo em alguns minutos.":
+        "{fonte} refused for too many requests (HTTP 429). The limit is per network "
+        "address and lifts on its own — try again in a few minutes.",
+    "curva {curva} sem vértices": "curve {curva} has no vertices",
+    "{curva} é uma curva de preço a termo, não de taxa — não há fator de "
+    "capitalização. Use taxa_para() para o preço.":
+        "{curva} is a forward-price curve, not a rate curve — there is no "
+        "compounding factor. Use taxa_para() for the price.",
+    "a curva {curva} é interpolada em dias úteis; informe dias_uteis":
+        "curve {curva} is interpolated on business days; pass dias_uteis",
+    "convenção EXP252 exige dias úteis": "the EXP252 convention needs business days",
+    "FRA exponencial exige dias úteis": "an exponential FRA needs business days",
+    "formato não suportado: {formato}": "unsupported format: {formato}",
+    "o visualizador não devolveu uma sessão de relatório — a página pode ter mudado":
+        "the report viewer returned no session — the page may have changed",
+    "não foi possível obter o relatório: {motivo}":
+        "could not fetch the report: {motivo}",
+    "Banco da Finlândia: {motivo}": "Bank of Finland: {motivo}",
+    "amortização personalizada precisa de um peso por período":
+        "a custom amortisation needs one weight per period",
+    "os pesos de amortização somam {total}, deveriam somar 1":
+        "the amortisation weights add up to {total}, they should add up to 1",
+    "a spline precisa de pelo menos 2 pontos distintos":
+        "the spline needs at least 2 distinct points",
+    "método de interpolação desconhecido: {metodo}":
+        "unknown interpolation method: {metodo}",
+    "indexador desconhecido: {indexador}": "unknown index: {indexador}",
+    "não há fixing de EURIBOR {tenor} publicado até {data}":
+        "no EURIBOR {tenor} fixing published up to {data}",
+    "o fixing inicial da moeda não pode ser zero":
+        "the opening currency fixing cannot be zero",
+    "o fim do fluxo tem que ser posterior ao início":
+        "the flow must end after it starts",
+    "o fluxo não pode começar ({inicio}) antes da operação ({operacao})":
+        "the flow cannot start ({inicio}) before the trade ({operacao})",
+    "o notional remanescente tem que ser positivo":
+        "the outstanding notional must be positive",
+    "a liquidação usa índice realizado, não projeção — o fim do fluxo não pode "
+    "passar de hoje ({hoje})":
+        "settlement uses realised indices, not forecasts — the flow cannot end "
+        "after today ({hoje})",
+    "o notional remanescente não pode ser maior que o valor original":
+        "the outstanding notional cannot exceed the original amount",
+    "os dois fixings de moeda estão preenchidos, mas a moeda do fluxo está em "
+    "Real, que não converte. Escolha a moeda estrangeira para a variação cambial "
+    "entrar na conta, ou apague os fixings.":
+        "both currency fixings are filled in, but the flow currency is Real, which "
+        "does not convert. Pick the foreign currency for the currency move to "
+        "count, or clear the fixings.",
+    "o Banco Central não boletina {moeda}: informe o fixing {qual} da moeda. Os "
+    "dois entram digitados.":
+        "the central bank does not publish {moeda}: enter the {qual} currency "
+        "fixing. Both are typed in.",
+    "uma ponta de moeda pura precisa de uma moeda estrangeira — em reais ela não "
+    "renderia nada":
+        "a pure currency leg needs a foreign currency — in reais it would earn "
+        "nothing",
+    "a ponta de equity precisa do preço inicial e do preço final":
+        "the equity leg needs an opening and a closing price",
+    "a ponta de IPCA precisa do número-índice inicial e do final":
+        "the IPCA leg needs an opening and a closing index number",
+    "informe o fator acumulado da ponta": "enter the leg's accrued factor",
+    "o {defasagem} tem que ficar entre 0 e {teto} dias úteis":
+        "the {defasagem} must be between 0 and {teto} business days",
+    "o Term SOFR é licenciado pela CME e não tem fonte pública. Informe a taxa do "
+    "fixing, ou importe o relatório da B3 na tela de Term SOFR.":
+        "Term SOFR is licensed by CME and has no public source. Enter the fixing "
+        "rate, or import the B3 report on the Term SOFR screen.",
+    "esta ponta precisa da curva {curva}, que não foi carregada":
+        "this leg needs the {curva} curve, which was not loaded",
+    "não sei ler {arquivo}. Use .xlsx, .csv ou .tsv — o .xls antigo precisa ser "
+    "salvo de novo num desses.":
+        "I cannot read {arquivo}. Use .xlsx, .csv or .tsv — an old .xls has to be "
+        "saved again as one of those.",
+    "o arquivo .xlsx não tem nenhuma planilha dentro":
+        "the .xlsx file has no worksheet inside",
+    "não foi possível ler o texto do arquivo": "could not read the file's text",
+    "este arquivo não é um .xlsx. Se ele for .xls antigo, abra e salve como .xlsx "
+    "ou como CSV.":
+        "this file is not an .xlsx. If it is an old .xls, open it and save as "
+        ".xlsx or as CSV.",
+    "{par} precisa da curva de preço a termo": "{par} needs the forward-price curve",
+    "{par} precisa da curva de preço para implicar o cupom":
+        "{par} needs the price curve to imply the coupon",
+    "{par} precisa da curva de cupom": "{par} needs the coupon curve",
+    "a curva de DI é obrigatória fora do modo de cross":
+        "the DI curve is required outside cross mode",
+    "o vencimento tem que ser posterior ao início":
+        "maturity must come after the start",
+    "o vencimento tem que ser posterior à aplicação":
+        "maturity must come after the investment date",
+    "falha de conexão com {url}: {detalhe}{pista}":
+        "connection to {url} failed: {detalhe}{pista}",
+    "resposta ilegível de {url}: {motivo}{pista}":
+        "unreadable response from {url}: {motivo}{pista}",
+    "PRECIFICADOR_SSO está ligado mas o pacote 'requests' não está instalado. "
+    "Instale-o (e o requests-negotiate-sspi no Windows) ou desligue a variável.":
+        "PRECIFICADOR_SSO is on but the 'requests' package is not installed. "
+        "Install it (and requests-negotiate-sspi on Windows) or turn the variable "
+        "off.",
+    "PRECIFICADOR_SSO está ligado e nenhum handler Negotiate foi encontrado. Sem "
+    "ele a chamada sai sem autenticação e o ADFS responde 401. Instale "
+    "requests-negotiate-sspi (Windows) ou requests-kerberos (Linux/macOS, com "
+    "ticket via kinit).":
+        "PRECIFICADOR_SSO is on and no Negotiate handler was found. Without it the "
+        "call goes out unauthenticated and ADFS answers 401. Install "
+        "requests-negotiate-sspi (Windows) or requests-kerberos (Linux/macOS, with "
+        "a ticket from kinit).",
+    "o proxy respondeu HTTP {codigo}": "the proxy answered HTTP {codigo}",
+    "HTTP {codigo} em {url}": "HTTP {codigo} at {url}",
+    "o fim do período tem que ser posterior ao início":
+        "the period must end after it starts",
+    "lookback e shift não podem ser negativos":
+        "lookback and shift cannot be negative",
+    "período sem dias corridos": "the period has no calendar days",
+    "não há fixing de SOFR publicado para {data} nem antes dessa data — amplie o "
+    "intervalo consultado":
+        "no SOFR fixing published for {data} or before it — widen the range you "
+        "are asking for",
+    "o SOFR Index não tem publicação para {data}":
+        "the SOFR Index has no publication for {data}",
+    "não foi possível obter a série do NY Fed: {motivo}":
+        "could not fetch the NY Fed series: {motivo}",
+    "sem convergência após {iteracoes} iterações":
+        "no convergence after {iteracoes} iterations",
+    "não foi possível encontrar um intervalo com troca de sinal":
+        "could not find a bracket where the sign changes",
+    "o arquivo está vazio": "the file is empty",
+    "nenhuma cotação de Term SOFR no arquivo. Procurei o ticker na coluna "
+    "{ticker}, a data na {data} e o valor na {valor}, e esperava um de: "
+    "{esperados}.":
+        "no Term SOFR quote in the file. I looked for the ticker in column "
+        "{ticker}, the date in {data} and the value in {valor}, and expected one "
+        "of: {esperados}.",
+    "informe as datas de início e vencimento":
+        "enter the start and maturity dates",
+    "preencha o campo {campo}": "fill in the {campo} field",
+    "{campo}: “{texto}” não é um número": "{campo}: “{texto}” is not a number",
+    "pesos de amortização inválidos": "invalid amortisation weights",
+    "modo de moeda desconhecido: {modo}": "unknown currency mode: {modo}",
+
+
+    # Rótulos de campo que entram nos moldes de erro. São valores, não frases —
+    # "preencha o campo {campo}" precisa deles traduzidos para não sair meia
+    # frase em cada idioma. Os que a ponta monta na hora ("taxa da ponta ativa")
+    # entram logo abaixo, pelo mesmo motivo.
+    "spot D+2": "D+2 spot",
+    "notional remanescente": "outstanding notional",
+    "notional original": "original notional",
+    "valor aplicado": "amount invested",
+    "juro da moeda estrangeira": "foreign currency rate",
+    "1º futuro": "1st future",
+    "2º futuro": "2nd future",
+    "CDI projetado": "forecast CDI",
+    "IPCA projetado": "forecast IPCA",
+    "projeção mensal": "monthly forecast",
+    "NI de partida": "starting index number",
+    "amortização": "amortisation",
+    "quantidade": "quantity",
+    "taxa da ponta ativa": "receiving-leg rate",
+    "taxa da ponta passiva": "paying-leg rate",
+    "fixing inicial da ponta ativa": "receiving-leg opening fixing",
+    "fixing inicial da ponta passiva": "paying-leg opening fixing",
+    "fixing final da ponta ativa": "receiving-leg closing fixing",
+    "fixing final da ponta passiva": "paying-leg closing fixing",
+    "número-índice inicial da ponta ativa": "receiving-leg opening index number",
+    "número-índice inicial da ponta passiva": "paying-leg opening index number",
+    "número-índice final da ponta ativa": "receiving-leg closing index number",
+    "número-índice final da ponta passiva": "paying-leg closing index number",
+    "fator da ponta ativa": "receiving-leg factor",
+    "fator da ponta passiva": "paying-leg factor",
+    "preço inicial da ponta ativa": "receiving-leg opening price",
+    "preço inicial da ponta passiva": "paying-leg opening price",
+    "preço final da ponta ativa": "receiving-leg closing price",
+    "preço final da ponta passiva": "paying-leg closing price",
+    "taxa do fixing da ponta ativa": "receiving-leg fixing rate",
+    "taxa do fixing da ponta passiva": "paying-leg fixing rate",
+    "data inicial": "start date",
+    "data final": "end date",
 
 }
 
@@ -1585,6 +1858,47 @@ def traduzir(texto: str, idioma: str = PADRAO) -> str:
             _FALTANDO.add(texto)
         return texto
     return traduzido
+
+
+def do_pedido() -> str:
+    """O idioma da tela atual — o mesmo que o ``t`` dos templates usa."""
+    try:
+        from flask import request
+        return normalizar(request.args.get("idioma")
+                          or request.cookies.get("idioma"))
+    except Exception:                                    # noqa: BLE001
+        return PADRAO                                    # fora de um pedido
+
+
+def mensagem(exc, idioma=None) -> str:
+    """A frase de um erro no idioma da tela.
+
+    Os erros do pacote guardam o molde separado dos valores (ver
+    ``precificador.erros.ErroTraduzido``), e é isso que permite traduzi-los: a
+    chave é o molde, e os números entram depois. Um erro que não passou por lá
+    cai de volta no português, que é o que acontecia com todos eles.
+
+    Se a tradução tiver um campo que os valores não têm — um molde editado de um
+    lado só —, a frase original é usada. Um erro de formatação escondendo o erro
+    de verdade seria o pior desfecho possível para esta função.
+    """
+    from precificador.erros import montar, partes
+    escolhido = idioma if idioma is not None else do_pedido()
+    molde, valores = partes(exc)
+    # o rótulo que entra no molde é texto, e texto também se traduz: "preencha o
+    # campo {campo}" com campo="notional remanescente" daria meia frase em cada
+    # idioma. Número e data passam direto, porque não estão no dicionário.
+    valores = {chave: traduzir(valor, escolhido) if isinstance(valor, str) else valor
+               for chave, valor in valores.items()}
+    traduzido = traduzir(molde, escolhido)
+    if not valores:
+        return traduzido
+    try:
+        return traduzido.format(**valores)
+    except (KeyError, IndexError, ValueError):
+        # tradução com um campo que os valores não têm: melhor a frase original
+        # inteira do que a traduzida com um {campo} cru no meio
+        return montar(molde, valores)
 
 
 def normalizar(idioma) -> str:

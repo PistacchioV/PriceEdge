@@ -103,7 +103,8 @@ def _data(valor, rotulo: str) -> date:
             return datetime.strptime(texto[:10], formato).date()
         except ValueError:
             continue
-    raise ErroCotacao(f"{rotulo} inválida: {valor!r}. Use dd/mm/aaaa.")
+    raise ErroCotacao("{campo} inválida: {valor}. Use dd/mm/aaaa.",
+                      campo=rotulo, valor=repr(valor))
 
 
 def periodo(inicio, fim) -> Tuple[date, date]:
@@ -158,10 +159,10 @@ def _buscar(url: str, parametros: dict, fonte: str) -> dict:
     except rede.ErroRede as exc:
         if getattr(exc, "status", None) == 429:
             raise ErroCotacao(
-                f"{fonte} recusou por excesso de consultas (HTTP 429). O limite "
-                "é por endereço de rede e passa sozinho — tente de novo em "
-                "alguns minutos.") from exc
-        raise ErroCotacao(f"{fonte}: {exc}") from exc
+                "{fonte} recusou por excesso de consultas (HTTP 429). O limite é "
+                "por endereço de rede e passa sozinho — tente de novo em alguns "
+                "minutos.", fonte=fonte) from exc
+        raise ErroCotacao("{fonte}: {motivo}", fonte=fonte, motivo=str(exc)) from exc
 
 
 # --------------------------------------------------------------------- PTAX
@@ -173,7 +174,8 @@ def historico_ptax(moeda: str, inicio, fim) -> Tuple[List[str], List[list]]:
     """
     codigo = str(moeda or "").strip().upper()
     if codigo not in MOEDAS_PTAX:
-        raise ErroCotacao(f"{moeda!r} não é publicada no boletim PTAX do BCB")
+        raise ErroCotacao("{moeda} não é publicada no boletim PTAX do BCB",
+                          moeda=repr(moeda))
     d1, d2 = periodo(inicio, fim)
 
     dados = _buscar(URL_PTAX, {
@@ -227,11 +229,12 @@ def historico_ohlc(simbolo: str, inicio, fim) -> Tuple[List[str], List[list]]:
     grafico = dados.get("chart") or {}
     if grafico.get("error"):
         erro = grafico["error"] or {}
-        raise ErroCotacao(f"o Yahoo Finance recusou {codigo}: "
-                          f"{erro.get('description') or erro}")
+        raise ErroCotacao("o Yahoo Finance recusou {simbolo}: {motivo}",
+                          simbolo=codigo,
+                          motivo=str(erro.get("description") or erro))
     resultado = (grafico.get("result") or [None])[0]
     if not resultado:
-        raise ErroCotacao(f"não há dado para {codigo} no período")
+        raise ErroCotacao("não há dado para {simbolo} no período", simbolo=codigo)
 
     carimbos = resultado.get("timestamp") or []
     indicadores = resultado.get("indicators") or {}
@@ -413,7 +416,7 @@ def historico(tipo: str, instrumento: str, inicio, fim) -> dict:
         return {"colunas": colunas, "linhas": linhas, "simbolo": instrumento}
 
     if tipo not in CADASTROS:
-        raise ErroCotacao(f"tipo de cotação desconhecido: {tipo!r}")
+        raise ErroCotacao("tipo de cotação desconhecido: {tipo}", tipo=repr(tipo))
 
     rotulo = str(instrumento or "").strip()
     simbolo = simbolo_de(tipo, rotulo)
@@ -422,7 +425,8 @@ def historico(tipo: str, instrumento: str, inicio, fim) -> dict:
         # 'AA UN' não são tickers de mercado, e a resposta seria um 404 obscuro
         # da fonte em vez de "falta cadastrar"
         raise ErroCotacao(
-            f"{rotulo or '(vazio)'} não tem símbolo de mercado no cadastro de "
-            f"{TIPO_POR_CODIGO.get(tipo, (tipo,))[0].lower()}")
+            "{instrumento} não tem símbolo de mercado no cadastro de {cadastro}",
+            instrumento=rotulo or "(vazio)",
+            cadastro=TIPO_POR_CODIGO.get(tipo, (tipo,))[0].lower())
     colunas, linhas = historico_ohlc(simbolo, inicio, fim)
     return {"colunas": colunas, "linhas": linhas, "simbolo": simbolo}

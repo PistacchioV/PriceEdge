@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from typing import Callable, Dict, List, Optional
 
 from .curvas import Curva, CurvaTermSOFR
+from .erros import ErroDeDado
 from .instrumentos import (PERCENTUAL, SPREAD, Swap, perna_cdi,
                            perna_ipca_capitalizado, perna_pre_usd,
                            perna_prefixada_exp252, perna_term_sofr)
@@ -37,8 +38,8 @@ class Mercado:
     def exigir(self, nome: str):
         valor = getattr(self, nome, None)
         if valor is None:
-            raise ValueError(f"esta ponta precisa da curva {nome.upper()}, "
-                             "que não foi carregada")
+            raise ErroDeDado("esta ponta precisa da curva {curva}, que não foi "
+                             "carregada", curva=nome.upper())
         return valor
 
 

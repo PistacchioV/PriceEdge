@@ -12,8 +12,10 @@ from __future__ import annotations
 
 from typing import Callable
 
+from .erros import ErroTraduzido
 
-class SemConvergencia(RuntimeError):
+
+class SemConvergencia(ErroTraduzido, RuntimeError):
     pass
 
 
@@ -64,4 +66,5 @@ def atingir_meta(f: Callable[[float], float], chute: float = 0.10,
             b, fb = x, fx
         else:
             a, fa = x, fx
-    raise SemConvergencia(f"sem convergência após {max_iter} iterações")
+    raise SemConvergencia("sem convergência após {iteracoes} iterações",
+                          iteracoes=max_iter)

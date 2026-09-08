@@ -79,6 +79,7 @@ from . import cambio, cdi, contagem, euribor, sofr, term_sofr
 from .calendario import (Calendario, calendario_anbima, calendario_sofr,
                          para_data)
 from .renda_fixa import aliquota_ir
+from .erros import ErroTraduzido
 
 PRE = "pre"
 CDI_PERCENTUAL = "cdi_percentual"
@@ -208,6 +209,16 @@ def nome_da_descricao(ponta: "PontaLiquidada") -> str:
     molde, valores = ponta.descricao
     return molde.format(**valores)
 
+BASE_JUROS = "juros"
+BASE_VALOR_FUTURO = "valor_futuro"
+BASE_AUTOMATICA = "auto"
+
+BASES_DE_AJUSTE = [
+    (BASE_AUTOMATICA, "Pelas datas — juros no fluxo intermediário, valor futuro no vencimento"),
+    (BASE_JUROS, "Só os juros — fluxo intermediário, o principal segue"),
+    (BASE_VALOR_FUTURO, "Valor futuro das duas pontas — liquidação final"),
+]
+
 SOBRE_ORIGINAL = "original"
 SOBRE_REMANESCENTE = "remanescente"
 
@@ -217,7 +228,7 @@ BASES_AMORTIZACAO = [
 ]
 
 
-class ErroLiquidacao(ValueError):
+class ErroLiquidacao(ErroTraduzido, ValueError):
     """Dado que falta ou não fecha para liquidar."""
 
 
@@ -372,7 +383,8 @@ def _fixing_euribor(tenor: str, quando: date) -> tuple:
     data, linha = curva.em(quando)
     if not linha or tenor not in linha:
         raise ErroLiquidacao(
-            f"não há fixing de EURIBOR {tenor} publicado até {quando:%d/%m/%Y}")
+            "não há fixing de EURIBOR {tenor} publicado até {data}",
+            tenor=tenor, data=f"{quando:%d/%m/%Y}")
     return data, linha[tenor] / 100.0
 
 
@@ -402,8 +414,9 @@ def _fator_cambial(ponta: Ponta, d0: date, d1: date) -> tuple:
             # erro precisa dizer isso em vez de falhar na fonte
             faltando = "inicial" if p0 is None else "final"
             raise ErroLiquidacao(
-                f"o Banco Central não boletina {ponta.moeda}: informe o fixing "
-                f"{faltando} da moeda. Os dois entram digitados.")
+                "o Banco Central não boletina {moeda}: informe o fixing {qual} da "
+                "moeda. Os dois entram digitados.",
+                moeda=ponta.moeda, qual=faltando)
         b0 = _ptax_do_dia_anterior(ponta.moeda, d0)
         b1 = _ptax_do_dia_anterior(ponta.moeda, d1)
         p0 = p0 if p0 is not None else b0.venda
@@ -495,7 +508,8 @@ def liquidar_ponta(ponta: Ponta, nocional: float, inicio, fim,
         for nome, valor in (("lookback", ponta.lookback), ("observation shift", ponta.shift)):
             if valor < 0 or valor > LIMITE_DEFASAGEM:
                 raise ErroLiquidacao(
-                    f"o {nome} tem que ficar entre 0 e {LIMITE_DEFASAGEM} dias úteis")
+                    "o {defasagem} tem que ficar entre 0 e {teto} dias úteis",
+                    defasagem=nome, teto=LIMITE_DEFASAGEM)
         # shift e lookback empurram a janela de observação para trás do início
         # do fluxo: buscar só o período deixaria a composição sem os fixings
         # que ela vai ler, e o erro apareceria na fonte, não aqui
@@ -573,7 +587,8 @@ def liquidar_ponta(ponta: Ponta, nocional: float, inicio, fim,
             raise ErroLiquidacao("informe o fator acumulado da ponta")
         return montar(ponta.fator_manual, ("fator digitado", {}))
 
-    raise ErroLiquidacao(f"indexador desconhecido: {ponta.indexador}")
+    raise ErroLiquidacao("indexador desconhecido: {indexador}",
+                         indexador=ponta.indexador)
 
 
 # ------------------------------------------------------------- a liquidação
@@ -583,6 +598,10 @@ class ResultadoLiquidacao:
     data_operacao: date
     inicio: date
     fim: date
+    vencimento: Optional[date]
+    base_de_ajuste: str
+    juros_da_ativa: float
+    juros_da_passiva: float
     nocional: float
     nocional_original: float
     percentual_amortizacao: float
@@ -603,7 +622,24 @@ class ResultadoLiquidacao:
     @property
     def diferenca_de_fator(self) -> float:
         """O ajuste em pontos de fator — o que sobra por real de notional."""
+        if self.base_de_ajuste == BASE_JUROS:
+            return (self.juros_da_ativa - self.juros_da_passiva) / self.nocional
         return self.ativa.fator - self.passiva.fator
+
+    @property
+    def so_juros(self) -> bool:
+        return self.base_de_ajuste == BASE_JUROS
+
+    @property
+    def efeito_cambial_do_principal(self) -> float:
+        """O que separa as duas bases: o câmbio sobre o principal.
+
+        Existe para a tela poder mostrar a distância entre a liquidação de fluxo
+        e a final sem obrigar ninguém a refazer a conta — é sempre esse número,
+        nem mais nem menos.
+        """
+        futuro = self.ativa.valor - self.passiva.valor
+        return futuro - (self.juros_da_ativa - self.juros_da_passiva)
 
     def para_dict(self) -> dict:
         """O resultado inteiro em tipos simples, pronto para JSON.
@@ -638,8 +674,42 @@ class ResultadoLiquidacao:
         }
 
 
+def juros_de(ponta: PontaLiquidada) -> float:
+    """Os juros da ponta para efeito de liquidação de fluxo.
+
+    Numa ponta em moeda estrangeira, os juros nascem **na moeda dela** e vêm
+    para reais pelo fixing do fim — o principal não é convertido junto, porque
+    num fluxo intermediário ele não liquida: fica de pé para o período seguinte.
+
+        juros = nocional · (fixing_fim/fixing_ini) · (fator do índice − 1)
+
+    Sem moeda o fator cambial é 1 e a conta vira ``nocional · (fator − 1)``, que
+    é o que se espera de uma ponta em reais.
+    """
+    return ponta.nocional * ponta.fator_cambial * (ponta.fator_do_indice - 1.0)
+
+
+def base_de_ajuste(fim, vencimento, escolha: str = BASE_AUTOMATICA) -> str:
+    """Qual das duas liquidações vale — pelas datas, quando não é escolhida.
+
+    Um fluxo que termina **antes** do vencimento do swap não liquida principal:
+    só o diferencial de juros muda de mãos, e o principal segue para o período
+    seguinte. Netar valor futuro ali cobraria da contraparte a variação cambial
+    de um principal que ninguém pagou.
+
+    Sem a data de vencimento não há como saber, e o padrão é a liquidação final
+    — que é o caso de um swap bullet, o mais comum de conferir.
+    """
+    if escolha in (BASE_JUROS, BASE_VALOR_FUTURO):
+        return escolha
+    if vencimento is None:
+        return BASE_VALOR_FUTURO
+    return BASE_JUROS if para_data(fim) < para_data(vencimento) else BASE_VALOR_FUTURO
+
+
 def liquidar(data_operacao, inicio, fim, nocional: float,
              ponta_ativa: Ponta, ponta_passiva: Ponta,
+             vencimento=None, base_ajuste: str = BASE_AUTOMATICA,
              nocional_original: Optional[float] = None,
              percentual_amortizacao: float = 0.0,
              base_amortizacao: str = SOBRE_ORIGINAL,
@@ -658,6 +728,12 @@ def liquidar(data_operacao, inicio, fim, nocional: float,
     próprio saldo remanescente. A amortização não muda o ajuste deste período —
     ela define o saldo que abre o próximo.
 
+    ``vencimento`` é a data em que o swap acaba, e ela decide o que liquida: um
+    fluxo que termina antes dela é intermediário, e nele só o diferencial de
+    **juros** muda de mãos — o principal segue para o período seguinte. No
+    vencimento liquidam os dois, e o ajuste é a diferença dos valores futuros.
+    ``base_ajuste`` força uma das duas quando as datas não bastam.
+
     ``reter_ir`` aplica a tabela regressiva sobre o resultado positivo, contada
     da **data da operação** até o fim do fluxo, que é o prazo que a legislação
     olha. É o que a fonte pagadora retém na liquidação.
@@ -670,16 +746,16 @@ def liquidar(data_operacao, inicio, fim, nocional: float,
         raise ErroLiquidacao("o fim do fluxo tem que ser posterior ao início")
     if d0 < dop:
         raise ErroLiquidacao(
-            f"o fluxo não pode começar ({d0:%d/%m/%Y}) antes da operação "
-            f"({dop:%d/%m/%Y})")
+            "o fluxo não pode começar ({inicio}) antes da operação ({operacao})",
+            inicio=f"{d0:%d/%m/%Y}", operacao=f"{dop:%d/%m/%Y}")
     if nocional <= 0:
         raise ErroLiquidacao("o notional remanescente tem que ser positivo")
 
     indexadores = {ponta_ativa.indexador, ponta_passiva.indexador}
     if indexadores & REALIZADOS and d1 > date.today():
         raise ErroLiquidacao(
-            "a liquidação usa índice realizado, não projeção — o fim do fluxo "
-            f"não pode passar de hoje ({date.today():%d/%m/%Y})")
+            "a liquidação usa índice realizado, não projeção — o fim do fluxo não "
+            "pode passar de hoje ({hoje})", hoje=f"{date.today():%d/%m/%Y}")
 
     original = float(nocional_original) if nocional_original else float(nocional)
     if original < nocional:
@@ -691,13 +767,19 @@ def liquidar(data_operacao, inicio, fim, nocional: float,
     ativa = liquidar_ponta(ponta_ativa, nocional, d0, d1, cal, arredondar_di)
     passiva = liquidar_ponta(ponta_passiva, nocional, d0, d1, cal, arredondar_di)
 
-    bruto = ativa.valor - passiva.valor
+    dv = para_data(vencimento) if vencimento else None
+    base = base_de_ajuste(d1, dv, base_ajuste)
+    juros_ativa, juros_passiva = juros_de(ativa), juros_de(passiva)
+    bruto = (juros_ativa - juros_passiva if base == BASE_JUROS
+             else ativa.valor - passiva.valor)
     dias_operacao = (d1 - dop).days
     pct_ir = aliquota_ir(dias_operacao) if (reter_ir and bruto > 0) else 0.0
     ir = bruto * pct_ir if pct_ir else 0.0
 
     return ResultadoLiquidacao(
-        data_operacao=dop, inicio=d0, fim=d1, nocional=float(nocional),
+        data_operacao=dop, inicio=d0, fim=d1, vencimento=dv,
+        base_de_ajuste=base, juros_da_ativa=juros_ativa,
+        juros_da_passiva=juros_passiva, nocional=float(nocional),
         nocional_original=original,
         percentual_amortizacao=percentual_amortizacao,
         base_amortizacao=base_amortizacao,

@@ -26,7 +26,7 @@ from precificador.produtos import (DIRECOES, MOEDAS_NDF, MODO_MANUAL, MODO_PRECO
                                    sinal_do_casado, spot_com_casado)
 from precificador.solver import SemConvergencia
 
-from . import servicos
+from . import idiomas, servicos
 
 bp = Blueprint("principal", __name__)
 
@@ -85,7 +85,7 @@ def curvas():
             contexto["curva"] = obj
             contexto["grafico"] = servicos.montar_grafico(obj)
         except (ErroDeFonte, ValueError) as exc:
-            contexto["erro"] = str(exc)
+            contexto["erro"] = idiomas.mensagem(exc)
     return render_template("curvas.html", **contexto)
 
 
@@ -98,7 +98,7 @@ def curvas_csv():
                if codigo in servicos.DERIVADA_POR_CODIGO
                else servicos.curva(codigo, data_txt))
     except (ErroDeFonte, ValueError) as exc:
-        return Response(str(exc), status=404, mimetype="text/plain; charset=utf-8")
+        return Response(idiomas.mensagem(exc), status=404, mimetype="text/plain; charset=utf-8")
     nome = f"curva_{codigo}_{para_data(data_txt):%Y%m%d}.csv"
     return Response(servicos.csv_da_curva(obj), content_type="text/csv; charset=utf-8",
                     headers={"Content-Disposition": f'attachment; filename="{nome}"'})
@@ -110,7 +110,7 @@ def api_curva(codigo: str):
     try:
         return jsonify(servicos.curva(codigo, data_txt).para_dict())
     except (ErroDeFonte, ValueError) as exc:
-        return jsonify({"erro": str(exc)}), 404
+        return jsonify({"erro": idiomas.mensagem(exc)}), 404
 
 
 @bp.route("/api/interpolar/<codigo>")
@@ -123,7 +123,7 @@ def api_interpolar(codigo: str):
         obj.metodo = request.args.get("metodo", obj.metodo)
         return jsonify({"dc": dc, "taxa": obj.taxa(dc), "metodo": obj.metodo})
     except (ErroDeFonte, ValueError) as exc:
-        return jsonify({"erro": str(exc)}), 400
+        return jsonify({"erro": idiomas.mensagem(exc)}), 400
 
 
 # ------------------------------------------------------------- interpolação
@@ -160,7 +160,7 @@ def interpolador():
             contexto["resultado"] = {"linhas": linhas, "n": len(xs),
                                      "dominio": (min(xs), max(xs))}
         except ValueError as exc:
-            contexto["erro"] = str(exc)
+            contexto["erro"] = idiomas.mensagem(exc)
     return render_template("interpolar.html", **contexto)
 
 
@@ -172,7 +172,7 @@ def interpolar_carregar():
     try:
         obj = servicos.curva(codigo, data_txt)
     except (ErroDeFonte, ValueError) as exc:
-        return jsonify({"erro": str(exc)}), 404
+        return jsonify({"erro": idiomas.mensagem(exc)}), 404
     return jsonify({
         "x": "\n".join(str(v.dias_corridos) for v in obj.vertices),
         "y": "\n".join(f"{v.taxa * 100:.4f}" for v in obj.vertices),
@@ -235,7 +235,7 @@ def precificar():
         try:
             contexto["resultado"] = _montar_personalizado(request.form)
         except (servicos.ErroFormulario, ErroDeFonte, SemConvergencia, ValueError) as exc:
-            contexto["erro"] = str(exc)
+            contexto["erro"] = idiomas.mensagem(exc)
 
     contexto["insumos"] = montador.insumos_necessarios(
         contexto["form"].get("perna_ativa", "pre_brl"),
@@ -295,7 +295,7 @@ def ndf():
         try:
             contexto["resultado"] = _montar_ndf(request.form)
         except (servicos.ErroFormulario, ErroDeFonte, ValueError) as exc:
-            contexto["erro"] = str(exc)
+            contexto["erro"] = idiomas.mensagem(exc)
     return render_template("ndf.html", **contexto)
 
 
@@ -378,7 +378,7 @@ def api_ndf_spot():
     try:
         valor = servicos.spot_da_curva(moeda, data)
     except b3.ErroB3 as exc:
-        return jsonify({"erro": str(exc)}), 502
+        return jsonify({"erro": idiomas.mensagem(exc)}), 502
     return jsonify({
         "moeda": moeda.codigo, "par": moeda.par, "casas": moeda.casas,
         "spot": valor, "padrao": moeda.spot_padrao,
@@ -407,7 +407,7 @@ def api_cambio():
         base = para_data(data_txt)
         cotacao = cambio.ptax_moeda(codigo_bcb, base)
     except (ErroDeFonte, ValueError) as exc:
-        return jsonify({"erro": str(exc)}), 502
+        return jsonify({"erro": idiomas.mensagem(exc)}), 502
 
     if moeda.codigo == "EURUSD":
         spot, fonte = cotacao.contra_dolar, "Banco Central — paridade EUR/USD"
@@ -531,7 +531,7 @@ def sofr_indice():
         try:
             contexto["resultado"] = _compor_sofr(request.form)
         except (servicos.ErroFormulario, ErroDeFonte, ValueError) as exc:
-            contexto["erro"] = str(exc)
+            contexto["erro"] = idiomas.mensagem(exc)
     return render_template("sofr.html", **contexto)
 
 
@@ -605,7 +605,7 @@ def term_sofr():
         })
         contexto.update(servicos.series_sofr(recorte))
     except sofr.ErroFed as exc:
-        contexto["erro"] = str(exc)
+        contexto["erro"] = idiomas.mensagem(exc)
     return render_template("term_sofr.html", **contexto)
 
 
@@ -638,7 +638,7 @@ def term_sofr_importar():
     try:
         resultado = term.importar(arquivo.filename, arquivo.read())
     except (term.ErroTermSOFR, ValueError) as exc:
-        return jsonify({"erro": str(exc)}), 422
+        return jsonify({"erro": idiomas.mensagem(exc)}), 422
 
     return jsonify({
         "ok": True,
@@ -704,7 +704,7 @@ def term_sofr_sincronizar():
     try:
         return jsonify(sofr.sincronizar(profundo=True))
     except sofr.ErroFed as exc:
-        return jsonify({"erro": str(exc)}), 502
+        return jsonify({"erro": idiomas.mensagem(exc)}), 502
 
 
 # ---------------------------------------------------------------- EURIBOR --
@@ -738,7 +738,7 @@ def euribor_diario():
         })
         contexto.update(servicos.series_euribor(recorte))
     except euribor.ErroEuribor as exc:
-        contexto["erro"] = str(exc)
+        contexto["erro"] = idiomas.mensagem(exc)
     return render_template("euribor.html", **contexto)
 
 
@@ -748,7 +748,7 @@ def euribor_sincronizar():
     try:
         relatorio = euribor.sincronizar(profundo=True, passo=5)
     except euribor.ErroEuribor as exc:
-        return jsonify({"erro": str(exc)}), 502
+        return jsonify({"erro": idiomas.mensagem(exc)}), 502
     return jsonify(relatorio)
 
 
@@ -758,7 +758,7 @@ def euribor_csv():
     try:
         curva = euribor.carregar()
     except euribor.ErroEuribor as exc:
-        return Response(str(exc), status=502, mimetype="text/plain; charset=utf-8")
+        return Response(idiomas.mensagem(exc), status=502, mimetype="text/plain; charset=utf-8")
     linhas = ["Data;" + ";".join(curva.tenores)]
     tabela = curva.por_data()
     for d in curva.datas:
@@ -775,7 +775,7 @@ def api_euribor():
     try:
         curva = euribor.carregar()
     except euribor.ErroEuribor as exc:
-        return jsonify({"erro": str(exc)}), 502
+        return jsonify({"erro": idiomas.mensagem(exc)}), 502
     tabela = curva.por_data()
     return jsonify({
         "fonte": euribor.PAGINA,
@@ -811,7 +811,7 @@ def calculadora_renda_fixa():
         try:
             contexto["resultado"] = _calcular_renda_fixa(request.form)
         except (servicos.ErroFormulario, ErroDeFonte, ValueError) as exc:
-            contexto["erro"] = str(exc)
+            contexto["erro"] = idiomas.mensagem(exc)
     return render_template("renda_fixa.html", **contexto)
 
 
@@ -899,7 +899,7 @@ def cotacoes_pagina():
         try:
             contexto["resultado"] = _buscar_cotacoes(request.form)
         except (servicos.ErroFormulario, ErroDeFonte, ValueError) as exc:
-            contexto["erro"] = str(exc)
+            contexto["erro"] = idiomas.mensagem(exc)
     return render_template("cotacoes.html", **contexto)
 
 
@@ -925,7 +925,7 @@ def cotacoes_csv():
         dados = cotacoes.historico(tipo, instrumento, request.args.get("inicio") or "",
                                    request.args.get("fim") or "")
     except (ErroDeFonte, ValueError) as exc:
-        return Response(str(exc), status=404, mimetype="text/plain; charset=utf-8")
+        return Response(idiomas.mensagem(exc), status=404, mimetype="text/plain; charset=utf-8")
 
     buffer = io.StringIO()
     escritor = csv.writer(buffer, delimiter=";")
@@ -955,6 +955,7 @@ def liquidacao_swap():
         "form": {
             "data_operacao": ano_passado.isoformat(),
             "inicio": ano_passado.isoformat(), "fim": hoje.isoformat(),
+            "vencimento": "", "base_ajuste": liquidacao.BASE_AUTOMATICA,
             "nocional": "10.000.000,00", "nocional_original": "10.000.000,00",
             "amortizacao": "0", "base_amortizacao": liquidacao.SOBRE_ORIGINAL,
             "calendario": "ANBIMA", "arredondar_di": "", "reter_ir": "1",
@@ -964,6 +965,7 @@ def liquidacao_swap():
         "regimes": contagem.REGIMES,
         "moedas": liquidacao.MOEDAS,
         "bases_amortizacao": liquidacao.BASES_AMORTIZACAO,
+        "bases_ajuste": liquidacao.BASES_DE_AJUSTE,
         "tenores_euribor": liquidacao.TENORES_EURIBOR,
         "calendarios": CALENDARIOS,
         "hoje": hoje.isoformat(),
@@ -991,7 +993,7 @@ def liquidacao_swap():
         try:
             contexto["resultado"] = _liquidar(request.form)
         except (servicos.ErroFormulario, ErroDeFonte, ValueError) as exc:
-            contexto["erro"] = str(exc)
+            contexto["erro"] = idiomas.mensagem(exc)
     return render_template("liquidacao.html", **contexto)
 
 
@@ -1045,6 +1047,9 @@ def _liquidar(form) -> dict:
         nocional=servicos.numero_do_form(form, "nocional", "notional remanescente"),
         ponta_ativa=_ponta_do_form(form, "ativa"),
         ponta_passiva=_ponta_do_form(form, "passiva"),
+        vencimento=(para_data(form.get("vencimento"))
+                    if (form.get("vencimento") or "").strip() else None),
+        base_ajuste=form.get("base_ajuste") or liquidacao.BASE_AUTOMATICA,
         nocional_original=servicos.numero_do_form(form, "nocional_original",
                                                   "notional original", 0.0),
         percentual_amortizacao=servicos.taxa_do_form(form, "amortizacao",
@@ -1104,5 +1109,5 @@ def ni_pro_rata():
                 "dut": calendario_anbima().dias_uteis(ni.data_base, ni.proxima_base),
             }
         except (ValueError, servicos.ErroFormulario, ErroDeFonte) as exc:
-            contexto["erro"] = str(exc)
+            contexto["erro"] = idiomas.mensagem(exc)
     return render_template("ni_pro_rata.html", **contexto)

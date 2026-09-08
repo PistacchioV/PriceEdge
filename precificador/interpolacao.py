@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import bisect
 from typing import Sequence
+from .erros import ErroDeDado
 
 
 class SplineNatural:
@@ -43,7 +44,7 @@ class SplineNatural:
             else:
                 limpos.append((px, py))
         if len(limpos) < 2:
-            raise ValueError("a spline precisa de pelo menos 2 pontos distintos")
+            raise ErroDeDado("a spline precisa de pelo menos 2 pontos distintos")
         self.x = [p[0] for p in limpos]
         self.y = [p[1] for p in limpos]
         self.y2 = self._segundas_derivadas(self.x, self.y)
@@ -177,7 +178,7 @@ def interpolar(x, y, xp, metodo: str = "spline", **kwargs) -> float:
     try:
         funcao = METODOS[metodo]
     except KeyError as exc:
-        raise ValueError(f"método de interpolação desconhecido: {metodo}") from exc
+        raise ErroDeDado("método de interpolação desconhecido: {metodo}", metodo=metodo) from exc
     if funcao is flat_forward:
         return funcao(x, y, xp)
     return funcao(x, y, xp, **kwargs)

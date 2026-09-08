@@ -1,4 +1,4 @@
-"""Leitura de planilha — ``.xlsx`` e ``.csv`` — sem dependência nenhuma.
+"""Leitura de planilha — ``.xlsx``, ``.csv`` e ``.tsv`` — sem dependência nenhuma.
 
 Um ``.xlsx`` é um zip de XML, e ler os quatro pedaços que importam cabe em
 pouco mais de cem linhas. A alternativa era o ``openpyxl``, que é excelente e
@@ -32,6 +32,8 @@ import io
 import re
 import zipfile
 from datetime import date, datetime, timedelta
+
+from .erros import ErroTraduzido
 from typing import List, Optional, Sequence
 from xml.etree import ElementTree
 
@@ -42,7 +44,7 @@ NS = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
 _ORIGEM_EXCEL = date(1899, 12, 30)
 
 
-class ErroPlanilha(ValueError):
+class ErroPlanilha(ErroTraduzido, ValueError):
     """Arquivo que não dá para ler, com o motivo por extenso."""
 
 
@@ -128,12 +130,15 @@ def ler_xlsx(dados: bytes) -> List[List[str]]:
     return linhas
 
 
-def ler_csv(dados: bytes) -> List[List[str]]:
-    """As linhas de um CSV, com o separador e a codificação descobertos.
+def ler_separado(dados: bytes) -> List[List[str]]:
+    """As linhas de um arquivo de texto tabular, com separador e codificação
+    descobertos.
 
-    A B3 exporta com ``;`` e cp1252; um arquivo salvo de outro lugar costuma
-    vir com ``,`` e UTF-8. Adivinhar os dois é mais barato que pedir ao usuário
-    que saiba qual é o dele.
+    A B3 exporta ``.tsv`` (tabulação) e ``.csv`` com ``;``, os dois em cp1252;
+    um arquivo salvo de outro lugar costuma vir com ``,`` e UTF-8. Adivinhar é
+    mais barato que pedir ao usuário que saiba qual é o dele — e o separador
+    sai por **contagem**, não pela extensão, porque um ``.csv`` salvo do Excel
+    em português vem com ``;`` e um ``.tsv`` renomeado continua tabulado.
     """
     texto = None
     for codificacao in ("utf-8-sig", "cp1252", "latin-1"):
@@ -145,20 +150,26 @@ def ler_csv(dados: bytes) -> List[List[str]]:
     if texto is None:
         raise ErroPlanilha("não foi possível ler o texto do arquivo")
 
-    amostra = texto[:4096]
-    separador = ";" if amostra.count(";") >= amostra.count(",") else ","
+    amostra = texto[:8192]
+    separador = max(("\t", ";", ","), key=amostra.count)
+    if amostra.count(separador) == 0:
+        separador = "\t"          # arquivo de uma coluna só: qualquer um serve
     return [linha for linha in csv.reader(io.StringIO(texto), delimiter=separador)]
+
+
+# o nome antigo continua valendo para quem já chamava
+ler_csv = ler_separado
 
 
 def ler(nome: str, dados: bytes) -> List[List[str]]:
     """Lê pela extensão do nome: ``.xlsx`` ou ``.csv``."""
     if (nome or "").lower().endswith(".xlsx"):
         return ler_xlsx(dados)
-    if (nome or "").lower().endswith((".csv", ".txt")):
-        return ler_csv(dados)
+    if (nome or "").lower().endswith((".csv", ".tsv", ".txt", ".tab")):
+        return ler_separado(dados)
     raise ErroPlanilha(
-        f"não sei ler {nome!r}. Use .xlsx ou .csv — o .xls antigo precisa ser "
-        "salvo de novo num dos dois.")
+        "não sei ler {arquivo}. Use .xlsx, .csv ou .tsv — o .xls antigo precisa "
+        "ser salvo de novo num desses.", arquivo=repr(nome))
 
 
 def celula(linha: Sequence[str], indice: int) -> str:

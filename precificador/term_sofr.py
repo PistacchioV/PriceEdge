@@ -36,6 +36,7 @@ from typing import Dict, List, Optional, Tuple
 
 from . import planilha
 from .calendario import para_data
+from .erros import ErroTraduzido
 
 ARQUIVO = Path(__file__).resolve().parent / "dados" / "term_sofr_b3.json"
 
@@ -63,7 +64,7 @@ _CABECALHOS = {
 _TRAVA = threading.Lock()          # a base é um arquivo só; escrita é serializada
 
 
-class ErroTermSOFR(ValueError):
+class ErroTermSOFR(ErroTraduzido, ValueError):
     """Arquivo que não dá para importar, com o motivo por extenso."""
 
 
@@ -139,7 +140,7 @@ def importar(nome: str, dados: bytes) -> Importacao:
     try:
         linhas = planilha.ler(nome, dados)
     except planilha.ErroPlanilha as exc:
-        raise ErroTermSOFR(str(exc)) from exc
+        raise ErroTermSOFR.de(exc) from exc
     if not linhas:
         raise ErroTermSOFR("o arquivo está vazio")
 
@@ -175,10 +176,12 @@ def importar(nome: str, dados: bytes) -> Importacao:
     if not encontrados:
         conhecidos = ", ".join(sorted(TICKERS))
         raise ErroTermSOFR(
-            f"nenhuma cotação de Term SOFR no arquivo. Procurei o ticker na "
-            f"coluna {planilha.letra_da_coluna(c_ticker)}, a data na "
-            f"{planilha.letra_da_coluna(c_data)} e o valor na "
-            f"{planilha.letra_da_coluna(c_valor)}, e esperava um de: {conhecidos}.")
+            "nenhuma cotação de Term SOFR no arquivo. Procurei o ticker na coluna "
+            "{ticker}, a data na {data} e o valor na {valor}, e esperava um de: "
+            "{esperados}.",
+            ticker=planilha.letra_da_coluna(c_ticker),
+            data=planilha.letra_da_coluna(c_data),
+            valor=planilha.letra_da_coluna(c_valor), esperados=conhecidos)
 
     with _TRAVA:
         base = carregar_base()

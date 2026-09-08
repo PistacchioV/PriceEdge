@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from .calendario import Calendario, calendario_anbima, para_data
+from .erros import ErroDeDado
 
 PREFIXADO = "prefixado"
 CDI_PERCENTUAL = "cdi_percentual"
@@ -152,7 +153,7 @@ def calcular(valor: float, inicio, vencimento, indexador: str, taxa: float,
     cal = calendario or calendario_anbima()
     d0, d1 = para_data(inicio), para_data(vencimento)
     if d1 <= d0:
-        raise ValueError("o vencimento tem que ser posterior à aplicação")
+        raise ErroDeDado("o vencimento tem que ser posterior à aplicação")
 
     dc = (d1 - d0).days
     du = dias_uteis if dias_uteis is not None else cal.dias_uteis(d0, d1)
@@ -171,7 +172,7 @@ def calcular(valor: float, inicio, vencimento, indexador: str, taxa: float,
         anos = du / 252.0
         fator = ((1.0 + ipca_projetado) ** (dc / 365.0)) * ((1.0 + taxa) ** anos)
     else:
-        raise ValueError(f"indexador desconhecido: {indexador}")
+        raise ErroDeDado("indexador desconhecido: {indexador}", indexador=indexador)
 
     bruto = valor * fator
     rendimento = bruto - valor

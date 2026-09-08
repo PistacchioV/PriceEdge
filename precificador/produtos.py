@@ -14,6 +14,7 @@ from typing import List, Optional, Sequence
 from .calendario import (FOLLOWING, Calendario, calendario_anbima, para_data,
                          soma_meses)
 from .curvas import Curva, CurvaTermSOFR
+from .erros import ErroDeDado
 from .instrumentos import (BULLET, PERCENTUAL, SPREAD, Periodo, Swap,
                            agenda_periodica, perna_cdi, perna_ipca_capitalizado,
                            perna_pre_usd, perna_prefixada_exp252,
@@ -36,7 +37,7 @@ class ParametrosSwap:
         self.inicio = para_data(self.inicio)
         self.vencimento = para_data(self.vencimento)
         if self.vencimento <= self.inicio:
-            raise ValueError("o vencimento tem que ser posterior ao início")
+            raise ErroDeDado("o vencimento tem que ser posterior ao início")
 
     def agenda(self, calendario: Optional[Calendario] = None) -> List[Periodo]:
         return agenda_periodica(self.inicio, self.vencimento, self.meses_periodo,
@@ -519,13 +520,13 @@ def curva_ndf(data_base, spot: float, curva_di: Optional[Curva],
     base = para_data(data_base)
 
     if m.modo == MODO_PRECO and curva_preco is None:
-        raise ValueError(f"{m.par} precisa da curva de preço a termo")
+        raise ErroDeDado("{par} precisa da curva de preço a termo", par=m.par)
     if m.modo == MODO_IMPLICITO and curva_preco is None:
-        raise ValueError(f"{m.par} precisa da curva de preço para implicar o cupom")
+        raise ErroDeDado("{par} precisa da curva de preço para implicar o cupom", par=m.par)
     if m.modo == MODO_CUPOM and curva_cupom is None:
-        raise ValueError(f"{m.par} precisa da curva de cupom")
+        raise ErroDeDado("{par} precisa da curva de cupom", par=m.par)
     if m.modo != MODO_PRECO and curva_di is None:
-        raise ValueError("a curva de DI é obrigatória fora do modo de cross")
+        raise ErroDeDado("a curva de DI é obrigatória fora do modo de cross")
 
     pontos: List[PontoNDF] = []
     for bruta in datas:

@@ -292,9 +292,22 @@
             <input class="campo" id="fim" name="fim" type="date" value="{{ form.fim }}"
                    data-maximo-hoje="{{ hoje }}" required/>
           </div>
+          <div>
+            <label class="rotulo" for="vencimento">{{ t("Vencimento do swap") }}</label>
+            <input class="campo" id="vencimento" name="vencimento" type="date"
+                   value="{{ form.vencimento }}"/>
+          </div>
+          <div class="sm:col-span-2">
+            <label class="rotulo" for="base_ajuste">{{ t("O que liquida") }}</label>
+            <select class="campo" id="base_ajuste" name="base_ajuste">
+              {% for valor, nome in bases_ajuste %}
+              <option value="{{ valor }}" {{ 'selected' if form.base_ajuste == valor }}>{{ t(nome) }}</option>
+              {% endfor %}
+            </select>
+          </div>
           <div class="sm:col-span-3">
             <p class="text-xs leading-5 text-slate-600 font-geist">
-              {{ t("A data da operação conta o prazo do IR; o fluxo é onde os índices acumulam.") }}
+              {{ t("A data da operação conta o prazo do IR; o fluxo é onde os índices acumulam. Um fluxo que termina antes do vencimento é intermediário: nele só o diferencial de juros muda de mãos, e o principal segue para o período seguinte.") }}
             </p>
           </div>
         </div>
@@ -387,6 +400,16 @@
             {% endif %}
           </p>
 
+          <p class="mt-4 inline-flex items-center gap-2 rounded-full border border-white/[0.12] bg-white/[0.05] px-3 py-1.5 text-xs text-slate-200 font-geist">
+            <iconify-icon height="14" width="14"
+              icon="{{ 'solar:refresh-linear' if r.so_juros else 'solar:flag-linear' }}"></iconify-icon>
+            {% if r.so_juros %}
+            {{ t("Fluxo intermediário — liquida só o diferencial de juros") }}
+            {% else %}
+            {{ t("Liquidação final — liquida o valor futuro das duas pontas") }}
+            {% endif %}
+          </p>
+
           <div class="mt-7 grid gap-3 sm:grid-cols-2">
             {{ estatistica(t('Ajuste bruto'), 'R$ ' ~ (r.ajuste_bruto | moeda(2)),
                            t('diferença de fator de ') ~ ('%.10f' | format(r.diferenca_de_fator) | replace('.', ','))) }}
@@ -403,6 +426,37 @@
           {{ resumo_ponta(r.ativa, t('Ponta ativa'), 'cyan') }}
           {{ resumo_ponta(r.passiva, t('Ponta passiva'), 'slate') }}
         </div>
+
+        {% if r.efeito_cambial_do_principal | round(2) != 0 %}
+        <div class="sem-reveal mt-6 rounded-[2rem] border border-white/[0.09] bg-slate-950/40 p-6 backdrop-blur-xl">
+          <p class="text-sm font-medium text-white font-geist">{{ t("As duas liquidações, lado a lado") }}</p>
+          <p class="mt-2 text-sm leading-6 text-slate-400 font-geist">
+            {{ t("O que separa as duas é a variação cambial sobre o principal. Num fluxo intermediário ela não muda de mãos, porque o principal não liquida ali — ele segue de pé para o período seguinte.") }}
+          </p>
+          <div class="mt-5 rolagem">
+            <table class="tabela-dados">
+              <thead><tr><th>{{ t("Base") }}</th><th>{{ t("Conta") }}</th><th>{{ t("Ajuste bruto") }}</th></tr></thead>
+              <tbody>
+                <tr>
+                  <td class="{{ 'text-cyan-100' if r.so_juros else 'text-white' }}">{{ t("Só os juros") }}</td>
+                  <td class="text-slate-500">{{ t("juros da ativa − juros da passiva") }}</td>
+                  <td class="tabular-nums">R$ {{ (r.juros_da_ativa - r.juros_da_passiva) | moeda(2) }}</td>
+                </tr>
+                <tr>
+                  <td class="{{ 'text-white' if r.so_juros else 'text-cyan-100' }}">{{ t("Valor futuro") }}</td>
+                  <td class="text-slate-500">{{ t("VF da ativa − VF da passiva") }}</td>
+                  <td class="tabular-nums">R$ {{ (r.ativa.valor - r.passiva.valor) | moeda(2) }}</td>
+                </tr>
+                <tr>
+                  <td class="text-white">{{ t("Diferença") }}</td>
+                  <td class="text-slate-500">{{ t("câmbio sobre o principal") }}</td>
+                  <td class="tabular-nums text-amber-200/90">R$ {{ r.efeito_cambial_do_principal | moeda(2) }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        {% endif %}
 
         {% if r.valor_amortizado %}
         <div class="sem-reveal mt-6 rounded-[2rem] border border-white/[0.09] bg-slate-950/40 p-6 backdrop-blur-xl">

@@ -29,6 +29,7 @@ from typing import List, Optional
 from . import rede
 from .erros import ErroDeFonte
 from .calendario import para_data
+from .erros import ErroDeDado
 
 SGS_CDI = 4389
 SGS_SELIC = 11
@@ -53,13 +54,14 @@ def serie(inicio, fim, codigo: int = SGS_CDI, timeout: int = 40) -> List[FixingC
     """
     d0, d1 = para_data(inicio), para_data(fim)
     if d1 < d0:
-        raise ValueError("a data final não pode ser anterior à inicial")
+        raise ErroDeDado("a data final não pode ser anterior à inicial")
     url = (f"{API.format(serie=codigo)}?formato=json"
            f"&dataInicial={d0:%d/%m/%Y}&dataFinal={d1:%d/%m/%Y}")
     try:
         bruto = rede.obter_json(url, timeout=timeout)
     except rede.ErroRede as exc:
-        raise ErroBCB(f"não foi possível obter a série {codigo} do BCB: {exc}") from exc
+        raise ErroBCB("não foi possível obter a série {codigo} do BCB: {motivo}",
+                      codigo=codigo, motivo=str(exc)) from exc
 
     fixings = []
     for linha in bruto:
@@ -107,13 +109,14 @@ def acumular(fixings: List[FixingCDI], inicio, fim, percentual: float = 1.0,
     """
     d0, d1 = para_data(inicio), para_data(fim)
     if d1 <= d0:
-        raise ValueError("a data final tem que ser posterior à inicial")
+        raise ErroDeDado("a data final tem que ser posterior à inicial")
 
     usados = [f for f in fixings if d0 <= f.data < d1]
     if not usados:
         raise ErroBCB(
-            f"o Banco Central não publicou CDI entre {d0:%d/%m/%Y} e {d1:%d/%m/%Y}. "
-            "A série tem um dia de defasagem e não cobre datas futuras.")
+            "o Banco Central não publicou CDI entre {inicio} e {fim}. A série tem "
+            "um dia de defasagem e não cobre datas futuras.",
+            inicio=f"{d0:%d/%m/%Y}", fim=f"{d1:%d/%m/%Y}")
 
     fator = 1.0
     linhas: List[DiaCDI] = []

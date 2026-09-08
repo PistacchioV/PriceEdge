@@ -661,6 +661,7 @@ FORMULARIOS = {
     "/ni-pro-rata": dict(ni_anterior="7.545,53", projecao="0,68",
                          data="2026-04-13", vne="1.000,00", ni_partida="7.545,53"),
     "/liquidacao": dict(data_operacao="2025-09-08", inicio="2025-09-08",
+                       vencimento="2027-09-04", base_ajuste="auto",
                        fim="2026-09-04", nocional="50.000.000,00",
                        nocional_original="100.000.000,00", amortizacao="10",
                        base_amortizacao="original", calendario="ANBIMA",
@@ -1068,15 +1069,17 @@ def test_toda_excecao_de_fonte_herda_da_base():
     """
     import pkgutil, importlib, inspect
     import precificador
-    from precificador.erros import ErroDeFonte
+    from precificador.erros import ErroDeFonte, ErroTraduzido
 
+    # a base e o mecanismo de tradução são infraestrutura: ninguém os levanta
+    base = {ErroDeFonte, ErroTraduzido}
     fora = []
     for m in pkgutil.iter_modules(precificador.__path__):
         modulo = importlib.import_module(f"precificador.{m.name}")
         for nome, classe in vars(modulo).items():
             if (inspect.isclass(classe) and classe.__module__ == modulo.__name__
                     and issubclass(classe, Exception) and nome.startswith("Erro")
-                    and classe is not ErroDeFonte
+                    and classe not in base
                     and not issubclass(classe, (ErroDeFonte, ValueError))):
                 fora.append(f"{modulo.__name__}.{nome}")
     assert not fora, ("estas excecoes nao herdam de ErroDeFonte nem de ValueError, "
@@ -2230,3 +2233,174 @@ def test_as_duas_convencoes_de_ajuste_diferem_pelo_cambio_do_principal():
     # e a distância é o câmbio sobre o principal, exatamente
     assert r.ajuste_bruto - so_juros == pytest.approx(nocional * (1 - variacao),
                                                       abs=0.02)
+
+
+def test_fluxo_intermediario_liquida_so_o_diferencial_de_juros():
+    """Antes do vencimento, o principal não muda de mãos — só os juros.
+
+    Este é o swap do print da mesa: operado em 18/11/2025, vencendo em
+    23/11/2026, com um fluxo de 21/05 a 21/08/2026. O fluxo termina três meses
+    antes do vencimento, então o principal segue de pé para o período seguinte
+    e o que liquida é a diferença de juros.
+
+    Netar valor futuro ali cobraria da contraparte a variação cambial de um
+    principal que ninguém pagou — R$ 4,3 MM a mais num swap de 150 MM.
+    """
+    from precificador import liquidacao as L
+    ativa = L.Ponta(L.PRE, 0.1328, convencao="act_360", regime="composto")
+    passiva = L.Ponta(L.CAMBIO, taxa=0.0467, moeda="USD",
+                      ptax_inicial=5.34000, ptax_final=5.18620,
+                      convencao="act_360", regime="simples")
+    comum = dict(data_operacao="2025-11-18", inicio="2026-05-21", fim="2026-08-21",
+                 nocional=150e6, ponta_ativa=ativa, ponta_passiva=passiva,
+                 reter_ir=False)
+
+    fluxo = L.liquidar(vencimento="2026-11-23", **comum)
+    assert fluxo.base_de_ajuste == L.BASE_JUROS
+    # os três números da planilha da mesa
+    assert fluxo.juros_da_ativa == pytest.approx(4_856_849.86, abs=0.02)
+    assert fluxo.juros_da_passiva == pytest.approx(1_738_607.18, abs=0.02)
+    assert fluxo.ajuste_bruto == pytest.approx(3_118_242.68, abs=0.02)
+
+    # o mesmo fluxo, se fosse o vencimento: aí o principal liquida junto
+    final = L.liquidar(vencimento="2026-08-21", **comum)
+    assert final.base_de_ajuste == L.BASE_VALOR_FUTURO
+    assert final.ajuste_bruto == pytest.approx(7_438_467.39, abs=0.02)
+
+    # e a distância entre as duas é sempre o câmbio sobre o principal
+    assert fluxo.efeito_cambial_do_principal == pytest.approx(
+        150e6 * (1 - 5.18620 / 5.34000), abs=0.02)
+
+
+def test_a_base_do_ajuste_sai_das_datas_e_pode_ser_forcada():
+    """Sem a data de vencimento não há como saber, e o padrão é a final."""
+    from precificador import liquidacao as L
+    assert L.base_de_ajuste("2026-08-21", "2026-11-23") == L.BASE_JUROS
+    assert L.base_de_ajuste("2026-11-23", "2026-11-23") == L.BASE_VALOR_FUTURO
+    assert L.base_de_ajuste("2026-08-21", None) == L.BASE_VALOR_FUTURO
+    # a escolha explícita ganha das datas nos dois sentidos
+    assert L.base_de_ajuste("2026-08-21", "2026-11-23",
+                            L.BASE_VALOR_FUTURO) == L.BASE_VALOR_FUTURO
+    assert L.base_de_ajuste("2026-11-23", "2026-11-23",
+                            L.BASE_JUROS) == L.BASE_JUROS
+
+
+def test_juros_de_ponta_em_moeda_nascem_na_moeda_dela():
+    """Os juros vêm para reais pelo fixing; o principal não vai junto.
+
+    Numa ponta em reais o fator cambial é 1 e a conta vira nocional × (fator−1),
+    que é o que se espera — o mesmo código serve os dois casos.
+    """
+    from precificador import liquidacao as L
+    r = L.liquidar("2025-11-18", "2026-05-21", "2026-08-21", 150e6,
+                   L.Ponta(L.PRE, 0.1328, convencao="act_360", regime="composto"),
+                   L.Ponta(L.CAMBIO, taxa=0.0467, moeda="USD",
+                           ptax_inicial=5.34000, ptax_final=5.18620,
+                           convencao="act_360", regime="simples"),
+                   vencimento="2026-11-23", reter_ir=False)
+
+    variacao = 5.18620 / 5.34000
+    assert L.juros_de(r.passiva) == pytest.approx(
+        150e6 * variacao * (r.passiva.fator_do_indice - 1))
+    # a ponta em reais: sem câmbio no meio
+    assert L.juros_de(r.ativa) == pytest.approx(150e6 * (r.ativa.fator - 1))
+
+
+# --------------------------------------- mensagens de erro no idioma da tela
+
+def test_todo_molde_de_erro_tem_traducao():
+    """Erro sem tradução é português na tela em inglês — e ninguém percebe.
+
+    Os testes de idioma varrem o que a tela mostra quando **dá certo**. O
+    caminho de erro passava por fora deles: era preciso quebrar cada tela, uma
+    a uma, para ver a frase aparecer. Este teste vai pela outra ponta — lê os
+    moldes direto do código e cobra tradução para cada um, inclusive os de erro
+    que ninguém consegue provocar de propósito.
+    """
+    import ast
+    from pathlib import Path
+    from webapp import idiomas
+
+    raiz = Path(__file__).resolve().parent.parent
+    arquivos = sorted((raiz / "precificador").glob("*.py")) + [raiz / "webapp" / "servicos.py"]
+
+    moldes, ainda_f_string = set(), []
+    for arquivo in arquivos:
+        fonte = arquivo.read_text(encoding="utf-8")
+        for no in ast.walk(ast.parse(fonte)):
+            if not isinstance(no, ast.Raise) or not isinstance(no.exc, ast.Call):
+                continue
+            alvo = no.exc.func
+            nome = getattr(alvo, "id", getattr(alvo, "attr", ""))
+            if "Erro" not in nome and "Sem" not in nome:
+                continue
+            if not no.exc.args:
+                continue
+            primeiro = no.exc.args[0]
+            if isinstance(primeiro, ast.Constant) and isinstance(primeiro.value, str):
+                moldes.add(primeiro.value)
+            elif isinstance(primeiro, ast.JoinedStr):
+                # f-string já vem montada: não tem como ser chave de tradução
+                ainda_f_string.append(f"{arquivo.name}:{no.lineno}")
+
+    assert not ainda_f_string, (
+        "estes erros ainda são f-string, então a frase chega pronta e não tem "
+        f"como ser traduzida: {ainda_f_string}")
+
+    faltando = sorted(m for m in moldes if m not in idiomas.TRADUCOES)
+    assert not faltando, (f"{len(faltando)} moldes de erro sem tradução em "
+                          "webapp/idiomas.py:\n  "
+                          + "\n  ".join(repr(m) for m in faltando))
+
+
+def test_erro_chega_na_tela_no_idioma_escolhido():
+    """O caminho inteiro: exceção do motor, rota, tela — nos dois idiomas."""
+    from webapp import create_app
+    app = create_app()
+    cliente = app.test_client()
+
+    # fixings preenchidos com a moeda em Real: erro de formulário conhecido
+    dados = dict(data_operacao="2025-11-18", inicio="2026-05-21", fim="2026-08-21",
+                 nocional="150.000.000,00", calendario="ANBIMA",
+                 ativa_indexador="pre", ativa_taxa="13,28",
+                 ativa_convencao="act_360", ativa_regime="composto",
+                 ativa_moeda="BRL", ativa_tenor="3 month",
+                 ativa_lookback="0", ativa_shift="0",
+                 passiva_indexador="cambio", passiva_taxa="4,67",
+                 passiva_convencao="act_360", passiva_regime="simples",
+                 passiva_moeda="BRL", passiva_ptax_inicial="5,34",
+                 passiva_ptax_final="5,1862", passiva_tenor="3 month",
+                 passiva_lookback="0", passiva_shift="0")
+
+    pt = cliente.post("/liquidacao?idioma=pt", data=dados).data.decode()
+    en = cliente.post("/liquidacao?idioma=en", data=dados).data.decode()
+    assert "que não converte" in pt
+    assert "which does not convert" in en
+    assert "que não converte" not in en
+
+
+def test_valor_do_molde_tambem_e_traduzido():
+    """O rótulo que entra no molde é texto, e texto também se traduz.
+
+    "preencha o campo {campo}" traduzido com campo="notional remanescente" daria
+    meia frase em cada idioma. Os valores que são rótulos conhecidos passam pelo
+    dicionário; número e data passam direto, porque não estão lá.
+    """
+    from webapp import idiomas, servicos
+    try:
+        servicos.numero_do_form({}, "nocional", "notional remanescente")
+    except servicos.ErroFormulario as exc:
+        assert idiomas.mensagem(exc, "pt") == "preencha o campo notional remanescente"
+        assert idiomas.mensagem(exc, "en") == "fill in the outstanding notional field"
+
+
+def test_erro_sem_molde_nao_quebra_a_tela():
+    """Uma exceção de fora do pacote cai de volta no português, e não estoura."""
+    from webapp import idiomas
+    assert idiomas.mensagem(ValueError("coisa de biblioteca"), "en") == \
+        "coisa de biblioteca"
+    # molde com campo que os valores não têm: usa a frase original em vez de
+    # deixar um KeyError esconder o erro de verdade
+    from precificador.erros import ErroDeDado
+    quebrado = ErroDeDado("faltou {a} e {b}", a=1)
+    assert "faltou" in idiomas.mensagem(quebrado, "en")

@@ -24,6 +24,7 @@ from typing import Callable, List, Optional, Sequence
 from .calendario import (FOLLOWING, Calendario, calendario_anbima, cronograma,
                          para_data)
 from .curvas import Curva
+from .erros import ErroDeDado
 from .solver import atingir_meta
 
 BULLET = "bullet"
@@ -101,10 +102,11 @@ def pesos_amortizacao(n: int, tipo: str = BULLET,
     """Fração do principal amortizada em cada período (soma 1)."""
     if tipo == PERSONALIZADA:
         if not personalizada or len(personalizada) != n:
-            raise ValueError("amortização personalizada precisa de um peso por período")
+            raise ErroDeDado("amortização personalizada precisa de um peso por período")
         total = sum(personalizada)
         if abs(total - 1.0) > 1e-9:
-            raise ValueError(f"os pesos de amortização somam {total:.6f}, deveriam somar 1")
+            raise ErroDeDado("os pesos de amortização somam {total}, deveriam somar 1",
+                         total=f"{total:.6f}")
         return [float(p) for p in personalizada]
     if tipo == LINEAR:
         return [1.0 / n] * n

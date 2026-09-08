@@ -82,7 +82,8 @@ def _buscar(url: str, timeout: int = 25):
     try:
         return rede.obter_json(url, timeout=timeout)
     except rede.ErroRede as exc:
-        raise ErroCambio(f"não foi possível obter a cotação: {exc}") from exc
+        raise ErroCambio("não foi possível obter a cotação: {motivo}",
+                         motivo=str(exc)) from exc
 
 
 def ptax(referencia=None, tolerancia: int = 10) -> Ptax:
@@ -100,8 +101,9 @@ def ptax(referencia=None, tolerancia: int = 10) -> Ptax:
     linhas = [linha for linha in dados if linha.get("valor")]
     if not linhas:
         raise ErroCambio(
-            f"o Banco Central não publicou PTAX entre {inicio:%d/%m/%Y} e "
-            f"{fim:%d/%m/%Y}. A cotação sai por volta das 13h do dia útil.")
+            "o Banco Central não publicou PTAX entre {inicio} e {fim}. A cotação "
+            "sai por volta das 13h do dia útil.",
+            inicio=f"{inicio:%d/%m/%Y}", fim=f"{fim:%d/%m/%Y}")
     ultima = linhas[-1]
     return Ptax(para_data(ultima["data"]), None, float(ultima["valor"]))
 
@@ -123,9 +125,9 @@ def ptax_moeda(codigo: str, referencia=None, tolerancia: int = 10) -> Ptax:
               if x.get("tipoBoletim") == "Fechamento" and x.get("cotacaoVenda")]
     if not linhas:
         raise ErroCambio(
-            f"o Banco Central não publicou boletim de {codigo} entre "
-            f"{inicio:%d/%m/%Y} e {fim:%d/%m/%Y}. O fechamento sai por volta "
-            "das 13h do dia útil.")
+            "o Banco Central não publicou boletim de {moeda} entre {inicio} e "
+            "{fim}. O fechamento sai por volta das 13h do dia útil.",
+            moeda=codigo, inicio=f"{inicio:%d/%m/%Y}", fim=f"{fim:%d/%m/%Y}")
 
     linha = linhas[-1]
     return Ptax(

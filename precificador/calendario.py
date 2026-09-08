@@ -19,6 +19,7 @@ from datetime import date, datetime, timedelta
 from functools import lru_cache
 from pathlib import Path
 from typing import Iterable, Optional
+from .erros import ErroDeDado
 
 _DADOS = Path(__file__).resolve().parent / "dados"
 
@@ -51,7 +52,7 @@ def para_data(valor) -> date:
                 return datetime.strptime(texto, formato).date()
             except ValueError:
                 continue
-    raise ValueError(f"data inválida: {valor!r}")
+    raise ErroDeDado("data inválida: {valor}", valor=repr(valor))
 
 
 class Calendario:
@@ -112,7 +113,8 @@ class Calendario:
                 return self._caminha(d, +1)
             return ajustada
 
-        raise ValueError(f"convenção de dia útil desconhecida: {convencao}")
+        raise ErroDeDado("convenção de dia útil desconhecida: {convencao}",
+                         convencao=convencao)
 
     def _caminha(self, d: date, direcao: int) -> date:
         passo = timedelta(days=direcao)
@@ -292,7 +294,7 @@ def obter_calendario(nome: str = "ANBIMA") -> Calendario:
     try:
         return CALENDARIOS[nome.upper()]()
     except KeyError as exc:
-        raise ValueError(f"calendário desconhecido: {nome}") from exc
+        raise ErroDeDado("calendário desconhecido: {nome}", nome=nome) from exc
 
 
 # --------------------------------------------------------------- cronogramas

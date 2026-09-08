@@ -127,14 +127,16 @@ def baixar_csv(codigo: str, data, timeout: int = 30) -> str:
             "Referer": "https://sistemaswebb3-derivativos.b3.com.br/",
         }, timeout=timeout)
     except rede.ErroRede as exc:
-        raise ErroB3(f"não foi possível obter {codigo} em {d:%d/%m/%Y}: {exc}") from exc
+        raise ErroB3("não foi possível obter {curva} em {data}: {motivo}",
+                     curva=codigo, data=f"{d:%d/%m/%Y}", motivo=str(exc)) from exc
 
     if not corpo.strip():
         return ""
     try:
         return base64.b64decode(corpo).decode("cp1252")
     except Exception as exc:  # resposta fora do formato esperado
-        raise ErroB3(f"resposta da B3 ilegível para {codigo}: {exc}") from exc
+        raise ErroB3("resposta da B3 ilegível para {curva}: {motivo}",
+                     curva=codigo, motivo=str(exc)) from exc
 
 
 def parse_csv(conteudo: str) -> List[VerticeB3]:
@@ -158,7 +160,8 @@ def extrair_curva(nome_ou_codigo: str, data) -> List[VerticeB3]:
     """Busca uma curva e devolve seus vértices (lista vazia se não houver arquivo)."""
     d = para_data(data)
     if not calendario_anbima().eh_dia_util(d):
-        raise ErroB3(f"{d:%d/%m/%Y} não é dia útil (fim de semana ou feriado)")
+        raise ErroB3("{data} não é dia útil (fim de semana ou feriado)",
+                     data=f"{d:%d/%m/%Y}")
     conteudo = baixar_csv(codigo_curva(nome_ou_codigo), d)
     return parse_csv(conteudo)
 

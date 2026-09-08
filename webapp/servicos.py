@@ -14,6 +14,7 @@ from datetime import date, timedelta
 from typing import Dict, List, Optional, Tuple
 
 from precificador import b3, contagem
+from precificador.erros import ErroTraduzido
 from precificador.calendario import (calendario_anbima, obter_calendario,
                                      para_data, terceira_quarta)
 from precificador.curvas import EXP252, PRECO, Curva, CurvaTermSOFR, Vertice
@@ -52,9 +53,10 @@ def curva(codigo: str, data) -> Curva:
     vs = vertices(codigo, data)
     if not vs:
         raise b3.ErroB3(
-            f"a B3 não publicou a curva {b3.NOME_POR_CODIGO.get(codigo, codigo)} "
-            f"para {para_data(data):%d/%m/%Y}. O histórico público cobre "
-            "aproximadamente o último mês útil."
+            "a B3 não publicou a curva {curva} para {data}. O histórico público "
+            "cobre aproximadamente o último mês útil.",
+            curva=b3.NOME_POR_CODIGO.get(codigo, codigo),
+            data=f"{para_data(data):%d/%m/%Y}"
         )
     return Curva.de_b3(vs, b3.NOME_POR_CODIGO.get(codigo, codigo), data,
                        convencao=CONVENCAO_POR_CURVA.get(codigo, EXP252),
@@ -78,7 +80,8 @@ def curva_derivada(codigo: str, data) -> Curva:
     prazos = sorted({(v.dias_uteis, v.dias_corridos) for v in de_cima.vertices}
                     & {(v.dias_uteis, v.dias_corridos) for v in de_baixo.vertices})
     if not prazos:
-        raise b3.ErroB3(f"as curvas {numerador} e {denominador} não têm prazos em comum")
+        raise b3.ErroB3("as curvas {a} e {b} não têm prazos em comum",
+                        a=numerador, b=denominador)
 
     vertices = [Vertice(du, dc, de_cima.taxa_para(dc, du) / de_baixo.taxa_para(dc, du))
                 for du, dc in prazos]
@@ -168,7 +171,7 @@ def csv_da_curva(curva_obj: Curva) -> str:
 
 # --------------------------------------------------------------- formulário
 
-class ErroFormulario(ValueError):
+class ErroFormulario(ErroTraduzido, ValueError):
     pass
 
 
@@ -187,7 +190,7 @@ def _decimal(texto: str, campo: str, padrao: Optional[float] = None) -> float:
     texto = (texto or "").strip().replace("%", "").replace(" ", "").replace(" ", "")
     if not texto:
         if padrao is None:
-            raise ErroFormulario(f"preencha o campo {campo}")
+            raise ErroFormulario("preencha o campo {campo}", campo=campo)
         return padrao
 
     if "," in texto and "." in texto:
@@ -205,7 +208,8 @@ def _decimal(texto: str, campo: str, padrao: Optional[float] = None) -> float:
     try:
         return float(normalizado)
     except ValueError:
-        raise ErroFormulario(f"{campo}: “{texto}” não é um número") from None
+        raise ErroFormulario("{campo}: “{texto}” não é um número",
+                             campo=campo, texto=texto) from None
 
 
 def numero_do_form(valores, campo: str, rotulo: str, padrao=None) -> float:
@@ -228,7 +232,7 @@ def parametros_do_form(valores) -> ParametrosSwap:
     try:
         inicio_d, vencimento_d = para_data(inicio), para_data(vencimento)
     except ValueError as exc:
-        raise ErroFormulario(str(exc)) from None
+        raise ErroFormulario.de(exc) from None
 
     amortizacao = valores.get("amortizacao") or BULLET
     pesos = None
@@ -251,7 +255,7 @@ def parametros_do_form(valores) -> ParametrosSwap:
             sem_fluxo=sem_fluxo,
         )
     except ValueError as exc:
-        raise ErroFormulario(str(exc)) from None
+        raise ErroFormulario.de(exc) from None
 
 
 # ------------------------------------------------------------- Term SOFR ---
@@ -443,7 +447,7 @@ def curvas_da_moeda(moeda, data) -> dict:
                  if moeda.curva_preco in DERIVADA_POR_CODIGO
                  else curva(moeda.curva_preco, data))
     elif moeda.modo != MODO_MANUAL:
-        raise ValueError(f"modo de moeda desconhecido: {moeda.modo}")
+        raise ErroFormulario("modo de moeda desconhecido: {modo}", modo=moeda.modo)
 
     return {"di": di, "cupom": cupom, "preco": preco,
             "usadas": [c for c in (di, cupom, preco) if c is not None]}

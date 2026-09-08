@@ -73,9 +73,9 @@
             {{ t("Arraste o relatório da B3 aqui, ou clique para escolher") }}
           </span>
           <span class="text-xs leading-5 text-slate-500 font-geist">
-            {{ t("Ticker na coluna L, data na O e valor na P — .xlsx ou .csv. O valor vem como número (3,74231) e é convertido para taxa na importação.") }}
+            {{ t("Ticker na coluna L, data na O e valor na P — .xlsx, .csv ou .tsv. O valor vem como número (3,74231) e é convertido para taxa na importação.") }}
           </span>
-          <input class="hidden" id="arquivo-termo" name="arquivo" type="file" accept=".xlsx,.csv,.txt"/>
+          <input class="hidden" id="arquivo-termo" name="arquivo" type="file" accept=".xlsx,.csv,.tsv,.txt,.tab"/>
         </label>
         <p class="mt-3 hidden text-sm leading-6 font-geist" id="aviso-termo"></p>
       </div>

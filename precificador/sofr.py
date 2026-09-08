@@ -34,7 +34,7 @@ from datetime import date, datetime, timedelta
 from typing import Dict, List, Optional, Sequence
 
 from . import rede
-from .erros import ErroDeFonte
+from .erros import ErroDeDado, ErroDeFonte
 from .calendario import Calendario, calendario_sofr, para_data
 
 API = "https://markets.newyorkfed.org/api/rates/secured"
@@ -77,7 +77,8 @@ def _buscar(url: str, timeout: int = 30):
     try:
         return rede.obter_json(url, timeout=timeout)
     except rede.ErroRede as exc:
-        raise ErroFed(f"não foi possível obter a série do NY Fed: {exc}") from exc
+        raise ErroFed("não foi possível obter a série do NY Fed: {motivo}",
+                      motivo=str(exc)) from exc
 
 
 def serie_sofr(inicio, fim) -> List[FixingSOFR]:
@@ -163,9 +164,9 @@ def compor(fixings: Sequence[FixingSOFR], inicio, fim,
     cal = calendario or calendario_sofr()
     d0, d1 = para_data(inicio), para_data(fim)
     if d1 <= d0:
-        raise ValueError("o fim do período tem que ser posterior ao início")
+        raise ErroDeDado("o fim do período tem que ser posterior ao início")
     if lookback < 0 or shift < 0:
-        raise ValueError("lookback e shift não podem ser negativos")
+        raise ErroDeDado("lookback e shift não podem ser negativos")
 
     por_data = {f.data: f.taxa for f in fixings}
 
@@ -191,7 +192,7 @@ def compor(fixings: Sequence[FixingSOFR], inicio, fim,
 
     dias_corridos = (obs_fim - obs_inicio).days
     if dias_corridos <= 0:
-        raise ValueError("período sem dias corridos")
+        raise ErroDeDado("período sem dias corridos")
 
     return ResultadoSOFR(
         inicio=d0, fim=d1, lookback=lookback, shift=shift,
@@ -225,8 +226,8 @@ def _taxa_do_dia(por_data: Dict[date, float], dia: date, cal: Calendario) -> flo
         return por_data[dia]
     anteriores = [d for d in por_data if d < dia]
     if not anteriores:
-        raise ErroFed(f"não há fixing de SOFR publicado para {dia:%d/%m/%Y} "
-                      "nem antes dessa data — amplie o intervalo consultado")
+        raise ErroFed("não há fixing de SOFR publicado para {data} nem antes dessa "
+                      "data — amplie o intervalo consultado", data=f"{dia:%d/%m/%Y}")
     return por_data[max(anteriores)]
 
 
@@ -242,10 +243,11 @@ def compor_por_indice(indice: Dict[date, float], inicio, fim,
     d0, d1 = para_data(inicio), para_data(fim)
     if d0 not in indice or d1 not in indice:
         faltando = d0 if d0 not in indice else d1
-        raise ErroFed(f"o SOFR Index não tem publicação para {faltando:%d/%m/%Y}")
+        raise ErroFed("o SOFR Index não tem publicação para {data}",
+                      data=f"{faltando:%d/%m/%Y}")
     dias = (d1 - d0).days
     if dias <= 0:
-        raise ValueError("período sem dias corridos")
+        raise ErroDeDado("período sem dias corridos")
     return (indice[d1] / indice[d0] - 1.0) * base / dias
 
 

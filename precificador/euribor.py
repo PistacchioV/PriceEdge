@@ -41,7 +41,7 @@ from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
 
 from . import rede
-from .erros import ErroDeFonte
+from .erros import ErroDeDado, ErroDeFonte
 
 RELATORIO = "/tilastot/markkina-_ja_hallinnolliset_korot/euriborkorot_pv_chrt_en"
 RAIZ = "https://reports.suomenpankki.fi"
@@ -105,14 +105,14 @@ class Sessao:
         try:
             return self._rede.get(url, referer=referer)
         except rede.ErroRede as exc:
-            raise ErroEuribor(f"Banco da Finlândia: {exc}") from exc
+            raise ErroEuribor("Banco da Finlândia: {motivo}", motivo=str(exc)) from exc
 
     def _post(self, url: str, dados: dict) -> str:
         try:
             return self._rede.post(url, dados, referer=VISUALIZADOR).decode(
                 "utf-8", "replace")
         except rede.ErroRede as exc:
-            raise ErroEuribor(f"Banco da Finlândia: {exc}") from exc
+            raise ErroEuribor("Banco da Finlândia: {motivo}", motivo=str(exc)) from exc
 
     @staticmethod
     def _ler_campos(html: str) -> Dict[str, str]:
@@ -148,8 +148,8 @@ class Sessao:
         sessao = re.search(r"ReportSession=([a-z0-9]+)", resposta)
         controle = re.search(r"ControlID=([a-f0-9]+)", resposta)
         if not (sessao and controle):
-            raise ErroEuribor("o visualizador não devolveu uma sessão de relatório — "
-                              "a página pode ter mudado")
+            raise ErroEuribor("o visualizador não devolveu uma sessão de relatório — a "
+                              "página pode ter mudado")
 
         # o viewstate roda a cada postback; sem atualizar, o próximo falha
         novos = self._ler_campos(resposta)
@@ -170,7 +170,7 @@ def url_exportacao(formato: str = "csv") -> str:
     """URL de exportação da janela padrão, no formato pedido."""
     saida = FORMATOS.get(formato.lower())
     if not saida:
-        raise ValueError(f"formato não suportado: {formato}")
+        raise ErroDeDado("formato não suportado: {formato}", formato=formato)
     return f"{RAIZ}/WebForms/ReportViewerPage.aspx?report={RELATORIO}&output={saida}"
 
 
@@ -203,7 +203,8 @@ def janela_atual(timeout: int = 60) -> List[FixingEuribor]:
     try:
         bruto = rede.obter(EXPORTACAO_DIRETA, CABECALHO, timeout).decode("utf-8-sig", "replace")
     except rede.ErroRede as exc:
-        raise ErroEuribor(f"não foi possível obter o relatório: {exc}") from exc
+        raise ErroEuribor("não foi possível obter o relatório: {motivo}",
+                          motivo=str(exc)) from exc
     return parse_csv(bruto)
 
 
