@@ -192,3 +192,19 @@ html[data-tema="claro"] .campo-data-dia.escolhido { background: #0e7490; color: 
 html[data-tema="claro"] .campo-data-dia:disabled { color: #e2e8f0; }
 html[data-tema="claro"] .campo-data-rodape { border-top-color: rgba(15, 23, 42, 0.08); }
 html[data-tema="claro"] .campo-data-rodape button { color: #0e7490; }
+
+/* ---------------------------------------------------------------- seleção --
+   A paleta da seleção é escrita para o escuro: o `body` pede
+   `selection:text-cyan-100`, que é quase branco, sobre um fundo de cyan a 20%.
+   No claro isso é texto branco sobre fundo claro — o trecho selecionado
+   simplesmente some, e some justamente onde mais se seleciona: o campo de data,
+   que abre com o conteúdo inteiro marcado.
+
+   O `::selection` é uma regra à parte e não é alcançada pelos seletores de
+   classe acima, nem pelo de atributo: `selection:text-cyan-100` gera
+   `*::selection`, não `.text-cyan-100`. Por isso ela é escrita aqui inteira. */
+html[data-tema="claro"] ::selection,
+html[data-tema="claro"] *::selection {
+    background: rgba(14, 116, 144, 0.20) !important;
+    color: #0f172a !important;
+}

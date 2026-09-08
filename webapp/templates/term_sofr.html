@@ -42,6 +42,81 @@
       {% endif %}
     </form>
 
+
+    {# ---------------------------------------------------- curva a termo da CME #}
+    <div class="sem-reveal mt-8 rounded-[2rem] border border-white/[0.09] bg-slate-950/40 p-6 backdrop-blur-xl sm:p-8">
+      <div class="flex flex-wrap items-start justify-between gap-4">
+        <div class="max-w-2xl">
+          <p class="text-[11px] font-semibold uppercase tracking-widest text-cyan-200 font-geist">{{ t("Curva a termo") }}</p>
+          <h2 class="mt-3 text-2xl tracking-tight text-white font-jakarta font-medium">{{ t("Term SOFR de 1, 3, 6 e 12 meses") }}</h2>
+          <p class="mt-3 text-sm leading-6 text-slate-400 font-geist">
+            {{ t("Administrada pela CME e licenciada: não há fonte pública que permita redistribuí-la. Quem tem a licença tem o arquivo — arraste o relatório da B3 aqui e as cotações ficam guardadas nesta máquina.") }}
+          </p>
+        </div>
+        {% if termo.base %}
+        <span class="shrink-0 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs text-slate-300 font-geist">
+          {{ termo.base.dias | numero }} {{ t("dias na base") }} · {{ termo.base.inicio | data_br }} {{ t("a") }} {{ termo.base.fim | data_br }}
+        </span>
+        {% endif %}
+      </div>
+
+      <div class="mt-6" id="zona-termo"
+           data-url="{{ url_for('principal.term_sofr_importar') }}"
+           data-recarregar="{{ url_for('principal.term_sofr', referencia=referencia.isoformat(), meses=meses) }}">
+        <label for="arquivo-termo"
+               class="flex cursor-pointer flex-col items-center justify-center gap-3 rounded-[1.5rem] border border-dashed border-white/[0.18] bg-white/[0.02] px-6 py-10 text-center transition hover:border-cyan-200/40 hover:bg-cyan-400/[0.05]"
+               id="alvo-termo">
+          <span class="flex h-12 w-12 items-center justify-center rounded-2xl bg-cyan-300/10 text-cyan-200">
+            <iconify-icon height="24" icon="solar:file-download-linear" width="24"></iconify-icon>
+          </span>
+          <span class="text-sm font-medium text-slate-200 font-geist" id="rotulo-termo">
+            {{ t("Arraste o relatório da B3 aqui, ou clique para escolher") }}
+          </span>
+          <span class="text-xs leading-5 text-slate-500 font-geist">
+            {{ t("Ticker na coluna L, data na O e valor na P — .xlsx ou .csv. O valor vem como número (3,74231) e é convertido para taxa na importação.") }}
+          </span>
+          <input class="hidden" id="arquivo-termo" name="arquivo" type="file" accept=".xlsx,.csv,.txt"/>
+        </label>
+        <p class="mt-3 hidden text-sm leading-6 font-geist" id="aviso-termo"></p>
+      </div>
+
+      {% if not termo.vazio %}
+      <div class="mt-7 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {% for campo, rotulo, meses_do_campo in campos_termo %}
+        {% if campo in termo.taxas %}
+        {{ estatistica(t(rotulo), termo.taxas[campo] | percentual(5),
+                       termo.vigente | data_br, destaque=loop.first) }}
+        {% endif %}
+        {% endfor %}
+      </div>
+
+      <div class="mt-6 overflow-hidden rounded-2xl border border-white/[0.07]">
+        <div class="rolagem max-h-[24rem]">
+          <table class="tabela-dados">
+            <thead>
+              <tr>
+                <th>{{ t("Data") }}</th>
+                {% for campo, rotulo, _ in campos_termo %}{% if campo in termo.campos %}<th>{{ t(rotulo) }}</th>{% endif %}{% endfor %}
+              </tr>
+            </thead>
+            <tbody>
+            {% for d in termo.datas | reverse %}
+              <tr>
+                <td>{{ d | data_br }}</td>
+                {% for campo, _, _ in campos_termo %}{% if campo in termo.campos %}
+                <td class="{{ 'text-cyan-100' if loop.first else 'text-slate-300' }}">
+                  {{ (termo.tabela[d][campo] | percentual(5)) if campo in termo.tabela[d] else '—' }}
+                </td>
+                {% endif %}{% endfor %}
+              </tr>
+            {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      {% endif %}
+    </div>
+
     {% if erro %}{{ alerta(erro) }}{% endif %}
 
     {% if historico %}
@@ -143,7 +218,7 @@
     <div class="sem-reveal mt-6 rounded-2xl border border-amber-300/25 bg-amber-400/[0.07] px-5 py-4">
       <p class="text-xs font-medium text-amber-100 font-geist">{{ t("Sobre o Term SOFR da CME") }}</p>
       <p class="mt-2 text-xs leading-6 text-amber-100/80 font-geist">
-        {{ t("O Term SOFR forward-looking de 1, 3, 6 e 12 meses é administrado pela CME e licenciado — não há fonte pública que permita redistribuí-lo, então ele continua entrando digitado na tela de precificação. O que está aqui é a estrutura a termo realizada, que o Fed de Nova York publica aberta: o overnight e as médias compostas.") }}
+        {{ t("O que está nesta seção é a estrutura a termo realizada, que o Fed de Nova York publica aberta: o overnight e as médias compostas. A curva forward-looking da CME é licenciada e vem do arquivo que você importa acima — as duas convivem na mesma tela porque respondem a perguntas diferentes.") }}
       </p>
       <p class="mt-3 text-xs text-amber-100/60 font-geist">
         <a class="transition hover:text-amber-100" href="https://markets.newyorkfed.org/api/rates/secured/sofr/search.json" target="_blank" rel="noopener">markets.newyorkfed.org — SOFR</a>
@@ -152,4 +227,8 @@
     {% endif %}
   </div>
 </section>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/term-sofr-import.js') }}"></script>
 {% endblock %}

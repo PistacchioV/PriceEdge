@@ -1868,3 +1868,277 @@ def test_erro_da_fonte_nao_gasta_as_outras_rotas():
     finally:
         rede._rota_boa["nome"] = None
         os.environ.pop("PRECIFICADOR_PROXY", None)
+
+
+def test_tema_claro_define_a_cor_da_selecao():
+    """Texto selecionado tem que continuar legível no claro.
+
+    O ``body`` pede ``selection:text-cyan-100`` — quase branco —, o que no fundo
+    claro faz o trecho selecionado sumir. E some onde mais se seleciona: o campo
+    de data abre com o conteúdo inteiro marcado, de propósito, para quem for
+    digitar por cima.
+
+    ``::selection`` é regra à parte: ela não é alcançada pelos seletores de
+    classe do tema nem pelo de atributo, porque o Tailwind gera ``*::selection``
+    e não ``.text-cyan-100``. Por isso ela precisa de teste próprio.
+    """
+    from pathlib import Path
+    raiz = Path(__file__).resolve().parent.parent / "webapp"
+    corpo = (raiz / "templates" / "base.html").read_text(encoding="utf-8")
+    css = (raiz / "static" / "css" / "tema-claro.css").read_text(encoding="utf-8")
+
+    if "selection:" not in corpo:
+        pytest.skip("o body não pinta mais a seleção")
+    assert "::selection" in css, (
+        "o body pinta a seleção com a paleta escura e o tema claro não a "
+        "redefine — o texto selecionado some no fundo claro")
+    trecho = css[css.index("html[data-tema=\"claro\"] ::selection"):]
+    assert "color:" in trecho[:400] and "background:" in trecho[:400]
+
+
+# ------------------------------------- Term SOFR importado da planilha da B3
+
+def _planilha_de_teste(linhas):
+    """Monta um .xlsx mínimo, no formato que o relatório da B3 tem.
+
+    Feita à mão de propósito: o leitor é de biblioteca padrão, e um teste que
+    dependesse do openpyxl para produzir o arquivo estaria testando o openpyxl.
+    """
+    import io, zipfile
+
+    def letra(i):
+        nome = ""
+        i += 1
+        while i:
+            i, resto = divmod(i - 1, 26)
+            nome = chr(65 + resto) + nome
+        return nome
+
+    compartilhados, indice = [], {}
+
+    def guardar(texto):
+        if texto not in indice:
+            indice[texto] = len(compartilhados)
+            compartilhados.append(texto)
+        return indice[texto]
+
+    xml = []
+    for numero, celulas in enumerate(linhas, 1):
+        partes = []
+        for coluna, valor, eh_texto in celulas:
+            ref = f"{letra(coluna)}{numero}"
+            partes.append(f'<c r="{ref}" t="s"><v>{guardar(valor)}</v></c>' if eh_texto
+                          else f'<c r="{ref}"><v>{valor}</v></c>')
+        xml.append(f'<row r="{numero}">{"".join(partes)}</row>')
+
+    ns = 'xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"'
+    folha = (f'<?xml version="1.0"?><worksheet {ns}><sheetData>'
+             f'{"".join(xml)}</sheetData></worksheet>')
+    textos = "".join(f"<si><t>{t}</t></si>" for t in compartilhados)
+    tabela = f'<?xml version="1.0"?><sst {ns} count="{len(compartilhados)}">{textos}</sst>'
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as z:
+        z.writestr("xl/worksheets/sheet1.xml", folha)
+        z.writestr("xl/sharedStrings.xml", tabela)
+        z.writestr("[Content_Types].xml", "<Types/>")
+    return buffer.getvalue()
+
+
+L, O, P = 11, 14, 15          # as colunas do relatório: ticker, data, valor
+
+
+def _relatorio_b3(cotacoes, com_cabecalho=True):
+    linhas = [[(L, "TSFR1M", True)], []]          # o topo do arquivo tem lixo
+    if com_cabecalho:
+        linhas.append([(L, "Ticker", True), (O, "Data da Cotação", True),
+                       (P, "Valor da Cotacao", True)])
+    for ticker, dia, valor in cotacoes:
+        serial = (dia - date(1899, 12, 30)).days
+        linhas.append([(L, ticker, True), (O, str(serial), False),
+                       (P, f"{valor:.5f}", False)])
+    return _planilha_de_teste(linhas)
+
+
+@pytest.fixture
+def base_de_termo(tmp_path, monkeypatch):
+    """Aponta a base para um arquivo temporário — o teste não suja o repositório."""
+    from precificador import term_sofr
+    monkeypatch.setattr(term_sofr, "ARQUIVO", tmp_path / "termo.json")
+    return term_sofr
+
+
+def test_planilha_preserva_a_lacuna_entre_as_colunas():
+    """A célula guarda posição, não ordem — e o XML pula a vazia.
+
+    Este é o erro que não aparece: quem lê em sequência desalinha a planilha a
+    partir da primeira lacuna, a coluna P vira a N, e os números continuam
+    parecendo números. O relatório da B3 tem onze colunas vazias antes da L.
+    """
+    from precificador import planilha
+    dados = _relatorio_b3([("TSFR1M", date(2026, 9, 4), 3.74231)])
+    linhas = planilha.ler("b3.xlsx", dados)
+    dados_da_linha = linhas[-1]
+    assert planilha.celula(dados_da_linha, L) == "TSFR1M"
+    assert planilha.como_numero(planilha.celula(dados_da_linha, P)) == 3.74231
+    assert planilha.como_data(planilha.celula(dados_da_linha, O)) == date(2026, 9, 4)
+
+
+def test_planilha_le_data_como_serial_e_como_texto():
+    from precificador import planilha
+    assert planilha.como_data("46265") == date(2026, 8, 31)   # serial do Excel
+    assert planilha.como_data("04/09/2026") == date(2026, 9, 4)
+    assert planilha.como_data("2026-09-04") == date(2026, 9, 4)
+    assert planilha.como_data("") is None
+    # número fora da faixa de data não é data, é dado
+    assert planilha.como_data("3,74231") is None
+
+
+def test_importacao_converte_o_valor_da_planilha_em_taxa(base_de_termo):
+    """3,74231 na planilha é 3,74231% — logo 0,0374231 em decimal.
+
+    Guardar o número como veio faria a taxa entrar cem vezes maior em toda conta
+    que a usasse, e ela continuaria parecendo plausível na tela até alguém
+    conferir um MtM contra a contraparte.
+    """
+    term = base_de_termo
+    dados = _relatorio_b3([
+        ("TSFR1M", date(2026, 9, 4), 3.74231),
+        ("TSFR3M", date(2026, 9, 4), 3.81044),
+        ("TSFR6M", date(2026, 9, 4), 3.88510),
+        ("TSFR12M", date(2026, 9, 4), 3.95127),
+    ])
+    resultado = term.importar("b3.xlsx", dados)
+    assert resultado.aproveitadas == 4 and resultado.novas == 1
+
+    base = term.carregar()
+    assert base.taxa(1, date(2026, 9, 4)) == pytest.approx(0.0374231)
+    assert base.taxa(12, date(2026, 9, 4)) == pytest.approx(0.0395127)
+    # e o filtro da tela devolve o percentual de volta
+    from webapp.filtros import percentual
+    assert percentual(base.taxa(1, date(2026, 9, 4)), 5) == "3,74231%"
+
+
+def test_importacao_ignora_ticker_de_fora_e_diz_qual(base_de_termo):
+    """O relatório traz outros contratos; eles não podem virar Term SOFR."""
+    term = base_de_termo
+    dados = _relatorio_b3([
+        ("TSFR3M", date(2026, 9, 4), 3.81044),
+        ("DI1F27", date(2026, 9, 4), 13.42),
+        ("DOLX26", date(2026, 9, 4), 5425.0),
+    ])
+    resultado = term.importar("b3.xlsx", dados)
+    assert resultado.aproveitadas == 1
+    assert set(resultado.ignorados) == {"DI1F27", "DOLX26"}
+
+
+def test_arquivo_sem_term_sofr_diz_onde_procurou(base_de_termo):
+    """A mensagem tem que citar as colunas — é o que resolve outro relatório."""
+    term = base_de_termo
+    dados = _relatorio_b3([("DI1F27", date(2026, 9, 4), 13.42)])
+    with pytest.raises(term.ErroTermSOFR) as exc:
+        term.importar("b3.xlsx", dados)
+    texto = str(exc.value)
+    assert "coluna L" in texto and "TSFR1M" in texto
+
+
+def test_importacao_acha_as_colunas_pelo_cabecalho(base_de_termo):
+    """Um relatório que mude de forma continua sendo lido.
+
+    Sem cabeçalho ela cai nas posições fixas, que é o arquivo de hoje.
+    """
+    term = base_de_termo
+    com = _relatorio_b3([("TSFR3M", date(2026, 9, 4), 3.81)], com_cabecalho=True)
+    sem = _relatorio_b3([("TSFR3M", date(2026, 9, 3), 3.80)], com_cabecalho=False)
+    assert term.importar("com.xlsx", com).aproveitadas == 1
+    assert term.importar("sem.xlsx", sem).aproveitadas == 1
+    assert len(term.carregar().datas) == 2
+
+
+def test_reimportar_substitui_o_valor_antigo(base_de_termo):
+    """O arquivo mais novo é a correção do anterior."""
+    term = base_de_termo
+    term.importar("a.xlsx", _relatorio_b3([("TSFR3M", date(2026, 9, 4), 3.81)]))
+    resultado = term.importar("b.xlsx", _relatorio_b3([("TSFR3M", date(2026, 9, 4), 3.90)]))
+    assert resultado.atualizadas == 1 and resultado.novas == 0
+    assert term.carregar().taxa(3, date(2026, 9, 4)) == pytest.approx(0.0390)
+
+
+def test_taxa_vigente_vale_ate_a_proxima_publicacao(base_de_termo):
+    """Fim de semana não tem cotação; a que vale é a da última publicação."""
+    term = base_de_termo
+    term.importar("b3.xlsx", _relatorio_b3([("TSFR3M", date(2026, 9, 4), 3.81)]))
+    base = term.carregar()
+    vigente, _ = base.em(date(2026, 9, 6))          # domingo
+    assert vigente == date(2026, 9, 4)
+    assert base.taxa(3, date(2026, 9, 6)) == pytest.approx(0.0381)
+    # antes da primeira publicação não há o que valer
+    assert base.taxa(3, date(2026, 1, 5)) is None
+
+
+def test_dropzone_importa_pela_rota_e_a_tela_mostra(base_de_termo):
+    """O caminho inteiro: upload, gravação e leitura na tela."""
+    import io as _io
+    from webapp import create_app
+    app = create_app()
+    cliente = app.test_client()
+
+    dados = _relatorio_b3([("TSFR1M", date(2026, 9, 4), 3.74231),
+                           ("TSFR12M", date(2026, 9, 4), 3.95127)])
+    resposta = cliente.post("/term-sofr/importar",
+                            data={"arquivo": (_io.BytesIO(dados), "b3.xlsx")},
+                            content_type="multipart/form-data")
+    assert resposta.status_code == 200
+    corpo = resposta.get_json()
+    assert corpo["ok"] and corpo["aproveitadas"] == 2
+
+    api = cliente.get("/api/term-sofr/taxa?meses=12&data=2026-09-04").get_json()
+    assert api["taxa"] == pytest.approx(0.0395127)
+    assert api["percentual"] == pytest.approx(3.95127)
+
+    # sem arquivo é 400, e arquivo ilegível é 422 — nenhum dos dois é 500
+    assert cliente.post("/term-sofr/importar", data={},
+                        content_type="multipart/form-data").status_code == 400
+    ruim = cliente.post("/term-sofr/importar",
+                        data={"arquivo": (_io.BytesIO(b"nada"), "x.csv")},
+                        content_type="multipart/form-data")
+    assert ruim.status_code == 422 and "coluna L" in ruim.get_json()["erro"]
+
+
+def test_liquidacao_usa_o_term_sofr_importado_no_lugar_da_digitacao(base_de_termo):
+    """Salvar a cotação serve para não redigitar o número.
+
+    A taxa digitada continua vencendo — quem tem a confirmação na mão manda
+    nela. Sem ela, a base importada responde pelo fixing de D-2.
+    """
+    from precificador import liquidacao as L
+    term = base_de_termo
+    term.importar("b3.xlsx", _relatorio_b3([
+        ("TSFR12M", date(2026, 8, 27), 3.93987),
+        ("TSFR12M", date(2026, 8, 31), 3.95127),
+    ]))
+
+    ponta = L.Ponta(L.TERM_SOFR, taxa=0.015, tenor="12 month",
+                    moeda=L.SEM_CONVERSAO, convencao="act_360", regime="simples")
+    r = L.liquidar("2025-09-08", "2026-08-31", "2026-09-04", 10e6,
+                   ponta, L.Ponta(L.PRE, 0.14), reter_ir=False)
+    # 31/08 é segunda; D-2 úteis é 27/08, e é essa a cotação que vale
+    assert r.ativa.data_fixing == date(2026, 8, 27)
+    assert r.ativa.taxa_do_fixing == pytest.approx(0.0393987)
+
+    # com a taxa digitada, ela vence a base
+    digitada = L.Ponta(L.TERM_SOFR, taxa=0.015, taxa_indice=0.042,
+                       tenor="12 month", moeda=L.SEM_CONVERSAO,
+                       convencao="act_360", regime="simples")
+    r2 = L.liquidar("2025-09-08", "2026-08-31", "2026-09-04", 10e6,
+                    digitada, L.Ponta(L.PRE, 0.14), reter_ir=False)
+    assert r2.ativa.taxa_do_fixing == pytest.approx(0.042)
+
+
+def test_sem_base_importada_o_erro_ensina_o_caminho(base_de_termo):
+    from precificador import liquidacao as L
+    with pytest.raises(L.ErroLiquidacao) as exc:
+        L.liquidar("2025-09-08", "2026-08-31", "2026-09-04", 10e6,
+                   L.Ponta(L.TERM_SOFR, taxa=0.015, moeda=L.SEM_CONVERSAO),
+                   L.Ponta(L.PRE, 0.14))
+    texto = str(exc.value)
+    assert "licenciado" in texto and "importe o relatório da B3" in texto

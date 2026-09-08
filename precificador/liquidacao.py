@@ -75,7 +75,7 @@ from dataclasses import dataclass, field
 from datetime import date, timedelta
 from typing import List, Optional
 
-from . import cambio, cdi, contagem, euribor, sofr
+from . import cambio, cdi, contagem, euribor, sofr, term_sofr
 from .calendario import (Calendario, calendario_anbima, calendario_sofr,
                          para_data)
 from .renda_fixa import aliquota_ir
@@ -184,6 +184,10 @@ MOEDAS_AUTOMATICAS = {m.codigo for m in MOEDAS if m.automatica}
 
 TENORES_EURIBOR = list(euribor.TENORES)
 TENORES_TERM_SOFR = ["1 month", "3 month", "6 month", "12 month"]
+
+# o tenor da tela em meses, que é como a base importada indexa os prazos
+_MESES_DO_TENOR = {"1 week": 1, "1 month": 1, "3 month": 3,
+                   "6 month": 6, "12 month": 12}
 
 # indexadores de taxa a termo: a taxa é fixada antes do fluxo começar, e a data
 # em que ela foi lida é campo próprio. O padrão do mercado é D-2 úteis do
@@ -507,9 +511,18 @@ def liquidar_ponta(ponta: Ponta, nocional: float, inicio, fim,
             # e não pode ser redistribuído, então ele entra digitado
             quando, taxa_indice = _fixing_euribor(ponta.tenor, quando)
         elif ponta.taxa_indice is None:
-            raise ErroLiquidacao(
-                "o Term SOFR é licenciado pela CME e não tem fonte pública — "
-                "informe a taxa do fixing")
+            # a taxa digitada continua vencendo; sem ela, procura no que o
+            # usuário importou da B3 na tela de Term SOFR
+            importada = term_sofr.carregar()
+            achada = (None if importada.vazio
+                      else importada.taxa(_MESES_DO_TENOR.get(ponta.tenor, 3), quando))
+            if achada is None:
+                raise ErroLiquidacao(
+                    "o Term SOFR é licenciado pela CME e não tem fonte pública. "
+                    "Informe a taxa do fixing, ou importe o relatório da B3 na "
+                    "tela de Term SOFR.")
+            taxa_indice = achada
+            quando = importada.em(quando)[0] or quando
         else:
             taxa_indice = ponta.taxa_indice
         indice = capitalizar(taxa_indice + ponta.taxa)

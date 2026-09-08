@@ -1518,6 +1518,37 @@ TRADUCOES: Dict[str, str] = {
     "Abertura": "Open",
     "Volume": "Volume",
 
+
+    # ------------------------------------- Term SOFR importado da planilha B3
+    "Curva a termo": "Forward curve",
+    "Term SOFR de 1, 3, 6 e 12 meses": "Term SOFR at 1, 3, 6 and 12 months",
+    "Administrada pela CME e licenciada: não há fonte pública que permita "
+    "redistribuí-la. Quem tem a licença tem o arquivo — arraste o relatório da B3 "
+    "aqui e as cotações ficam guardadas nesta máquina.":
+        "Administered by CME and licensed: no public source allows redistributing "
+        "it. Whoever holds the licence holds the file — drop the B3 report here and "
+        "the quotes are kept on this machine.",
+    "Arraste o relatório da B3 aqui, ou clique para escolher":
+        "Drop the B3 report here, or click to choose one",
+    "Ticker na coluna L, data na O e valor na P — .xlsx ou .csv. O valor vem como "
+    "número (3,74231) e é convertido para taxa na importação.":
+        "Ticker in column L, date in O and value in P — .xlsx or .csv. The value "
+        "arrives as a plain number (3.74231) and is converted to a rate on import.",
+    "dias na base": "days on file",
+    "Term SOFR 1 mês": "Term SOFR 1 month",
+    "Term SOFR 3 meses": "Term SOFR 3 months",
+    "Term SOFR 6 meses": "Term SOFR 6 months",
+    "Term SOFR 12 meses": "Term SOFR 12 months",
+    "O que está nesta seção é a estrutura a termo realizada, que o Fed de Nova York "
+    "publica aberta: o overnight e as médias compostas. A curva forward-looking da "
+    "CME é licenciada e vem do arquivo que você importa acima — as duas convivem na "
+    "mesma tela porque respondem a perguntas diferentes.":
+        "This section holds the realised term structure, which the New York Fed "
+        "publishes openly: the overnight rate and the compounded averages. CME's "
+        "forward-looking curve is licensed and comes from the file you import "
+        "above — the two live on the same screen because they answer different "
+        "questions.",
+
 }
 
 

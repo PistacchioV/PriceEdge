@@ -10,7 +10,8 @@ from flask import (Blueprint, Response, jsonify, redirect, render_template,
                    request, url_for)
 
 from precificador import (b3, cambio, cdi, contagem, cotacoes, euribor, fontes,
-                          glossario, liquidacao, montador, rede, renda_fixa, sofr)
+                          glossario, liquidacao, montador, rede, renda_fixa, sofr,
+                          term_sofr as term)
 from precificador.calendario import (CALENDARIOS_DISPONIVEIS, CONVENCOES_DIA_UTIL,
                                      MODIFIED_FOLLOWING, calendario_anbima,
                                      obter_calendario, para_data, soma_meses)
@@ -585,6 +586,10 @@ def term_sofr():
         "referencia": referencia, "meses": meses, "hoje": hoje.isoformat(),
         "vigente": None, "taxas_vigentes": {}, "base": None,
         "series": [], "escala_x": [], "escala_y": [],
+        # a curva a termo da CME é importada, não baixada — ver a rota abaixo
+        "termo": _termo_importado(referencia, meses),
+        "campos_termo": term.CAMPOS,
+        "importacao": request.args.get("importado"),
     }
     try:
         completo = sofr.carregar_historico()
@@ -602,6 +607,76 @@ def term_sofr():
     except sofr.ErroFed as exc:
         contexto["erro"] = str(exc)
     return render_template("term_sofr.html", **contexto)
+
+
+def _termo_importado(referencia, meses: int) -> dict:
+    """A curva a termo da CME que o usuário importou, se importou.
+
+    Ela não desce de fonte nenhuma: é licenciada, e quem tem a licença traz o
+    arquivo. Base vazia não é erro — é o estado normal de quem ainda não
+    importou, e a tela mostra a área de arrastar em vez de um aviso.
+    """
+    base = term.carregar()
+    if base.vazio:
+        return {"vazio": True}
+    vigente, taxas = base.em(referencia)
+    recorte = base.janela(soma_meses(para_data(referencia), -meses), referencia)
+    return {
+        "vazio": False, "vigente": vigente, "taxas": taxas,
+        "tabela": recorte.por_data(), "datas": recorte.datas,
+        "campos": recorte.campos,
+        "base": {"inicio": base.inicio, "fim": base.fim, "dias": len(base.datas)},
+    }
+
+
+@bp.route("/term-sofr/importar", methods=["POST"])
+def term_sofr_importar():
+    """Recebe o relatório da B3 e guarda as cotações de Term SOFR."""
+    arquivo = request.files.get("arquivo")
+    if arquivo is None or not (arquivo.filename or "").strip():
+        return jsonify({"erro": "nenhum arquivo enviado"}), 400
+    try:
+        resultado = term.importar(arquivo.filename, arquivo.read())
+    except (term.ErroTermSOFR, ValueError) as exc:
+        return jsonify({"erro": str(exc)}), 422
+
+    return jsonify({
+        "ok": True,
+        "arquivo": arquivo.filename,
+        "linhas_lidas": resultado.linhas_lidas,
+        "aproveitadas": resultado.aproveitadas,
+        "novas": resultado.novas,
+        "atualizadas": resultado.atualizadas,
+        "inicio": resultado.inicio.isoformat() if resultado.inicio else None,
+        "fim": resultado.fim.isoformat() if resultado.fim else None,
+        "tickers": resultado.tickers,
+        "ignorados": resultado.ignorados,
+    })
+
+
+@bp.route("/api/term-sofr/taxa")
+def api_term_sofr_taxa():
+    """A taxa importada de um prazo numa data — para a tela de liquidação.
+
+    É o que tira o Term SOFR da digitação: quem importou o arquivo não precisa
+    copiar o número de volta na mão.
+    """
+    base = term.carregar()
+    if base.vazio:
+        return jsonify({"erro": "nenhuma cotação de Term SOFR importada"}), 404
+    try:
+        meses = int(request.args.get("meses") or 3)
+    except ValueError:
+        return jsonify({"erro": "prazo inválido"}), 400
+    quando = request.args.get("data") or date.today().isoformat()
+    vigente, _ = base.em(quando)
+    taxa = base.taxa(meses, quando)
+    if taxa is None:
+        return jsonify({"erro": f"não há Term SOFR de {meses} meses até "
+                                f"{para_data(quando):%d/%m/%Y}"}), 404
+    return jsonify({"taxa": taxa, "percentual": taxa * 100.0,
+                    "data": vigente.isoformat() if vigente else None,
+                    "meses": meses})
 
 
 @bp.route("/term-sofr/csv")

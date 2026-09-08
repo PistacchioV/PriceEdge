@@ -10,3 +10,8 @@ __pycache__/
 # Flask
 instance/
 *.log
+
+# Cotacoes de Term SOFR importadas da planilha da B3. A serie e licenciada da
+# CME: quem tem a licenca importa o proprio arquivo, e ele nao acompanha o
+# repositorio. As outras bases (SOFR do NY Fed, EURIBOR) sao publicas e ficam.
+precificador/dados/term_sofr_b3.json
