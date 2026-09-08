@@ -1777,3 +1777,94 @@ def test_excesso_de_consultas_vira_frase_propria(monkeypatch):
     texto = str(exc.value)
     assert "429" in texto and "alguns minutos" in texto
     assert "proxy" not in texto.lower()
+
+
+def test_nenhuma_fonte_abre_a_propria_conexao():
+    """Toda chamada externa passa por ``rede`` — sem exceção.
+
+    No ambiente corporativo a saída tem duas exigências: SSO Kerberos e o proxy.
+    As duas moram em ``rede``, e uma fonte que monta o próprio ``build_opener``
+    escapa das duas — funciona na máquina de casa e falha na do banco, com uma
+    mensagem que não menciona nem autenticação nem proxy.
+
+    Foi o que aconteceu com o EURIBOR: ele precisa de cookie e viewstate para
+    atravessar o formulário do Banco da Finlândia, montou o próprio opener por
+    causa disso, e virou a única fonte fora do Kerberos. A resposta não foi
+    proibir sessão com estado — foi pôr uma em ``rede``.
+    """
+    from pathlib import Path
+    import re
+
+    pacote = Path(__file__).resolve().parent.parent / "precificador"
+    proibido = re.compile(r"\b(urlopen|build_opener|requests\.(get|post|Session)"
+                          r"|http\.client|socket\.create_connection)\b")
+    fora = []
+    for arquivo in sorted(pacote.glob("*.py")):
+        if arquivo.name == "rede.py":       # é ele quem tem o direito
+            continue
+        for numero, linha in enumerate(arquivo.read_text(encoding="utf-8").splitlines(), 1):
+            if linha.lstrip().startswith("#"):
+                continue
+            if proibido.search(linha):
+                fora.append(f"{arquivo.name}:{numero}: {linha.strip()[:70]}")
+
+    assert not fora, ("estes trechos abrem conexão sem passar por rede.py, e por "
+                      f"isso ficam sem SSO e sem proxy: {fora}")
+
+
+def test_cadeia_de_saidas_tenta_proxy_antes_da_conexao_direta():
+    """A ordem importa: numa rede que só sai por proxy, a direta nunca responde.
+
+    E a memória importa tanto quanto: sem ela toda chamada pagaria de novo o
+    timeout das rotas mortas que vêm antes da que funciona.
+    """
+    import os
+    from precificador import rede
+
+    anterior = os.environ.get("PRECIFICADOR_PROXY")
+    os.environ["PRECIFICADOR_PROXY"] = "http://proxy.exemplo:9443"
+    rede._rota_boa["nome"] = None
+    try:
+        nomes = [nome for nome, _ in rede.rotas_de_saida()]
+        assert nomes[0].startswith("proxy http://proxy.exemplo:9443")
+        assert nomes[-1] == "conexão direta"
+
+        # a rota memorizada passa para a frente da fila
+        rede._rota_boa["nome"] = "conexão direta"
+        assert rede.rotas_de_saida()[0][0] == "conexão direta"
+    finally:
+        rede._rota_boa["nome"] = None
+        if anterior is None:
+            os.environ.pop("PRECIFICADOR_PROXY", None)
+        else:
+            os.environ["PRECIFICADOR_PROXY"] = anterior
+
+
+def test_erro_da_fonte_nao_gasta_as_outras_rotas():
+    """Um 404 da fonte não melhora trocando de proxy.
+
+    Só o erro de REDE tenta a próxima saída. O 407 e os 502/504 são a exceção
+    que confirma a regra: eles vêm do proxy, não da fonte.
+    """
+    from precificador import rede
+    assert issubclass(rede._ErroDeRota, rede.ErroRede)
+
+    chamadas = []
+
+    def falso(url, cabecalho, timeout, proxies):
+        chamadas.append(proxies)
+        raise rede.ErroRede("HTTP 404 em " + url, status=404)
+
+    import os
+    os.environ["PRECIFICADOR_PROXY"] = "http://proxy.exemplo:9443"
+    rede._rota_boa["nome"] = None
+    try:
+        with __import__("unittest.mock", fromlist=["patch"]).patch.object(
+                rede, "_obter_por", falso):
+            with pytest.raises(rede.ErroRede) as exc:
+                rede.obter("https://exemplo.com/x")
+        assert exc.value.status == 404
+        assert len(chamadas) == 1, "o erro da fonte gastou outra rota"
+    finally:
+        rede._rota_boa["nome"] = None
+        os.environ.pop("PRECIFICADOR_PROXY", None)

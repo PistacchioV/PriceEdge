@@ -5,10 +5,14 @@ pytest>=8.0
 waitress>=3.0
 
 # --- rede corporativa: proxy, CA interna e SSO Kerberos ----------------------
-# Nada aqui e necessario nas fontes publicas: sem estes pacotes o codigo cai no
-# urllib, que tambem respeita PRECIFICADOR_PROXY. Instale-os quando a saida
-# exigir Negotiate (PRECIFICADOR_SSO=1) ou CA interna.
+# No ambiente do JP toda chamada externa sai autenticada: PRECIFICADOR_SSO=1
+# liga o Negotiate e estes pacotes passam a ser obrigatorios. Sem eles a sessao
+# iria SEM autenticacao e o ADFS responderia 401 -- por isso a camada de rede
+# levanta erro em vez de degradar em silencio.
 #
-# requests>=2.31
-# requests-negotiate-sspi>=0.5 ; sys_platform == "win32"
-# requests-kerberos>=0.14      ; sys_platform != "win32"
+# Fora do banco eles nao sao necessarios: com o SSO desligado o codigo cai no
+# urllib, que tambem respeita PRECIFICADOR_PROXY. O marcador de plataforma
+# resolve isso sozinho -- o sspi so instala no Windows.
+requests>=2.31
+requests-negotiate-sspi>=0.5 ; sys_platform == "win32"
+requests-kerberos>=0.14      ; sys_platform != "win32"

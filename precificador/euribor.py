@@ -88,10 +88,11 @@ class Sessao:
     """Uma sessão do visualizador SSRS, com cookies e viewstate."""
 
     def __init__(self, timeout: int = 90):
+        # a porta é a do pacote: Kerberos quando ligado, e a cadeia de saídas
+        # (proxy, proxy do sistema, direta) em qualquer caso. Enquanto esta
+        # sessão montava o próprio opener, ela era a única fonte fora dos dois
+        self._rede = rede.SessaoNavegada(timeout=timeout, cabecalho=CABECALHO)
         self.timeout = timeout
-        self._jar = http.cookiejar.CookieJar()
-        self._op = urllib.request.build_opener(
-            urllib.request.HTTPCookieProcessor(self._jar))
         self._campos: Dict[str, str] = {}
         self._html = ""
 
@@ -101,30 +102,17 @@ class Sessao:
         return self
 
     def _get(self, url: str, referer: Optional[str] = None) -> bytes:
-        cabecalho = dict(CABECALHO)
-        if referer:
-            cabecalho["Referer"] = referer
         try:
-            return self._op.open(urllib.request.Request(url, headers=cabecalho),
-                                 timeout=self.timeout).read()
-        except urllib.error.HTTPError as exc:
-            raise ErroEuribor(f"o Banco da Finlândia respondeu HTTP {exc.code}") from exc
-        except OSError as exc:
-            raise ErroEuribor(f"falha de conexão com o Banco da Finlândia: {exc}") from exc
+            return self._rede.get(url, referer=referer)
+        except rede.ErroRede as exc:
+            raise ErroEuribor(f"Banco da Finlândia: {exc}") from exc
 
     def _post(self, url: str, dados: dict) -> str:
-        cabecalho = dict(CABECALHO)
-        cabecalho["Content-Type"] = "application/x-www-form-urlencoded"
-        cabecalho["Referer"] = VISUALIZADOR
-        corpo = urllib.parse.urlencode(dados).encode()
         try:
-            return self._op.open(
-                urllib.request.Request(url, data=corpo, headers=cabecalho),
-                timeout=self.timeout).read().decode("utf-8", "replace")
-        except urllib.error.HTTPError as exc:
-            raise ErroEuribor(f"o Banco da Finlândia respondeu HTTP {exc.code}") from exc
-        except OSError as exc:
-            raise ErroEuribor(f"falha de conexão com o Banco da Finlândia: {exc}") from exc
+            return self._rede.post(url, dados, referer=VISUALIZADOR).decode(
+                "utf-8", "replace")
+        except rede.ErroRede as exc:
+            raise ErroEuribor(f"Banco da Finlândia: {exc}") from exc
 
     @staticmethod
     def _ler_campos(html: str) -> Dict[str, str]:

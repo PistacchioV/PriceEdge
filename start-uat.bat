@@ -200,6 +200,17 @@ if not defined PYTHONPYCACHEPREFIX set "PYTHONPYCACHEPREFIX=%LOCALAPPDATA%\Price
 
 set "PRECIFICADOR_PORTA=%PORTA%"
 set "PRECIFICADOR_HOST=127.0.0.1"
+REM ---------------------------------------------------------------------------
+REM  SSO Kerberos. No ambiente do JP toda chamada externa sai autenticada, e o
+REM  Negotiate depende do requests-negotiate-sspi (ja nos requirements, com
+REM  marcador de plataforma). Ligado, a camada de rede LEVANTA erro se o pacote
+REM  faltar, em vez de sair sem autenticacao e receber um 401 do ADFS -- que
+REM  chega a tela como uma URL de duas mil letras sem mencionar pacote nenhum.
+REM
+REM  Para desligar numa maquina fora do banco:  set PRICEEDGE_SEM_SSO=1
+REM ---------------------------------------------------------------------------
+if not defined PRICEEDGE_SEM_SSO set "PRECIFICADOR_SSO=1"
+if defined PRICEEDGE_SEM_SSO echo [INFO] SSO Kerberos desligado por PRICEEDGE_SEM_SSO.
 set "PRECIFICADOR_DEBUG=1"
 
 REM abre o navegador numa janela propria, que espera o servidor responder

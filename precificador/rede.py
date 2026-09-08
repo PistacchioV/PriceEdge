@@ -43,12 +43,15 @@ Duas lições que vieram do OTC Tracker e que economizam horas de depuração:
 
 from __future__ import annotations
 
+import http.cookiejar
 import json
 import os
 import urllib.error
+import urllib.parse
 import urllib.request
-from .erros import ErroDeFonte
 from typing import Optional
+
+from .erros import ErroDeFonte
 
 try:                                    # Windows corporativo
     from requests_negotiate_sspi import HttpNegotiateAuth   # type: ignore
@@ -86,7 +89,14 @@ class ErroRede(ErroDeFonte):
     def __init__(self, mensagem: str, status: Optional[int] = None) -> None:
         super().__init__(mensagem)
         self.status = status
-    """Falha de rede ou de autenticação numa chamada externa."""
+
+
+class _ErroDeRota(ErroRede):
+    """Falha de REDE numa saída — vale tentar a próxima.
+
+    Separada de propósito: um HTTP 404 da fonte não melhora trocando de proxy,
+    e insistir gastaria as três tentativas para chegar à mesma resposta.
+    """
 
 
 def proxy_configurado() -> Optional[str]:
@@ -99,6 +109,56 @@ def proxy_configurado() -> Optional[str]:
         if valor:
             return valor
     return None
+
+
+_rota_boa = {"nome": None}
+
+
+def rotas_de_saida() -> list:
+    """As saídas a tentar, em ordem, sem repetir endereço.
+
+    Uma máquina que sai direto e outra que só sai por proxy usam o mesmo
+    código: a diferença é qual delas responde primeiro. A ordem é
+
+        1. o proxy configurado (``PRECIFICADOR_PROXY`` ou as variáveis padrão);
+        2. o proxy do sistema (no Windows, as Opções de Internet);
+        3. conexão direta.
+
+    A primeira que responder fica memorizada no processo e passa a ser tentada
+    antes das outras — sem isso, toda chamada pagaria de novo o timeout das
+    rotas mortas que vêm antes dela.
+
+    A rota 1 é exatamente o que a camada fazia antes de existir cadeia, então
+    o comportamento de quem já funciona não muda: o que era falha final virou
+    primeira tentativa.
+    """
+    rotas, vistos = [], set()
+
+    def juntar(nome, proxies):
+        chave = (proxies.get("http", ""), proxies.get("https", ""))
+        if chave in vistos:
+            return
+        vistos.add(chave)
+        rotas.append((nome, proxies))
+
+    proxy = proxy_configurado()
+    if proxy:
+        juntar(f"proxy {proxy}", {"http": proxy, "https": proxy})
+    try:
+        sistema = urllib.request.getproxies()
+    except Exception:                                    # noqa: BLE001
+        sistema = {}
+    alvo = sistema.get("https") or sistema.get("http")
+    if alvo:
+        juntar(f"proxy do sistema {alvo}",
+               {"http": sistema.get("http") or alvo,
+                "https": sistema.get("https") or alvo})
+    juntar("conexão direta", {})
+
+    escolhida = _rota_boa.get("nome")
+    if escolhida:
+        rotas.sort(key=lambda r: 0 if r[0] == escolhida else 1)
+    return rotas
 
 
 def proxy_do_windows() -> dict:
@@ -188,8 +248,12 @@ def diagnostico() -> dict:
     }
 
 
-def sessao():
-    """Sessão ``requests`` com SSO, ou ``None`` quando o caminho é o urllib."""
+def sessao(proxies: Optional[dict] = None):
+    """Sessão ``requests`` com SSO, ou ``None`` quando o caminho é o urllib.
+
+    ``proxies`` vem da cadeia de saídas. Passar ``None`` mantém o que a camada
+    fazia antes: o proxy configurado, ou nenhum.
+    """
     if not sso_ligado():
         return None
     if requests is None:
@@ -204,13 +268,17 @@ def sessao():
     ca = os.getenv("PRECIFICADOR_CA_BUNDLE")
     if ca:
         s.verify = ca                    # o certifi não traz a raiz interna
-    proxy = proxy_configurado()
-    if proxy:
+    if proxies is None:
+        proxy = proxy_configurado()
+        proxies = {"http": proxy, "https": proxy} if proxy else {}
+    if proxies:
         # NO_PROXY tem que continuar valendo: com trust_env desligado o requests
         # ignora a variável, e um host interno que deveria ir direto passaria a
         # sair pelo proxy — que costuma recusá-lo.
-        s.proxies = {"http": proxy, "https": proxy,
-                     "no_proxy": os.getenv("NO_PROXY") or os.getenv("no_proxy") or ""}
+        s.proxies = dict(proxies,
+                         no_proxy=os.getenv("NO_PROXY") or os.getenv("no_proxy") or "")
+    else:
+        s.proxies = {}
 
     if HttpNegotiateAuth is not None:
         s.auth = HttpNegotiateAuth()
@@ -226,40 +294,68 @@ def sessao():
 
 
 def obter(url: str, cabecalho: Optional[dict] = None, timeout: int = TIMEOUT) -> bytes:
-    """GET que devolve bytes, pelo caminho de SSO ou pelo urllib."""
+    """GET que devolve bytes, tentando as saídas em ordem.
+
+    Erro de **rede** tenta a próxima saída; erro **da fonte** para na hora,
+    porque aí a rota funcionou e o problema é o outro lado. O 407 e os 502/504
+    são a exceção: eles vêm do proxy, não da fonte, e por isso contam como rota
+    ruim — parar neles esconderia a saída que funciona.
+    """
     cabecalho = dict(cabecalho or {})
     cabecalho.setdefault("User-Agent", UA_NAVEGADOR if sso_ligado() else UA_PADRAO)
     cabecalho.setdefault("Accept", "*/*")
 
-    s = sessao()
+    tentativas = []
+    for nome, proxies in rotas_de_saida():
+        try:
+            conteudo = _obter_por(url, cabecalho, timeout, proxies)
+        except _ErroDeRota as exc:
+            tentativas.append(f"{nome}: {exc}")
+            continue
+        if _rota_boa.get("nome") != nome:
+            _rota_boa["nome"] = nome
+        return conteudo
+
+    # a rota memorizada caiu junto com as outras: esquece, para a próxima
+    # chamada recomeçar pela ordem natural em vez de insistir na que morreu
+    _rota_boa["nome"] = None
+    detalhe = "; ".join(tentativas) or "nenhuma saída disponível"
+    raise ErroRede(f"falha de conexão com {url}: {detalhe}{_pista_de_proxy(detalhe)}")
+
+
+def _obter_por(url: str, cabecalho: dict, timeout: int, proxies: dict) -> bytes:
+    """Uma tentativa por uma saída."""
+    s = sessao(proxies)
     if s is not None:
         try:
             resposta = s.get(url, headers=cabecalho, timeout=timeout)
-            codigo = resposta.status_code
-            resposta.raise_for_status()
-            return resposta.content
         except Exception as exc:         # requests tem sua própria árvore de erros
-            codigo = locals().get("codigo")
-            raise ErroRede(f"falha na chamada autenticada a {url}: {exc}",
-                           status=codigo if codigo and codigo >= 400 else None) from exc
+            raise _ErroDeRota(str(exc)) from exc
+        codigo = resposta.status_code
+        if codigo in (407, 502, 504):
+            raise _ErroDeRota(f"o proxy respondeu HTTP {codigo}")
+        if codigo >= 400:
+            raise ErroRede(f"HTTP {codigo} em {url}", status=codigo)
+        return resposta.content
 
     abridor = urllib.request.urlopen
-    proxy = proxy_configurado()
-    if proxy:
+    if proxies:
         abridor = urllib.request.build_opener(
-            urllib.request.ProxyHandler({"http": proxy, "https": proxy})).open
+            urllib.request.ProxyHandler(dict(proxies))).open
 
     try:
         with abridor(urllib.request.Request(url, headers=cabecalho),
                      timeout=timeout) as r:
             return r.read()
     except urllib.error.HTTPError as exc:
+        if exc.code in (407, 502, 504):
+            raise _ErroDeRota(f"o proxy respondeu HTTP {exc.code}") from exc
         raise ErroRede(f"HTTP {exc.code} em {url}", status=exc.code) from exc
     except OSError as exc:
-        raise ErroRede(f"falha de conexão com {url}: {exc}{_pista_de_proxy(exc)}") from exc
+        raise _ErroDeRota(str(exc)) from exc
 
 
-def _pista_de_proxy(exc: Exception) -> str:
+def _pista_de_proxy(exc) -> str:
     """Explica o timeout de saída quando ele tem cara de bloqueio de rede.
 
     ``WinError 10060`` e ``timed out`` não são erro do servidor remoto: são a
@@ -282,6 +378,96 @@ def _pista_de_proxy(exc: Exception) -> str:
         dica += (f". O Windows usa um arquivo PAC ({janela['AutoConfigURL']}), "
                  "que não diz o endereço direto: abra-o e leia de lá o proxy")
     return dica
+
+
+class SessaoNavegada:
+    """GET e POST com cookies, pela mesma porta autenticada do pacote.
+
+    Existe porque uma fonte precisa de **sessão**: o visualizador do Banco da
+    Finlândia é um formulário ASP.NET que só entrega o CSV depois de duas idas
+    com cookie e viewstate. Enquanto ela montava o próprio ``build_opener``, ela
+    era a única fonte fora do Kerberos e fora do proxy — no ambiente
+    corporativo, a única que ia falhar sem que a mensagem dissesse por quê.
+
+    A rota é escolhida na **primeira** chamada e fica: trocar de saída no meio
+    de uma sessão jogaria fora o cookie e o viewstate, e o formulário voltaria
+    ao começo sem dizer nada.
+    """
+
+    def __init__(self, timeout: int = TIMEOUT, cabecalho: Optional[dict] = None):
+        self.timeout = timeout
+        self.cabecalho = dict(cabecalho or {})
+        self.cabecalho.setdefault(
+            "User-Agent", UA_NAVEGADOR if sso_ligado() else UA_PADRAO)
+        self._porta = None          # a rota escolhida, depois da 1ª chamada
+        self._nome = None
+
+    def _abrir(self, proxies: dict):
+        """A porta de uma rota: sessão do requests com SSO, ou opener do urllib."""
+        s = sessao(proxies)
+        if s is not None:
+            return s                # o requests já guarda cookie sozinho
+        manipuladores = [urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar())]
+        if proxies:
+            manipuladores.append(urllib.request.ProxyHandler(dict(proxies)))
+        return urllib.request.build_opener(*manipuladores)
+
+    def _uma(self, porta, url, dados, cabecalho):
+        if hasattr(porta, "get"):                       # requests.Session
+            try:
+                if dados is None:
+                    r = porta.get(url, headers=cabecalho, timeout=self.timeout)
+                else:
+                    r = porta.post(url, data=dados, headers=cabecalho,
+                                   timeout=self.timeout)
+            except Exception as exc:                    # noqa: BLE001
+                raise _ErroDeRota(str(exc)) from exc
+            if r.status_code in (407, 502, 504):
+                raise _ErroDeRota(f"o proxy respondeu HTTP {r.status_code}")
+            if r.status_code >= 400:
+                raise ErroRede(f"HTTP {r.status_code} em {url}", status=r.status_code)
+            return r.content
+
+        corpo = urllib.parse.urlencode(dados).encode() if dados is not None else None
+        pedido = urllib.request.Request(url, data=corpo, headers=cabecalho)
+        try:
+            with porta.open(pedido, timeout=self.timeout) as r:
+                return r.read()
+        except urllib.error.HTTPError as exc:
+            if exc.code in (407, 502, 504):
+                raise _ErroDeRota(f"o proxy respondeu HTTP {exc.code}") from exc
+            raise ErroRede(f"HTTP {exc.code} em {url}", status=exc.code) from exc
+        except OSError as exc:
+            raise _ErroDeRota(str(exc)) from exc
+
+    def _pedir(self, url: str, dados: Optional[dict], extra: Optional[dict]) -> bytes:
+        cabecalho = dict(self.cabecalho)
+        cabecalho.update(extra or {})
+        if dados is not None:
+            cabecalho.setdefault("Content-Type", "application/x-www-form-urlencoded")
+
+        if self._porta is not None:
+            return self._uma(self._porta, url, dados, cabecalho)
+
+        tentativas = []
+        for nome, proxies in rotas_de_saida():
+            porta = self._abrir(proxies)
+            try:
+                conteudo = self._uma(porta, url, dados, cabecalho)
+            except _ErroDeRota as exc:
+                tentativas.append(f"{nome}: {exc}")
+                continue
+            self._porta, self._nome = porta, nome
+            _rota_boa["nome"] = nome
+            return conteudo
+        detalhe = "; ".join(tentativas) or "nenhuma saída disponível"
+        raise ErroRede(f"falha de conexão com {url}: {detalhe}{_pista_de_proxy(detalhe)}")
+
+    def get(self, url: str, referer: Optional[str] = None) -> bytes:
+        return self._pedir(url, None, {"Referer": referer} if referer else None)
+
+    def post(self, url: str, dados: dict, referer: Optional[str] = None) -> bytes:
+        return self._pedir(url, dados, {"Referer": referer} if referer else None)
 
 
 def obter_json(url: str, cabecalho: Optional[dict] = None, timeout: int = TIMEOUT):
