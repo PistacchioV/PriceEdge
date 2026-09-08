@@ -1388,6 +1388,50 @@ def test_nenhum_select_da_aplicacao_chega_vazio_a_tela():
                         f"variável no contexto da rota: {vazios}")
 
 
+def test_toda_tela_abre_na_mesma_data_de_referencia_hoje():
+    """A data de referência é uma só em toda a aplicação, e é hoje.
+
+    Metade das telas nascia em D-1 (``data_sugerida``, cautela com o horário de
+    publicação da B3) e a outra metade em ``date.today()``. Quem monta a curva
+    na tela de NDF e confere na de extração vê duas datas diferentes, e a
+    diferença de um dia útil não aparece como erro: aparece como taxa diferente.
+
+    A varredura é por nome de campo e não por lista de telas, para que uma tela
+    nova com ``data_curva`` entre no teste sozinha.
+    """
+    from datetime import date
+    from webapp import create_app, servicos
+
+    hoje = date.today().isoformat()
+    assert servicos.data_sugerida() == date.today()
+
+    # os campos que significam "a data em que o mercado é lido". `inicio`,
+    # `fim` e `vencimento` ficam de fora de propósito: são prazos de uma
+    # operação, não a referência da curva.
+    DE_REFERENCIA = {"data", "data_curva", "referencia"}
+
+    app = create_app()
+    fora, vistos = [], set()
+    paginas = ["/", "/curvas", "/precificar", "/ndf", "/sofr", "/term-sofr",
+               "/euribor", "/renda-fixa", "/liquidacao", "/interpolar",
+               "/cotacoes", "/ni-pro-rata"]
+    for rota in paginas:
+        html = app.test_client().get(rota).data.decode()
+        for campo in re.findall(r"<input[^>]*type=\"date\"[^>]*>", html):
+            nome = re.search(r'name="([^"]+)"', campo)
+            if not nome or nome.group(1) not in DE_REFERENCIA:
+                continue
+            valor = re.search(r'value="([^"]*)"', campo)
+            vistos.add(nome.group(1))
+            if not valor or valor.group(1) != hoje:
+                fora.append(f"{rota}: {nome.group(1)}="
+                            f"{valor.group(1) if valor else '(sem value)'}")
+
+    assert not fora, f"estas telas não abrem na data de hoje ({hoje}): {fora}"
+    # e o teste está mesmo olhando para alguma coisa
+    assert vistos == DE_REFERENCIA, f"campos de referência não varridos: {DE_REFERENCIA - vistos}"
+
+
 def test_sofr_composto_acumula_os_fixings_do_proprio_periodo():
     """A ponta de SOFR composto olha para trás — sem data de fixação.
 

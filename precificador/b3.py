@@ -27,7 +27,7 @@ from __future__ import annotations
 import base64
 import json
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date
 from typing import List
 
 from . import rede
@@ -175,11 +175,3 @@ def extrair_todas(data) -> dict:
         except ErroB3:
             resultado[codigo] = []
     return resultado
-
-
-def ultimo_dia_util(referencia=None) -> date:
-    """Dia útil anterior à referência (a B3 publica a curva no fim do pregão)."""
-    d = para_data(referencia) if referencia else date.today()
-    cal = calendario_anbima()
-    d = d - timedelta(days=1)
-    return cal.ajusta(d, seguinte=False)

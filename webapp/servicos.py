@@ -90,8 +90,20 @@ def curva_derivada(codigo: str, data) -> Curva:
 
 
 def data_sugerida() -> date:
-    """Último dia útil com arquivo provável na B3 (D-1)."""
-    return b3.ultimo_dia_util()
+    """A data de referência que toda tela abre: **hoje**.
+
+    Era D-1, por cautela com o horário de publicação da B3 — e o resultado é
+    que metade das telas nascia num dia e a outra metade em outro. Quem monta
+    uma curva na tela de NDF e confere na de extração precisa dos dois lados
+    falando da mesma data; a diferença de um dia útil não aparece como erro,
+    aparece como taxa diferente.
+
+    A B3 publica o arquivo do dia durante o pregão, então hoje costuma existir.
+    Quando não existe — fim de semana, feriado, ou antes da publicação — a
+    própria extração diz por extenso qual é o problema, e a data continua
+    editável em todas as telas.
+    """
+    return date.today()
 
 
 def datas_uteis_recentes(quantidade: int = 25) -> List[date]:
