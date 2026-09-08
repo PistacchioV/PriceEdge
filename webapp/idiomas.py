@@ -1705,6 +1705,18 @@ TRADUCOES: Dict[str, str] = {
     "dois entram digitados.":
         "the central bank does not publish {moeda}: enter the {qual} currency "
         "fixing. Both are typed in.",
+    "{taxa}% do CDI não é um percentual de mercado — ele é cotado em 98, 100, "
+    "105. Se {taxa}% é o spread sobre o CDI, escolha \"CDI + spread realizado\": "
+    "em \"% do CDI\" ele daria um fator de quase 1, e a conta sairia baixa sem "
+    "acusar nada.":
+        "{taxa}% of CDI is not a market percentage — it is quoted at 98, 100, 105. "
+        "If {taxa}% is the spread over CDI, pick \"CDI + realised spread\": under "
+        "\"% of CDI\" it would give a factor of almost 1, and the settlement would "
+        "come out low without flagging anything.",
+    "um spread de {taxa}% ao ano sobre o CDI não existe. Se {taxa} é o percentual "
+    "do CDI, escolha \"CDI — % do CDI realizado\".":
+        "a spread of {taxa}% a year over CDI does not exist. If {taxa} is the "
+        "percentage of CDI, pick \"CDI — % of realised CDI\".",
     "uma ponta de moeda pura precisa de uma moeda estrangeira — em reais ela não "
     "renderia nada":
         "a pure currency leg needs a foreign currency — in reais it would earn "

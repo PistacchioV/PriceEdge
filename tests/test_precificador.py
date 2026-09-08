@@ -2213,6 +2213,111 @@ def test_swap_de_dolar_contra_pre_bate_com_a_planilha_da_mesa():
     assert r.ativa.juros == pytest.approx(4_856_849.86, abs=0.01)
 
 
+def _serie_de_cdi_constante(inicio, fim, taxa: float):
+    """Fixings de CDI numa taxa só, um por dia útil de ``inicio`` a ``fim``.
+
+    O acumulado de um período fechado não muda mais, mas buscá-lo no BCB faria
+    o teste depender de rede. Uma taxa constante calibrada reproduz o fator
+    exato do período, que é o que a conta usa.
+    """
+    from precificador import cdi
+    from precificador.calendario import obter_calendario, para_data
+
+    cal = obter_calendario("ANBIMA")
+    dia, fim = para_data(inicio), para_data(fim)
+    dias = []
+    while dia < fim:
+        dias.append(cdi.FixingCDI(dia, taxa))
+        dia = cal.workday(dia, 1)
+    return dias
+
+
+def test_swap_de_cdi_mais_spread_bate_com_a_planilha_da_mesa(monkeypatch):
+    """Cetip 26E04610365, conferido linha a linha contra a planilha da mesa.
+
+    VBR 15.210.000, fluxo de 05/06 a 08/09/2026 (66 dias úteis, 95 corridos),
+    vencimento em 07/06/2027 — fluxo intermediário. Ativa DI a 100% mais spread
+    de 0,8000% em Exp/252; passiva dólar com cupom de 5,3882% em Lin360 e PTAX
+    de 5,07000 para 5,12530.
+
+    O que a planilha traz e este teste fixa:
+
+        acumulado do DI      14,100640%   (fator 1,035151750 em 66 dias úteis)
+        fator do spread      1,002089081  = 1,008 ^ (66/252)
+        juros do ativo       R$ 567.549,98
+        juros do passivo     R$ 218.627,79
+        resultado final      R$ 348.922,19
+
+    O spread é **multiplicativo**: o produto diário do DI é a definição do
+    índice, e a contagem escolhida capitaliza só o spread. Somar 0,8% à taxa
+    diária daria outro número, e é essa a escolha que o teste prende.
+    """
+    from precificador import cdi, liquidacao as L
+
+    # calibrada para reproduzir o fator do período: 1,14100640 ^ (66/252)
+    monkeypatch.setattr(
+        cdi, "serie",
+        lambda inicio, fim, *a, **k: _serie_de_cdi_constante(inicio, fim, 0.14100639586478247))
+
+    r = L.liquidar("2026-05-28", "2026-06-05", "2026-09-08", 15_210_000.0,
+                   L.Ponta(L.CDI_SPREAD, 0.008),
+                   L.Ponta(L.CAMBIO, taxa=0.053882, moeda="USD",
+                           ptax_inicial=5.07000, ptax_final=5.12530,
+                           convencao="act_360", regime="simples"),
+                   vencimento="2027-06-07", reter_ir=False)
+
+    assert (r.dias_uteis, r.dias_corridos) == (66, 95)
+    assert r.ativa.fator_do_indice == pytest.approx(1.035151750 * 1.002089081, abs=1e-9)
+    assert r.ativa.juros == pytest.approx(567_549.98, abs=0.01)
+    assert r.passiva.fator_do_indice == pytest.approx(1.014218861, abs=1e-9)
+    assert r.passiva.juros == pytest.approx(218_627.79, abs=0.01)
+
+    # fluxo intermediário: só o diferencial de juros liquida, e o câmbio sobre o
+    # principal fica para o próximo período
+    assert r.base_de_ajuste == L.BASE_JUROS
+    assert r.ajuste_bruto == pytest.approx(348_922.19, abs=0.02)
+    assert r.passiva.efeito_cambial == pytest.approx(165_900.00, abs=0.02)
+
+
+def test_o_percentual_e_o_spread_do_cdi_nao_se_confundem(monkeypatch):
+    """As duas leituras do CDI usam o mesmo campo, e trocá-las não dá erro: dá
+    um número plausível.
+
+    "CDI + 0,8%" digitado em "% do CDI" vira 0,8% do CDI — um fator de 1,0003
+    que passa por juros de fim de trimestre. Na planilha da mesa os dois vêm em
+    colunas separadas ("% Indicador" e "Spread"), e é na tradução para uma
+    escolha só que a mão erra. Sem a guarda, o swap acima liquidaria R$ 4.205,48
+    em vez de R$ 567.549,98.
+    """
+    from precificador import cdi, liquidacao as L
+
+    monkeypatch.setattr(
+        cdi, "serie",
+        lambda inicio, fim, *a, **k: _serie_de_cdi_constante(inicio, fim, 0.141))
+
+    def liquidar(ponta):
+        return L.liquidar("2026-05-28", "2026-06-05", "2026-09-08", 15_210_000.0,
+                          ponta, L.Ponta(L.PRE, 0.14), reter_ir=False)
+
+    # o spread na opção de percentual
+    with pytest.raises(L.ErroLiquidacao) as erro:
+        liquidar(L.Ponta(L.CDI_PERCENTUAL, 0.008))
+    assert "CDI + spread" in str(erro.value)
+
+    # e o percentual na opção de spread
+    with pytest.raises(L.ErroLiquidacao) as erro:
+        liquidar(L.Ponta(L.CDI_SPREAD, 1.0))
+    assert "% do CDI" in str(erro.value)
+
+    # o que é de mercado continua passando, dos dois lados da faixa
+    for ponta in (L.Ponta(L.CDI_PERCENTUAL, 1.05), L.Ponta(L.CDI_PERCENTUAL, 0.5),
+                  L.Ponta(L.CDI_SPREAD, 0.008), L.Ponta(L.CDI_SPREAD, 0.05)):
+        assert liquidar(ponta).ativa.fator_do_indice > 1.0
+
+    # a faixa vazia entre as duas é deliberada: nada de mercado cai nela
+    assert L.MINIMO_PERCENTUAL_CDI < L.MAXIMO_SPREAD_CDI
+
+
 def test_as_duas_convencoes_de_ajuste_diferem_pelo_cambio_do_principal():
     """A diferença entre netar valor futuro e netar só juros tem nome e tamanho.
 

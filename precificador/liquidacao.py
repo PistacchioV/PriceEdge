@@ -138,6 +138,18 @@ SEM_TAXA = {MOEDA, FATOR}
 # teto de lookback e observation shift, o mesmo da tela de SOFR Index
 LIMITE_DEFASAGEM = 15
 
+# As duas leituras do CDI usam o mesmo campo de taxa, e trocá-las dá um número
+# plausível em vez de um erro: "CDI + 0,8%" digitado em "% do CDI" vira 0,8% do
+# CDI, um fator de 1,0003 que passa por juros de fim de trimestre. Numa planilha
+# da mesa os dois vêm em colunas separadas — "% Indicador 100%" e "Spread
+# 0,8000%" — e a tradução para uma escolha só é onde a mão erra.
+#
+# Os limites separam as duas faixas com folga: percentual de CDI é cotado em 98,
+# 100, 105; spread sobre CDI vive entre 0,1% e 5% ao ano. Nada de mercado cai
+# entre 10% e 50%, então o que cair ali é digitação na opção errada.
+MINIMO_PERCENTUAL_CDI = 0.10        # 10% do CDI
+MAXIMO_SPREAD_CDI = 0.50            # 50% ao ano
+
 # A contagem e o regime de cada indexador, como o mercado os usa. Não são
 # trava: a tela troca os dois ao escolher o índice e deixa mudar depois, porque
 # quem liquida contra a confirmação de uma contraparte precisa reproduzir a
@@ -530,6 +542,18 @@ def liquidar_ponta(ponta: Ponta, nocional: float, inicio, fim,
 
     if ponta.indexador in (CDI_PERCENTUAL, CDI_SPREAD):
         com_spread = ponta.indexador == CDI_SPREAD
+        if not com_spread and 0 < ponta.taxa < MINIMO_PERCENTUAL_CDI:
+            raise ErroLiquidacao(
+                "{taxa}% do CDI não é um percentual de mercado — ele é cotado em "
+                "98, 100, 105. Se {taxa}% é o spread sobre o CDI, escolha "
+                "\"CDI + spread realizado\": em \"% do CDI\" ele daria um fator de "
+                "quase 1, e a conta sairia baixa sem acusar nada.",
+                taxa=_numero(ponta.taxa * 100, 4))
+        if com_spread and ponta.taxa >= MAXIMO_SPREAD_CDI:
+            raise ErroLiquidacao(
+                "um spread de {taxa}% ao ano sobre o CDI não existe. Se {taxa} é o "
+                "percentual do CDI, escolha \"CDI — % do CDI realizado\".",
+                taxa=_numero(ponta.taxa * 100, 4))
         acumulado = cdi.acumular(cdi.serie(d0, d1), d0, d1, valor=1.0,
                                  percentual=1.0 if com_spread else ponta.taxa,
                                  arredondar=arredondar_di)
