@@ -2474,3 +2474,89 @@ def test_juros_da_ponta_cambial_nao_carregam_a_variacao_da_moeda():
     # numa ponta em reais não há o que separar
     assert r.ativa.efeito_cambial == 0.0
     assert r.ativa.juros == pytest.approx(r.ativa.valor - r.ativa.nocional)
+
+
+def test_cada_indexador_traz_a_convencao_que_o_mercado_usa():
+    """O padrão errado é um erro silencioso: a conta fecha e o número está errado.
+
+    Um cupom cambial em DU/252 composto, em vez de ACT/360 simples, dá um fator
+    plausível — e num swap de 150 MM a diferença passa dos milhares. Escolher o
+    índice já traz a régua dele; os dois campos continuam editáveis, porque quem
+    liquida contra a confirmação de uma contraparte precisa reproduzir a régua
+    **dela**.
+    """
+    from precificador import contagem, liquidacao as L
+
+    local = (contagem.DU_252, contagem.COMPOSTO)
+    dolar = (contagem.ACT_360, contagem.SIMPLES)
+    esperado = {
+        L.PRE: local, L.CDI_PERCENTUAL: local, L.CDI_SPREAD: local,
+        L.IPCA: local, L.EQUITY: local, L.FATOR: local,
+        L.MOEDA: dolar, L.CAMBIO: dolar, L.SOFR: dolar,
+        L.TERM_SOFR: dolar, L.EURIBOR: dolar,
+    }
+    for indexador, par in esperado.items():
+        assert L.convencao_padrao(indexador) == par, indexador
+
+    # todo indexador da tela tem entrada: um novo sem convenção cairia no
+    # padrão local sem ninguém decidir isso
+    for codigo, _ in L.INDEXADORES:
+        assert codigo in L.CONVENCAO_PADRAO, codigo
+
+
+def test_a_tela_nasce_com_a_convencao_de_cada_ponta():
+    """O formulário inicial já vem certo, sem depender do JavaScript.
+
+    O script troca os campos quando o índice muda; a primeira carga é do
+    servidor. Sem isso, quem não roda JavaScript veria o padrão de uma ponta
+    aplicado à outra.
+    """
+    import html as _html
+    import json as _json
+    from webapp import create_app
+    from precificador import contagem, liquidacao as L
+
+    pagina = create_app().test_client().get("/liquidacao").data.decode()
+
+    def selecionado(campo):
+        bloco = re.search(r'id="' + campo + r'"[^>]*>(.*?)</select>', pagina, re.S)
+        achado = re.search(r'value="([^"]+)"\s+selected', bloco.group(1))
+        return achado.group(1)
+
+    # a tela abre com pré contra CDI: as duas em DU/252 composto
+    assert selecionado("ativa_convencao") == contagem.DU_252
+    assert selecionado("ativa_regime") == contagem.COMPOSTO
+    assert selecionado("passiva_convencao") == contagem.DU_252
+
+    # e a tabela inteira viaja para o script, para ele não ter a sua própria
+    tabela = re.search(r'data-convencoes="([^"]+)"', pagina)
+    enviada = _json.loads(_html.unescape(tabela.group(1)))
+    assert enviada[L.CAMBIO] == [contagem.ACT_360, contagem.SIMPLES]
+    assert enviada[L.CDI_PERCENTUAL] == [contagem.DU_252, contagem.COMPOSTO]
+    assert set(enviada) == {c for c, _ in L.INDEXADORES}
+
+
+def test_o_script_da_liquidacao_encontra_os_campos_que_procura():
+    """Um ``getElementById`` com id errado falha calado — e some da tela nada.
+
+    O script troca a contagem e o regime ao mudar o índice, procurando os campos
+    por id. Renomear um campo no template deixaria o script apontando para o
+    vazio: nenhum erro, nenhum aviso, e o padrão simplesmente não vem mais.
+    """
+    from pathlib import Path
+    from webapp import create_app
+
+    raiz = Path(__file__).resolve().parent.parent / "webapp"
+    script = (raiz / "static" / "js" / "liquidacao.js").read_text(encoding="utf-8")
+    pagina = create_app().test_client().get("/liquidacao").data.decode()
+
+    # os sufixos que o script monta como `lado + "_algo"`
+    sufixos = set(re.findall(r'getElementById\(lado \+ "(_\w+)"\)', script))
+    assert sufixos, "o script deixou de procurar campos por id — teste desatualizado"
+    for lado in ("ativa", "passiva"):
+        for sufixo in sufixos:
+            assert f'id="{lado}{sufixo}"' in pagina, f"{lado}{sufixo} não está na tela"
+
+    # e os atributos de dados que ele lê
+    for atributo in re.findall(r'getAttribute\("(data-[\w-]+)"\)', script):
+        assert atributo in pagina, f"{atributo} não está na tela"

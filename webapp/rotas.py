@@ -966,6 +966,8 @@ def liquidacao_swap():
         "moedas": liquidacao.MOEDAS,
         "bases_amortizacao": liquidacao.BASES_AMORTIZACAO,
         "bases_ajuste": liquidacao.BASES_DE_AJUSTE,
+        "convencao_padrao": {codigo: list(liquidacao.convencao_padrao(codigo))
+                             for codigo, _ in liquidacao.INDEXADORES},
         "tenores_euribor": liquidacao.TENORES_EURIBOR,
         "calendarios": CALENDARIOS,
         "hoje": hoje.isoformat(),
@@ -977,9 +979,10 @@ def liquidacao_swap():
         "passiva": dict(indexador=liquidacao.CDI_PERCENTUAL, taxa="100"),
     }
     for lado, escolhas in padrao.items():
+        convencao, regime = liquidacao.convencao_padrao(escolhas["indexador"])
         contexto["form"].update({
             f"{lado}_indexador": escolhas["indexador"], f"{lado}_taxa": escolhas["taxa"],
-            f"{lado}_convencao": contagem.DU_252, f"{lado}_regime": contagem.COMPOSTO,
+            f"{lado}_convencao": convencao, f"{lado}_regime": regime,
             f"{lado}_moeda": liquidacao.SEM_CONVERSAO,
             f"{lado}_ptax_inicial": "", f"{lado}_ptax_final": "",
             f"{lado}_ni_inicial": "", f"{lado}_ni_final": "", f"{lado}_fator": "",

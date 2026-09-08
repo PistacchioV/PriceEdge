@@ -12,7 +12,8 @@
   <div class="grid gap-4">
     <div>
       <label class="rotulo" for="{{ lado }}_indexador">{{ t("Indexador") }}</label>
-      <select class="campo campo-indexador" id="{{ lado }}_indexador" name="{{ lado }}_indexador" data-lado="{{ lado }}">
+      <select class="campo campo-indexador" id="{{ lado }}_indexador" name="{{ lado }}_indexador"
+              data-lado="{{ lado }}" data-convencoes="{{ convencao_padrao | tojson | forceescape }}">
         {% for valor, nome in indexadores %}
         <option value="{{ valor }}" {{ 'selected' if f[lado ~ '_indexador'] == valor }}>{{ t(nome) }}</option>
         {% endfor %}

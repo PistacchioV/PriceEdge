@@ -138,6 +138,40 @@ SEM_TAXA = {MOEDA, FATOR}
 # teto de lookback e observation shift, o mesmo da tela de SOFR Index
 LIMITE_DEFASAGEM = 15
 
+# A contagem e o regime de cada indexador, como o mercado os usa. Não são
+# trava: a tela troca os dois ao escolher o índice e deixa mudar depois, porque
+# quem liquida contra a confirmação de uma contraparte precisa reproduzir a
+# régua dela — mas o padrão errado é um erro silencioso, e o certo evita a
+# maioria das digitações.
+#
+#   DU/252 composto   o padrão brasileiro: DI, pré em real, IPCA. O juro
+#                     capitaliza em dia útil, que é como o CDI é publicado.
+#   ACT/360 simples   o padrão do mercado em dólar e em euro: cupom cambial,
+#                     SOFR, Term SOFR e EURIBOR. Taxa a termo não capitaliza
+#                     dentro do próprio período — ela é linear sobre ele.
+#
+# Equity fica em DU/252 composto porque a ponta é quanto: ela liquida em reais,
+# contra uma perna de funding local, e o spread segue a régua de cá.
+CONVENCAO_PADRAO = {
+    PRE:            (contagem.DU_252, contagem.COMPOSTO),
+    CDI_PERCENTUAL: (contagem.DU_252, contagem.COMPOSTO),
+    CDI_SPREAD:     (contagem.DU_252, contagem.COMPOSTO),
+    IPCA:           (contagem.DU_252, contagem.COMPOSTO),
+    EQUITY:         (contagem.DU_252, contagem.COMPOSTO),
+    FATOR:          (contagem.DU_252, contagem.COMPOSTO),
+    MOEDA:          (contagem.ACT_360, contagem.SIMPLES),
+    CAMBIO:         (contagem.ACT_360, contagem.SIMPLES),
+    SOFR:           (contagem.ACT_360, contagem.SIMPLES),
+    TERM_SOFR:      (contagem.ACT_360, contagem.SIMPLES),
+    EURIBOR:        (contagem.ACT_360, contagem.SIMPLES),
+}
+
+
+def convencao_padrao(indexador: str) -> tuple:
+    """``(contagem, regime)`` que o mercado usa naquele índice."""
+    return CONVENCAO_PADRAO.get(indexador,
+                                (contagem.DU_252, contagem.COMPOSTO))
+
 # a moeda de cada índice, quando ele tem uma só
 MOEDA_DO_INDEXADOR = {SOFR: "USD", TERM_SOFR: "USD", EURIBOR: "EUR"}
 
