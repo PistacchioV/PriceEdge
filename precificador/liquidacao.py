@@ -383,7 +383,16 @@ def _fator_cambial(ponta: Ponta, d0: date, d1: date) -> tuple:
     fixings entram digitados ou vêm da PTAX do dia útil anterior a cada data.
     """
     if ponta.indexador not in COM_MOEDA or ponta.moeda == SEM_CONVERSAO:
-        # inclui o caso quanto: a moeda está declarada, mas não converte
+        # Preencher os dois fixings e deixar a moeda em Real é ambíguo, e as duas
+        # leituras dão números diferentes: ou a conversão foi esquecida, ou os
+        # fixings sobraram de outra tentativa. Descartar em silêncio é o pior dos
+        # dois — o ajuste sai sem a variação cambial e nada na tela diz isso.
+        if (ponta.moeda == SEM_CONVERSAO and ponta.indexador in COM_MOEDA
+                and ponta.ptax_inicial is not None and ponta.ptax_final is not None):
+            raise ErroLiquidacao(
+                "os dois fixings de moeda estão preenchidos, mas a moeda do fluxo "
+                "está em Real, que não converte. Escolha a moeda estrangeira para "
+                "a variação cambial entrar na conta, ou apague os fixings.")
         return 1.0, None, None, None, None
     p0, p1 = ponta.ptax_inicial, ponta.ptax_final
     data0 = data1 = None

@@ -2142,3 +2142,91 @@ def test_sem_base_importada_o_erro_ensina_o_caminho(base_de_termo):
                    L.Ponta(L.PRE, 0.14))
     texto = str(exc.value)
     assert "licenciado" in texto and "importe o relatório da B3" in texto
+
+
+def test_fixing_preenchido_com_moeda_em_real_nao_passa_calado():
+    """Descartar os dois fixings em silêncio produz um número plausível e errado.
+
+    Foi assim que um swap de dólar × pré saiu R$ 3.066.683,19 em vez de incluir
+    a variação cambial: os fixings estavam preenchidos, a moeda tinha ficado em
+    Real, e nada na tela dizia que a conversão não aconteceu. As duas leituras
+    possíveis dão números diferentes, então a saída não é escolher uma — é
+    perguntar.
+    """
+    from precificador import liquidacao as L
+    ativa = L.Ponta(L.PRE, 0.1328, convencao="act_360", regime="composto")
+
+    with pytest.raises(L.ErroLiquidacao) as exc:
+        L.liquidar("2025-11-18", "2026-05-21", "2026-08-21", 150e6, ativa,
+                   L.Ponta(L.CAMBIO, taxa=0.0467, moeda=L.SEM_CONVERSAO,
+                           ptax_inicial=5.34, ptax_final=5.1862,
+                           convencao="act_360", regime="simples"))
+    assert "não converte" in str(exc.value)
+
+    # sem fixings, o Real segue valendo: é o fluxo que já está em reais
+    r = L.liquidar("2025-11-18", "2026-05-21", "2026-08-21", 150e6, ativa,
+                   L.Ponta(L.CAMBIO, taxa=0.0467, moeda=L.SEM_CONVERSAO,
+                           convencao="act_360", regime="simples"), reter_ir=False)
+    assert r.passiva.fator_cambial == 1.0
+
+
+def test_swap_de_dolar_contra_pre_bate_com_a_planilha_da_mesa():
+    """Um caso real, conferido linha a linha contra a planilha de liquidação.
+
+    Cetip 25K02830262: VBR 150 MM, fluxo de 21/05 a 21/08/2026 (92 dias
+    corridos), ativa pré 13,28% em Exp/360, passiva dólar com cupom 4,67% em
+    Lin360 e PTAX de 5,34000 para 5,18620.
+
+    Os dois fatores batem na nona casa. O que **não** bate é o que cada convenção
+    faz com a variação cambial do principal — ver o teste seguinte.
+    """
+    from precificador import liquidacao as L
+    r = L.liquidar("2025-11-18", "2026-05-21", "2026-08-21", 150e6,
+                   L.Ponta(L.PRE, 0.1328, convencao="act_360", regime="composto"),
+                   L.Ponta(L.CAMBIO, taxa=0.0467, moeda="USD",
+                           ptax_inicial=5.34000, ptax_final=5.18620,
+                           convencao="act_360", regime="simples"),
+                   reter_ir=False)
+
+    assert r.dias_corridos == 92
+    assert r.ativa.fracao_de_ano == pytest.approx(92 / 360)
+    # os fatores da planilha, na nona casa
+    assert r.ativa.fator == pytest.approx(1.032378999, abs=1e-9)
+    assert r.passiva.fator_do_indice == pytest.approx(1.011934444, abs=1e-9)
+    assert r.passiva.fator_cambial == pytest.approx(5.18620 / 5.34000)
+    # e os juros do ativo, que a planilha traz como 4.856.849,86
+    assert r.ativa.juros == pytest.approx(4_856_849.86, abs=0.01)
+
+
+def test_as_duas_convencoes_de_ajuste_diferem_pelo_cambio_do_principal():
+    """A diferença entre netar valor futuro e netar só juros tem nome e tamanho.
+
+    O PriceEdge neta o **valor futuro** das duas pontas, que é a liquidação de um
+    cross-currency: o principal da ponta em dólar vale menos em reais quando o
+    dólar cai, e essa perda faz parte do ajuste.
+
+    A planilha da mesa neta só os **juros**, aplicando o câmbio apenas à base de
+    cálculo deles. A distância entre as duas é exatamente o efeito cambial sobre
+    o principal — nem mais nem menos, e é isso que este teste fixa.
+    """
+    from precificador import liquidacao as L
+    nocional, variacao = 150e6, 5.18620 / 5.34000
+    r = L.liquidar("2025-11-18", "2026-05-21", "2026-08-21", nocional,
+                   L.Ponta(L.PRE, 0.1328, convencao="act_360", regime="composto"),
+                   L.Ponta(L.CAMBIO, taxa=0.0467, moeda="USD",
+                           ptax_inicial=5.34000, ptax_final=5.18620,
+                           convencao="act_360", regime="simples"),
+                   reter_ir=False)
+
+    # o que a planilha faz: juros do ativo menos juros sobre o principal ajustado
+    juros_ativo = nocional * (r.ativa.fator - 1)
+    juros_passivo = nocional * variacao * (r.passiva.fator_do_indice - 1)
+    so_juros = juros_ativo - juros_passivo
+    assert so_juros == pytest.approx(3_118_242.68, abs=0.02)
+
+    # o que o PriceEdge faz
+    assert r.ajuste_bruto == pytest.approx(7_438_467.39, abs=0.02)
+
+    # e a distância é o câmbio sobre o principal, exatamente
+    assert r.ajuste_bruto - so_juros == pytest.approx(nocional * (1 - variacao),
+                                                      abs=0.02)
