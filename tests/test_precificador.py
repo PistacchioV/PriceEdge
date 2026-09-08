@@ -2560,3 +2560,92 @@ def test_o_script_da_liquidacao_encontra_os_campos_que_procura():
     # e os atributos de dados que ele lê
     for atributo in re.findall(r'getAttribute\("(data-[\w-]+)"\)', script):
         assert atributo in pagina, f"{atributo} não está na tela"
+
+    # os ids literais — `inicio`, `calendario` — pelo mesmo motivo
+    for campo in re.findall(r'getElementById\("(\w+)"\)', script):
+        assert f'id="{campo}"' in pagina, f"{campo} não está na tela"
+
+
+def test_a_data_do_fixing_nasce_em_d_menos_2_do_inicio():
+    """O campo chega preenchido, e com o mesmo dia que o motor usaria.
+
+    Antes ele nascia vazio e o D-2 ficava implícito no motor. Quem confere uma
+    liquidação contra a confirmação da contraparte precisa ver de que dia a taxa
+    a termo saiu: num fim de trimestre, D-2 e D-1 estão a vários pontos-base de
+    distância, e o campo vazio escondia a escolha em vez de declará-la.
+    """
+    from webapp import create_app
+    from precificador import liquidacao as L
+    from precificador.calendario import obter_calendario, para_data
+
+    pagina = create_app().test_client().get("/liquidacao").data.decode()
+
+    inicio = re.search(r'id="inicio"[^>]*value="([\d-]+)"', pagina).group(1)
+    esperado = L.data_de_fixing(para_data(inicio), obter_calendario("ANBIMA"))
+
+    for lado in ("ativa", "passiva"):
+        campo = re.search(r'id="' + lado + r'_data_fixing"[^>]*>', pagina).group(0)
+        valor = re.search(r'value="([\d-]+)"', campo).group(1)
+        assert valor == esperado.isoformat(), lado
+        # o padrão viaja junto: é por ele que o script sabe se a data ainda é
+        # automática ou se alguém digitou a dela
+        assert f'data-padrao="{esperado.isoformat()}"' in campo, lado
+
+
+def test_o_endereco_do_fixing_responde_o_mesmo_que_o_motor():
+    """O dia útil sai do pacote, não do navegador.
+
+    Refazer a contagem em JavaScript daria duas verdades para a mesma pergunta,
+    e elas divergiriam no primeiro Carnaval — num campo que ninguém reconfere.
+    """
+    from datetime import date
+    from webapp import create_app
+    from precificador import liquidacao as L
+    from precificador.calendario import obter_calendario
+
+    cliente = create_app().test_client()
+
+    for nome in ("ANBIMA", "SOFR", "EURIBOR"):
+        # 2026-02-18 é quarta-feira de cinzas: o D-2 no Brasil pula o Carnaval
+        resposta = cliente.get("/api/liquidacao/fixing",
+                               query_string={"inicio": "2026-02-18", "calendario": nome})
+        assert resposta.status_code == 200
+        esperado = L.data_de_fixing(date(2026, 2, 18), obter_calendario(nome))
+        assert resposta.get_json()["data"] == esperado.isoformat(), nome
+
+    # o calendário brasileiro e o americano não podem responder o mesmo aqui,
+    # senão o teste passaria mesmo se a rota ignorasse o parâmetro
+    def em(nome):
+        return cliente.get("/api/liquidacao/fixing",
+                           query_string={"inicio": "2026-02-18",
+                                         "calendario": nome}).get_json()["data"]
+    assert em("ANBIMA") != em("SOFR")
+
+    # data impossível não derruba a tela: volta vazio e o motor decide
+    vazio = cliente.get("/api/liquidacao/fixing", query_string={"inicio": "30/02/2026"})
+    assert vazio.status_code == 200 and vazio.get_json()["data"] == ""
+
+
+def test_a_data_digitada_no_fixing_volta_da_liquidacao():
+    """Quem digitou uma data não a perde no formulário devolvido.
+
+    O script só reescreve o campo enquanto ele estiver igual ao ``data-padrao``.
+    Se o servidor devolvesse o padrão em vez do que veio, a data digitada seria
+    trocada em silêncio na primeira mexida no início do fluxo.
+    """
+    from webapp import create_app
+
+    dados = {
+        "data_operacao": "2025-01-02", "inicio": "2025-01-02", "fim": "2025-04-02",
+        "nocional": "1.000.000,00", "nocional_original": "1.000.000,00",
+        "amortizacao": "0", "calendario": "ANBIMA", "reter_ir": "1",
+        "ativa_indexador": "pre", "ativa_taxa": "14",
+        "passiva_indexador": "cdi_percentual", "passiva_taxa": "100",
+        "ativa_data_fixing": "2024-12-20",
+    }
+    pagina = create_app().test_client().post("/liquidacao", data=dados).data.decode()
+    campo = re.search(r'id="ativa_data_fixing"[^>]*>', pagina).group(0)
+    assert 'value="2024-12-20"' in campo
+    # e o padrão devolvido é o D-2 do início, que é diferente: o script vê que
+    # a data foi digitada justamente porque os dois não batem
+    assert 'data-padrao="2024-12-20"' not in campo

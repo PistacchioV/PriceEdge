@@ -39,6 +39,48 @@
     if (regime) regime.value = padrao[1];
   }
 
+  // A data do fixing acompanha o início do fluxo: D-2 dias úteis, que é
+  // exatamente o que o motor usa. Antes o campo nascia vazio e o padrão ficava
+  // implícito — quem confere uma liquidação contra a confirmação da contraparte
+  // precisa *ver* de que dia a taxa a termo saiu, porque num fim de trimestre
+  // D-2 e D-1 estão a vários pontos-base de distância.
+  //
+  // O dia útil vem do servidor. Refazer a contagem aqui criaria duas verdades
+  // para a mesma pergunta — a do navegador e a do pacote — e elas divergiriam
+  // no primeiro Carnaval, num campo que ninguém reconfere.
+  function camposDeFixing() {
+    var todos = document.querySelectorAll('input[id$="_data_fixing"]');
+    // só os que ainda estão no automático: o campo digitado é escolha de
+    // alguém, e sobrescrevê-lo perderia a data sem avisar
+    return Array.prototype.filter.call(todos, function (campo) {
+      return campo.value === (campo.getAttribute("data-padrao") || "");
+    });
+  }
+
+  function trazerFixing() {
+    var inicio = document.getElementById("inicio");
+    var calendario = document.getElementById("calendario");
+    if (!inicio || !inicio.value) return;
+    var campos = camposDeFixing();
+    if (!campos.length) return;
+
+    var endereco = "/api/liquidacao/fixing?inicio=" + encodeURIComponent(inicio.value) +
+      "&calendario=" + encodeURIComponent(calendario ? calendario.value : "ANBIMA");
+    fetch(endereco)
+      .then(function (r) { return r.json(); })
+      .then(function (dados) {
+        if (!dados || !dados.data) return;
+        campos.forEach(function (campo) {
+          campo.value = dados.data;
+          campo.setAttribute("data-padrao", dados.data);
+        });
+      })
+      .catch(function () {
+        // sem rede o campo fica com o que já estava, e o motor calcula o D-2
+        // sozinho no envio: a tela perde a prévia, não a conta
+      });
+  }
+
   function iniciar() {
     var seletores = document.querySelectorAll(".campo-indexador");
     Array.prototype.forEach.call(seletores, function (seletor) {
@@ -48,6 +90,11 @@
         aplicar(lado);
         trazerConvencao(lado, seletor);
       });
+    });
+
+    ["inicio", "calendario"].forEach(function (id) {
+      var campo = document.getElementById(id);
+      if (campo) campo.addEventListener("change", trazerFixing);
     });
   }
 

@@ -19,7 +19,7 @@ from precificador.curvas import TENORES_TERM
 from precificador.instrumentos import (BULLET, LINEAR, PERCENTUAL,
                                        PERSONALIZADA, SPREAD)
 from precificador.interpolacao import METODOS, interpolar
-from precificador.erros import ErroDeFonte
+from precificador.erros import ErroDeDado, ErroDeFonte
 from precificador.produtos import (DIRECOES, MOEDAS_NDF, MODO_MANUAL, MODO_PRECO,
                                    PROGRESSOES, SAIDA, NumeroIndice, casado,
                                    curva_ndf, moeda_ndf, escada_datas, rolagem,
@@ -946,6 +946,27 @@ def api_instrumentos(tipo: str):
 
 # --------------------------------------------------------------- liquidação
 
+def _fixing_padrao(inicio: str, calendario: str) -> str:
+    """A data de fixing que o motor usaria: D-2 dias úteis do início do fluxo.
+
+    A tela mostra o padrão em vez de deixar o campo em branco. Quem confere uma
+    liquidação precisa **ver** de que dia a taxa a termo saiu: num fim de
+    trimestre, D-2 e D-1 estão a vários pontos-base de distância, e um campo
+    vazio esconde a escolha em vez de declará-la.
+
+    O dia útil sai do calendário escolhido na tela — o mesmo que o motor usa,
+    para que o que aparece no campo seja o que a conta faria.
+
+    Volta vazio quando a data ou o calendário não dão pé; a tela então deixa o
+    campo em branco e o motor decide, que é como era antes.
+    """
+    try:
+        return liquidacao.data_de_fixing(para_data(inicio),
+                                         obter_calendario(calendario)).isoformat()
+    except (ValueError, TypeError, ErroDeDado):
+        return ""
+
+
 @bp.route("/liquidacao", methods=["GET", "POST"])
 def liquidacao_swap():
     """Valor de liquidação de um swap — o ajuste que uma parte paga à outra."""
@@ -971,6 +992,7 @@ def liquidacao_swap():
         "tenores_euribor": liquidacao.TENORES_EURIBOR,
         "calendarios": CALENDARIOS,
         "hoje": hoje.isoformat(),
+        "fixing_padrao": _fixing_padrao(ano_passado.isoformat(), "ANBIMA"),
         "resultado": None, "erro": None,
     }
     # cada ponta repete os mesmos campos com o seu prefixo
@@ -986,13 +1008,17 @@ def liquidacao_swap():
             f"{lado}_moeda": liquidacao.SEM_CONVERSAO,
             f"{lado}_ptax_inicial": "", f"{lado}_ptax_final": "",
             f"{lado}_ni_inicial": "", f"{lado}_ni_final": "", f"{lado}_fator": "",
-            f"{lado}_tenor": "3 month", f"{lado}_data_fixing": "",
+            f"{lado}_tenor": "3 month",
+            f"{lado}_data_fixing": contexto["fixing_padrao"],
             f"{lado}_taxa_indice": "", f"{lado}_lookback": "0", f"{lado}_shift": "0",
             f"{lado}_ativo": "", f"{lado}_preco_inicial": "", f"{lado}_preco_final": "",
         })
 
     if request.method == "POST":
         contexto["form"] = {k: v for k, v in request.form.items()}
+        contexto["fixing_padrao"] = _fixing_padrao(
+            request.form.get("inicio") or "",
+            request.form.get("calendario") or "ANBIMA")
         try:
             contexto["resultado"] = _liquidar(request.form)
         except (servicos.ErroFormulario, ErroDeFonte, ValueError) as exc:
@@ -1064,6 +1090,20 @@ def _liquidar(form) -> dict:
     return {"r": resultado,
             "comparacao": servicos.contagens_lado_a_lado(resultado.inicio,
                                                          resultado.fim, calendario)}
+
+
+@bp.route("/api/liquidacao/fixing")
+def api_fixing_padrao():
+    """D-2 dias úteis de uma data, no calendário pedido.
+
+    A tela chama isto quando o início do fluxo ou o calendário mudam: o feriado
+    é do pacote, e reimplementar a contagem em JavaScript daria duas verdades
+    para a mesma pergunta — a do navegador e a do motor — que divergiriam no
+    primeiro Carnaval.
+    """
+    data = _fixing_padrao(request.args.get("inicio") or "",
+                          request.args.get("calendario") or "ANBIMA")
+    return jsonify({"data": data})
 
 
 # -------------------------------------------------------------- metodologia

@@ -1334,10 +1334,12 @@ TRADUCOES: Dict[str, str] = {
     "Prazo do fixing": "Fixing tenor",
     "Data do fixing": "Fixing date",
     "Taxa do fixing (% a.a.)": "Fixing rate (% p.a.)",
-    "Taxa a termo: fixada antes de o fluxo começar. Em branco, a data do fixing é "
-    "D-2 dias úteis do início.":
-        "A forward-looking rate, set before the flow starts. Left blank, the fixing "
-        "date is two business days before the start.",
+    "Taxa a termo: fixada antes de o fluxo começar. A data vem em D-2 dias úteis "
+    "do início do fluxo e acompanha ele; digite outra para prender uma data "
+    "diferente.":
+        "A forward-looking rate, set before the flow starts. The date comes in at "
+        "two business days before the flow start and follows it; type another to "
+        "pin a different one.",
     "O Term SOFR é administrado pela CME e licenciado — não há fonte pública que "
     "permita redistribuí-lo, então a taxa do fixing entra digitada.":
         "Term SOFR is administered by CME and licensed — no public source allows "

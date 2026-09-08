@@ -93,8 +93,11 @@
       </div>
       <div>
         <label class="rotulo" for="{{ lado }}_data_fixing">{{ t("Data do fixing") }}</label>
+        {# `data-padrao` é o D-2 que o servidor calculou. O script só reescreve o
+           campo enquanto ele estiver igual a esse valor: quem digitou uma data
+           não a perde quando mexe no início do fluxo. #}
         <input class="campo" id="{{ lado }}_data_fixing" name="{{ lado }}_data_fixing" type="date"
-               value="{{ f[lado ~ '_data_fixing'] }}"/>
+               value="{{ f[lado ~ '_data_fixing'] }}" data-padrao="{{ fixing_padrao }}"/>
       </div>
       <div data-bloco="{{ lado }}" data-mostrar-em="term_sofr">
         <label class="rotulo" for="{{ lado }}_taxa_indice">{{ t("Taxa do fixing (% a.a.)") }}</label>
@@ -102,7 +105,7 @@
                value="{{ f[lado ~ '_taxa_indice'] }}" inputmode="decimal"/>
       </div>
       <p class="sm:col-span-3 text-xs leading-5 text-slate-600 font-geist">
-        {{ t("Taxa a termo: fixada antes de o fluxo começar. Em branco, a data do fixing é D-2 dias úteis do início.") }}
+        {{ t("Taxa a termo: fixada antes de o fluxo começar. A data vem em D-2 dias úteis do início do fluxo e acompanha ele; digite outra para prender uma data diferente.") }}
       </p>
     </div>
 
