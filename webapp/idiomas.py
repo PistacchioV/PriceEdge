@@ -1399,6 +1399,14 @@ TRADUCOES: Dict[str, str] = {
         "The regressive table on a positive result, over the horizon counted from the "
         "trade date.",
     "Juros do período": "Interest for the period",
+    "Variação da moeda": "Currency move",
+    "não há retenção quando a ponta ativa ganha":
+        "nothing is withheld when the receiving leg wins",
+    "Tabela regressiva pelo prazo contado da data da operação. Só incide quando a "
+    "ponta ativa perde — a retenção é da fonte pagadora, e é aí que ela paga.":
+        "The regressive table over the horizon counted from the trade date. It "
+        "only applies when the receiving leg loses — withholding is the paying "
+        "source's job, and that is when it pays.",
     "Fixing": "Fixing",
     "Fixing de": "Fixing for",
     "Índice · câmbio": "Index · currency",

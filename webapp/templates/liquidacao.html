@@ -206,6 +206,14 @@
       <span class="text-slate-500">{{ t("Juros do período") }}</span>
       <span class="text-slate-300 tabular-nums">R$ {{ p.juros | moeda(2) }}</span>
     </div>
+    {% if p.efeito_cambial | round(2) != 0 %}
+    <div class="flex justify-between gap-3 text-xs font-geist">
+      <span class="text-slate-500">{{ t("Variação da moeda") }}</span>
+      <span class="tabular-nums {{ 'text-emerald-200' if p.efeito_cambial > 0 else 'text-rose-200' }}">
+        R$ {{ p.efeito_cambial | moeda(2) }}
+      </span>
+    </div>
+    {% endif %}
     {% if p.convencao %}
     <div class="flex justify-between gap-3 text-xs font-geist">
       <span class="text-slate-500">{{ t("Contagem") }}</span>
@@ -362,7 +370,7 @@
             <span>
               <span class="block text-sm font-medium text-slate-200 font-geist">{{ t("Reter o IR na fonte") }}</span>
               <span class="mt-1 block text-xs leading-5 text-slate-500 font-geist">
-                {{ t("Tabela regressiva sobre o resultado positivo, pelo prazo contado da data da operação.") }}
+                {{ t("Tabela regressiva pelo prazo contado da data da operação. Só incide quando a ponta ativa perde — a retenção é da fonte pagadora, e é aí que ela paga.") }}
               </span>
             </span>
           </label>
@@ -414,7 +422,8 @@
             {{ estatistica(t('Ajuste bruto'), 'R$ ' ~ (r.ajuste_bruto | moeda(2)),
                            t('diferença de fator de ') ~ ('%.10f' | format(r.diferenca_de_fator) | replace('.', ','))) }}
             {{ estatistica(t('IR retido'), 'R$ ' ~ (r.ir | moeda(2)),
-                           (t('alíquota ') ~ (r.aliquota_ir | percentual(1)) ~ ' · ' ~ (r.dias_da_operacao | numero) ~ ' ' ~ t('dias de operação')) if r.aliquota_ir else t('sem retenção')) }}
+                           (t('alíquota ') ~ (r.aliquota_ir | percentual(1)) ~ ' · ' ~ (r.dias_da_operacao | numero) ~ ' ' ~ t('dias de operação'))
+                           if r.aliquota_ir else t('não há retenção quando a ponta ativa ganha')) }}
             {{ estatistica(t('Notional remanescente'), 'R$ ' ~ (r.nocional | moeda(2)),
                            t('base das duas pontas'), destaque=true) }}
             {{ estatistica(t('Saldo após a amortização'), 'R$ ' ~ (r.saldo_seguinte | moeda(2)),

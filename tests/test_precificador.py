@@ -1324,24 +1324,36 @@ def test_liquidacao_recusa_indice_realizado_no_futuro():
 
 
 def test_ir_sai_da_tabela_regressiva_contada_da_operacao():
-    """O prazo do IR conta da contratação, não do início do fluxo."""
+    """O prazo do IR conta da contratação, não do início do fluxo.
+
+    As pontas estão invertidas de propósito — a ativa perdendo — porque só aí há
+    retenção: quem paga é o banco. Ver
+    ``test_ir_so_e_retido_quando_o_banco_paga``.
+    """
     from precificador import liquidacao as L
-    ativa, passiva = L.Ponta(L.PRE, 0.20), L.Ponta(L.FATOR, fator_manual=1.0)
+    ativa, passiva = L.Ponta(L.FATOR, fator_manual=1.0), L.Ponta(L.PRE, 0.20)
     # 2 anos e meio de operação: 15%
     longo = L.liquidar("2024-01-02", "2026-01-02", "2026-09-04", 10e6, ativa, passiva)
-    assert longo.aliquota_ir == 0.15
+    assert longo.ajuste_bruto < 0 and longo.aliquota_ir == 0.15
     # o mesmo fluxo, contratado junto: 8 meses, 20%
     curto = L.liquidar("2026-01-02", "2026-01-02", "2026-09-04", 10e6, ativa, passiva)
     assert curto.aliquota_ir == 0.20
-    assert abs(curto.ajuste_liquido - curto.ajuste_bruto * 0.80) < 1e-6
+    assert curto.ajuste_liquido == pytest.approx(curto.ajuste_bruto * 0.80)
 
 
-def test_resultado_negativo_nao_retem_ir():
-    """Não se retém imposto sobre prejuízo."""
+def test_resultado_a_favor_do_banco_nao_retem_ir():
+    """Quem recebe é o banco: não há o que reter de si mesmo.
+
+    Este teste guardava a regra ao contrário — retinha quando a ativa ganhava —
+    e o erro não aparecia porque a alíquota estava certa e o número parecia
+    plausível. A retenção é da fonte pagadora, e o banco só é fonte pagadora
+    quando paga.
+    """
     from precificador import liquidacao as L
     r = L.liquidar("2026-01-02", "2026-01-02", "2026-09-04", 10e6,
-                   L.Ponta(L.FATOR, fator_manual=1.0), L.Ponta(L.PRE, 0.20))
-    assert r.ajuste_bruto < 0 and r.ir == 0.0 and r.quem_recebe == L.PASSIVA
+                   L.Ponta(L.PRE, 0.20), L.Ponta(L.FATOR, fator_manual=1.0))
+    assert r.ajuste_bruto > 0 and r.quem_recebe == L.ATIVA
+    assert r.ir == 0.0 and r.banco_paga is False
 
 
 def test_nenhum_select_da_aplicacao_chega_vazio_a_tela():
@@ -2404,3 +2416,61 @@ def test_erro_sem_molde_nao_quebra_a_tela():
     from precificador.erros import ErroDeDado
     quebrado = ErroDeDado("faltou {a} e {b}", a=1)
     assert "faltou" in idiomas.mensagem(quebrado, "en")
+
+
+def test_ir_so_e_retido_quando_o_banco_paga():
+    """A retenção é da fonte pagadora, e ela é sobre o ganho de quem recebe.
+
+    Com a ponta ativa ganhando, quem recebe é o banco — não há o que reter de
+    si mesmo, e o imposto do outro lado é da contabilidade dele. Reter dos dois
+    lados inflava o número em toda liquidação a favor do banco, e o resultado
+    parecia plausível porque a alíquota estava certa.
+    """
+    from precificador import liquidacao as L
+    pre = L.Ponta(L.PRE, 0.1328, convencao="act_360", regime="composto")
+    dolar = L.Ponta(L.CAMBIO, taxa=0.0467, moeda="USD",
+                    ptax_inicial=5.34000, ptax_final=5.18620,
+                    convencao="act_360", regime="simples")
+    comum = dict(data_operacao="2025-11-18", inicio="2026-05-21",
+                 fim="2026-08-21", nocional=150e6, vencimento="2026-11-23")
+
+    ganha = L.liquidar(ponta_ativa=pre, ponta_passiva=dolar, **comum)
+    assert ganha.ajuste_bruto > 0 and ganha.banco_paga is False
+    assert ganha.ir == 0.0 and ganha.aliquota_ir == 0.0
+    assert ganha.ajuste_liquido == ganha.ajuste_bruto
+
+    perde = L.liquidar(ponta_ativa=dolar, ponta_passiva=pre, **comum)
+    assert perde.ajuste_bruto < 0 and perde.banco_paga is True
+    assert perde.aliquota_ir == 0.20                      # 276 dias de operação
+    # o IR é positivo (é quanto se retém) e encolhe o que sai do caixa
+    assert perde.ir == pytest.approx(abs(perde.ajuste_bruto) * 0.20)
+    assert perde.ajuste_liquido == pytest.approx(perde.ajuste_bruto + perde.ir)
+    assert abs(perde.ajuste_liquido) < abs(perde.ajuste_bruto)
+
+
+def test_juros_da_ponta_cambial_nao_carregam_a_variacao_da_moeda():
+    """Cupom e câmbio são naturezas diferentes, e vão em linhas diferentes.
+
+    Somados, um cupom de 4,67% com o dólar caindo 2,88% apareciam como juros
+    **negativos** de R$ 2,58 MM. O número estava certo como soma e não respondia
+    a nenhuma pergunta que alguém faça olhando para "juros do período".
+
+    A decomposição é exata — é o que deixa mostrar as duas linhas sem que a
+    soma deixe de fechar com o valor futuro.
+    """
+    from precificador import liquidacao as L
+    r = L.liquidar("2025-11-18", "2026-05-21", "2026-08-21", 150e6,
+                   L.Ponta(L.PRE, 0.1328, convencao="act_360", regime="composto"),
+                   L.Ponta(L.CAMBIO, taxa=0.0467, moeda="USD",
+                           ptax_inicial=5.34000, ptax_final=5.18620,
+                           convencao="act_360", regime="simples"),
+                   vencimento="2026-11-23", reter_ir=False)
+    p = r.passiva
+    assert p.juros == pytest.approx(1_738_607.18, abs=0.02)       # só o cupom
+    assert p.efeito_cambial == pytest.approx(-4_320_224.72, abs=0.02)
+    # e as duas somam exatamente o que o valor futuro diz
+    assert p.juros + p.efeito_cambial == pytest.approx(p.valor - p.nocional)
+
+    # numa ponta em reais não há o que separar
+    assert r.ativa.efeito_cambial == 0.0
+    assert r.ativa.juros == pytest.approx(r.ativa.valor - r.ativa.nocional)

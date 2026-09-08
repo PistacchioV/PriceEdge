@@ -347,7 +347,30 @@ class PontaLiquidada:
 
     @property
     def juros(self) -> float:
-        return self.valor - self.nocional
+        """Só o que a **taxa** rendeu — a moeda fica de fora, na linha dela.
+
+        Antes isto era ``valor − nocional``, que numa ponta cambial soma duas
+        coisas de naturezas diferentes: o cupom, que é remuneração contratada, e
+        a variação da moeda, que é mercado. Com o dólar caindo 2,88%, um cupom
+        de 4,67% aparecia como juros **negativos** de R$ 2,58 MM — o número
+        estava certo como soma e não respondia a nenhuma pergunta que alguém
+        faça olhando para "juros do período".
+
+        Os juros nascem na moeda da ponta e vêm para reais pelo fixing do fim:
+
+            juros = nocional · (fixing_fim/fixing_ini) · (fator do índice − 1)
+        """
+        return self.nocional * self.fator_cambial * (self.fator_do_indice - 1.0)
+
+    @property
+    def efeito_cambial(self) -> float:
+        """O que a moeda fez com o principal, sozinha.
+
+        ``juros + efeito_cambial == valor − nocional``, sempre: a decomposição é
+        exata, e é isso que permite mostrar as duas linhas sem que a soma deixe
+        de fechar com o valor futuro.
+        """
+        return self.nocional * (self.fator_cambial - 1.0)
 
 
 def _numero(valor: float, casas: int = 4) -> str:
@@ -618,6 +641,7 @@ class ResultadoLiquidacao:
     aliquota_ir: float
     ir: float
     ajuste_liquido: float
+    banco_paga: bool
 
     @property
     def diferenca_de_fator(self) -> float:
@@ -675,18 +699,8 @@ class ResultadoLiquidacao:
 
 
 def juros_de(ponta: PontaLiquidada) -> float:
-    """Os juros da ponta para efeito de liquidação de fluxo.
-
-    Numa ponta em moeda estrangeira, os juros nascem **na moeda dela** e vêm
-    para reais pelo fixing do fim — o principal não é convertido junto, porque
-    num fluxo intermediário ele não liquida: fica de pé para o período seguinte.
-
-        juros = nocional · (fixing_fim/fixing_ini) · (fator do índice − 1)
-
-    Sem moeda o fator cambial é 1 e a conta vira ``nocional · (fator − 1)``, que
-    é o que se espera de uma ponta em reais.
-    """
-    return ponta.nocional * ponta.fator_cambial * (ponta.fator_do_indice - 1.0)
+    """Atalho para ``ponta.juros`` — a conta mora lá, e mora numa só."""
+    return ponta.juros
 
 
 def base_de_ajuste(fim, vencimento, escolha: str = BASE_AUTOMATICA) -> str:
@@ -734,9 +748,11 @@ def liquidar(data_operacao, inicio, fim, nocional: float,
     vencimento liquidam os dois, e o ajuste é a diferença dos valores futuros.
     ``base_ajuste`` força uma das duas quando as datas não bastam.
 
-    ``reter_ir`` aplica a tabela regressiva sobre o resultado positivo, contada
-    da **data da operação** até o fim do fluxo, que é o prazo que a legislação
-    olha. É o que a fonte pagadora retém na liquidação.
+    ``reter_ir`` aplica a tabela regressiva pelo prazo contado da **data da
+    operação** até o fim do fluxo, que é o que a legislação olha. Ela só incide
+    quando o **banco paga** — quando a ponta ativa perde —, porque a retenção é
+    da fonte pagadora e é sobre o ganho de quem recebe. Com a ativa ganhando,
+    quem recebe é o banco, e não há o que reter de si mesmo.
     """
     cal = calendario or calendario_anbima()
     dop = para_data(data_operacao)
@@ -773,8 +789,18 @@ def liquidar(data_operacao, inicio, fim, nocional: float,
     bruto = (juros_ativa - juros_passiva if base == BASE_JUROS
              else ativa.valor - passiva.valor)
     dias_operacao = (d1 - dop).days
-    pct_ir = aliquota_ir(dias_operacao) if (reter_ir and bruto > 0) else 0.0
-    ir = bruto * pct_ir if pct_ir else 0.0
+    # A retenção é da FONTE PAGADORA, e a fonte pagadora aqui é o banco: ele só
+    # retém quando é ele quem paga, isto é, quando a ponta ativa perde. Com a
+    # ativa ganhando, quem recebe é o banco — não há o que reter de si mesmo, e
+    # o imposto do outro lado é problema da contabilidade dele.
+    #
+    # Reter dos dois lados inflava o número em toda liquidação a favor do banco,
+    # e o resultado parecia plausível porque a alíquota estava certa.
+    banco_paga = bruto < 0
+    pct_ir = aliquota_ir(dias_operacao) if (reter_ir and banco_paga) else 0.0
+    ir = abs(bruto) * pct_ir if pct_ir else 0.0
+    # o IR reduz o que sai do caixa, então ele encolhe o ajuste em módulo
+    liquido = (bruto + ir) if bruto < 0 else (bruto - ir)
 
     return ResultadoLiquidacao(
         data_operacao=dop, inicio=d0, fim=d1, vencimento=dv,
@@ -788,5 +814,6 @@ def liquidar(data_operacao, inicio, fim, nocional: float,
         quem_recebe=ATIVA if bruto > 0 else PASSIVA,
         dias_corridos=(d1 - d0).days, dias_uteis=cal.dias_uteis(d0, d1),
         dias_da_operacao=dias_operacao,
-        aliquota_ir=pct_ir, ir=ir, ajuste_liquido=bruto - ir,
+        aliquota_ir=pct_ir, ir=ir, ajuste_liquido=liquido,
+        banco_paga=banco_paga,
     )
