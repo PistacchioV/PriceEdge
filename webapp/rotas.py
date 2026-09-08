@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+import csv
+import io
 from datetime import date, timedelta
 
 from flask import (Blueprint, Response, jsonify, redirect, render_template,
                    request, url_for)
 
-from precificador import (b3, cambio, cdi, contagem, euribor, fontes, glossario,
-                          liquidacao, montador, rede, renda_fixa, sofr)
+from precificador import (b3, cambio, cdi, contagem, cotacoes, euribor, fontes,
+                          glossario, liquidacao, montador, rede, renda_fixa, sofr)
 from precificador.calendario import (CALENDARIOS_DISPONIVEIS, CONVENCOES_DIA_UTIL,
                                      MODIFIED_FOLLOWING, calendario_anbima,
                                      obter_calendario, para_data, soma_meses)
@@ -796,6 +798,75 @@ def _calcular_renda_fixa(form) -> dict:
 
     return {"r": resultado, "comparacao": comparacao, "indexador": indexador,
             "acumulado": acumulado}
+
+
+# ----------------------------------------------------------------- cotações
+
+@bp.route("/cotacoes", methods=["GET", "POST"])
+def cotacoes_pagina():
+    """Histórico de PTAX, ações e commodities — porte da tela Quotes."""
+    hoje = date.today()
+    contexto = {
+        "form": {
+            "tipo": cotacoes.PTAX, "instrumento": "USD",
+            # um mês para trás: quem abre a tela quer o histórico recente,
+            # não dois campos de data em branco
+            "inicio": (hoje - timedelta(days=30)).isoformat(),
+            "fim": hoje.isoformat(),
+        },
+        "tipos": cotacoes.TIPOS,
+        "instrumentos": {t: cotacoes.instrumentos(t) for t, *_ in cotacoes.TIPOS},
+        "hoje": hoje.isoformat(),
+        "resultado": None, "erro": None,
+    }
+    if request.method == "POST":
+        contexto["form"] = {k: v for k, v in request.form.items()}
+        try:
+            contexto["resultado"] = _buscar_cotacoes(request.form)
+        except (servicos.ErroFormulario, ErroDeFonte, ValueError) as exc:
+            contexto["erro"] = str(exc)
+    return render_template("cotacoes.html", **contexto)
+
+
+def _buscar_cotacoes(form) -> dict:
+    tipo = form.get("tipo") or cotacoes.PTAX
+    instrumento = (form.get("instrumento") or "").strip()
+    if not instrumento:
+        raise servicos.ErroFormulario("escolha o instrumento")
+    saida = cotacoes.historico(tipo, instrumento, form.get("inicio") or "",
+                               form.get("fim") or "")
+    saida["tipo"] = tipo
+    saida["instrumento"] = instrumento
+    saida["nome_do_tipo"] = cotacoes.TIPO_POR_CODIGO.get(tipo, (tipo, ""))[0]
+    return saida
+
+
+@bp.route("/cotacoes/csv")
+def cotacoes_csv():
+    """A mesma tabela em CSV — quem confere contra a planilha não redigita."""
+    tipo = request.args.get("tipo") or cotacoes.PTAX
+    instrumento = (request.args.get("instrumento") or "").strip()
+    try:
+        dados = cotacoes.historico(tipo, instrumento, request.args.get("inicio") or "",
+                                   request.args.get("fim") or "")
+    except (ErroDeFonte, ValueError) as exc:
+        return Response(str(exc), status=404, mimetype="text/plain; charset=utf-8")
+
+    buffer = io.StringIO()
+    escritor = csv.writer(buffer, delimiter=";")
+    escritor.writerow(dados["colunas"])
+    escritor.writerows(dados["linhas"])
+    nome = f"cotacoes_{dados['simbolo'].replace('=', '').replace('.', '_')}.csv"
+    return Response(buffer.getvalue(), content_type="text/csv; charset=utf-8",
+                    headers={"Content-Disposition": f'attachment; filename="{nome}"'})
+
+
+@bp.route("/api/cotacoes/instrumentos/<tipo>")
+def api_instrumentos(tipo: str):
+    """Os instrumentos de um tipo, para a tela trocar a lista sem recarregar."""
+    if tipo not in dict((t, n) for t, n, _ in cotacoes.TIPOS):
+        return jsonify({"erro": f"tipo desconhecido: {tipo}"}), 404
+    return jsonify({"instrumentos": cotacoes.instrumentos(tipo)})
 
 
 # --------------------------------------------------------------- liquidação

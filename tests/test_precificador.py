@@ -672,6 +672,8 @@ FORMULARIOS = {
                        passiva_convencao="du_252", passiva_regime="composto",
                        passiva_moeda="BRL", passiva_tenor="3 month",
                        passiva_lookback="0", passiva_shift="0"),
+    "/cotacoes": dict(tipo="ptax", instrumento="USD", inicio="2026-08-20",
+                       fim="2026-09-05"),
     "/liquidacao-sofr": dict(data_operacao="2025-09-08", inicio="2025-09-08",
                        fim="2026-09-04", nocional="30.000.000,00",
                        calendario="ANBIMA", reter_ir="1",
@@ -732,8 +734,8 @@ def _rota_do_formulario(chave: str) -> str:
 def _exercitar_aplicacao(app):
     """Passa por todas as telas e pelos formulários, para o audit ver tudo."""
     gets = ["/", "/curvas", "/precificar", "/ndf", "/sofr", "/term-sofr", "/euribor",
-            "/renda-fixa", "/liquidacao", "/interpolar", "/ni-pro-rata",
-            "/metodologia"]
+            "/renda-fixa", "/liquidacao", "/cotacoes", "/interpolar",
+            "/ni-pro-rata", "/metodologia"]
     for rota in gets:
         app.test_client().get(rota + "?idioma=en")
 
@@ -823,8 +825,8 @@ def test_nenhum_texto_em_portugues_sobra_na_tela_em_ingles():
 
     paginas = ["/", "/curvas?curva=DOC&extrair=1", "/curvas?curva=PTX&extrair=1",
                "/precificar", "/ndf", "/sofr", "/term-sofr", "/euribor",
-               "/renda-fixa", "/liquidacao", "/interpolar", "/ni-pro-rata",
-            "/metodologia"]
+               "/renda-fixa", "/liquidacao", "/cotacoes", "/interpolar",
+            "/ni-pro-rata", "/metodologia"]
     def varrer(rotulo, html):
         for texto in _texto_visivel(html):
             achados = {p.lower() for p in _MARCADORES_PT.findall(texto)}
@@ -1628,3 +1630,150 @@ def test_toda_cor_usada_nos_templates_tem_regra_no_tema_claro():
 
     assert not sem_regra, ("estas cores não têm regra em tema-claro.css e somem "
                            f"no fundo branco: {sorted(sem_regra)}")
+
+
+# ------------------------------------------------------------------ cotações
+
+def test_de_para_resolve_o_padrao_de_vencimento():
+    """Uma linha ``BO"MY"`` responde pela família inteira de vencimentos.
+
+    É o que evita cadastrar linha por linha e acrescentar uma a cada vencimento
+    que a B3 abre. O miolo precisa ser mês+ano de contrato: sem essa exigência o
+    prefixo ``C`` do milho casaria com cacau e com WTI, devolvendo o símbolo da
+    mercadoria errada em silêncio.
+    """
+    from precificador import cotacoes as C
+    assert C.simbolo_de(C.COMMODITIES, "BOK6") == "ZLK26.CBT"
+    # o espaço da B3 não conta: 'C K6' e 'CK6' são o mesmo contrato
+    assert C.simbolo_de(C.COMMODITIES, "C K6") == "ZCK26.CBT"
+    assert C.simbolo_de(C.COMMODITIES, "CK6") == "ZCK26.CBT"
+    # prefixo mais longo ganha: CO é Brent, CC é cacau, C é milho
+    assert C.simbolo_de(C.COMMODITIES, "COZ6") == "BZZ26.NYM"
+    assert C.simbolo_de(C.COMMODITIES, "CCZ6") == "CCZ26.NYB"
+    # código que não é de contrato não casa com padrão nenhum
+    assert C.simbolo_de(C.COMMODITIES, "XYZ9") == ""
+
+
+def test_linha_literal_vence_o_padrao():
+    """O contínuo é cadastro válido e não pode receber mês/ano.
+
+    ``BO1`` é o primeiro vencimento contínuo (``ZL=F``). Se o padrão ``BO"MY"``
+    ganhasse dele, sairia um ticker que não existe.
+    """
+    from precificador import cotacoes as C
+    assert C.simbolo_de(C.COMMODITIES, "BO1") == "ZL=F"
+    assert C.simbolo_de(C.ACOES, "AAPL34") == "AAPL34.SA"
+    assert C.simbolo_de(C.ACOES, "AAPL US") == "AAPL"
+
+
+def test_ano_de_um_digito_resolve_na_decada_corrente():
+    """Contrato futuro aponta para a frente — com um ano de folga.
+
+    O dígito único da B3 é ambíguo por dez anos. A desambiguação é a do mercado:
+    a década corrente, virando para a seguinte quando o ano cairia mais de um
+    ano atrás, porque o vencimento recém-liquidado ainda é consultado.
+    """
+    from precificador import cotacoes as C
+    em_2026 = date(2026, 6, 1)
+    assert C.ano_de_dois_digitos("6", em_2026) == "26"
+    assert C.ano_de_dois_digitos("7", em_2026) == "27"
+    assert C.ano_de_dois_digitos("5", em_2026) == "25"   # acabou de vencer
+    assert C.ano_de_dois_digitos("4", em_2026) == "34"   # cairia dois anos atrás
+    assert C.ano_de_dois_digitos("26", em_2026) == "26"  # dois dígitos passam direto
+
+
+def test_ptax_so_aceita_as_moedas_do_boletim():
+    from precificador import cotacoes as C
+    with pytest.raises(C.ErroCotacao) as exc:
+        C.historico_ptax("BRL", "2026-08-01", "2026-09-01")
+    assert "boletim PTAX" in str(exc.value)
+    assert "USD" in C.MOEDAS_PTAX and "CNH" not in C.MOEDAS_PTAX
+
+
+def test_periodo_invertido_e_erro_de_quem_digitou():
+    """Dizer isso é melhor do que devolver tabela vazia, que parece fonte sem dado."""
+    from precificador import cotacoes as C
+    with pytest.raises(C.ErroCotacao) as exc:
+        C.periodo("2026-09-05", "2026-08-20")
+    assert "anterior" in str(exc.value)
+    with pytest.raises(C.ErroCotacao):
+        C.periodo("nao é data", "2026-08-20")
+
+
+def test_ohlc_le_o_formato_do_yahoo_e_deixa_o_dia_sem_pregao_vazio(monkeypatch):
+    """O parsing é provado por fixture, não pela rede.
+
+    O Yahoo limita por endereço (HTTP 429) e a máquina de desenvolvimento cai
+    nesse limite, então o caminho de rede não é testável aqui. O que dá para
+    travar — e é o que quebra em silêncio — é a leitura do formato: o ``null``
+    de um dia sem pregão tem que virar célula vazia, e não ``0,00``, que
+    afirmaria um preço que não existiu.
+    """
+    from precificador import cotacoes as C
+    resposta = {"chart": {"error": None, "result": [{
+        "timestamp": [1756944000, 1757030400],
+        "indicators": {
+            "quote": [{"close": [38.5, None], "high": [38.9, None],
+                       "low": [38.1, None], "open": [38.2, None],
+                       "volume": [12000000, None]}],
+            "adjclose": [{"adjclose": [37.9, None]}],
+        }}]}}
+    monkeypatch.setattr(C, "_buscar", lambda *a, **k: resposta)
+
+    colunas, linhas = C.historico_ohlc("PETR4.SA", "2026-09-03", "2026-09-05")
+    assert colunas == list(C.COLUNAS_OHLC)
+    assert len(linhas) == 2
+    # a tabela abre pela data mais recente
+    assert linhas[0][0] > linhas[1][0] or _data_br(linhas[0][0]) > _data_br(linhas[1][0])
+    recente, antigo = linhas[0], linhas[1]
+    assert recente[1] == "" and recente[2] == ""     # dia sem pregão: vazio
+    assert antigo[2] == "38,500000" and antigo[6] == "12.000.000"
+
+
+def _data_br(texto):
+    from datetime import datetime as _dt
+    return _dt.strptime(texto, "%d/%m/%Y")
+
+
+def test_yahoo_recusando_o_simbolo_vira_mensagem_e_nao_tabela_vazia(monkeypatch):
+    from precificador import cotacoes as C
+    monkeypatch.setattr(C, "_buscar", lambda *a, **k: {
+        "chart": {"error": {"code": "Not Found", "description": "No data found"}}})
+    with pytest.raises(C.ErroCotacao) as exc:
+        C.historico_ohlc("NAOEXISTE", "2026-09-01", "2026-09-05")
+    assert "recusou" in str(exc.value)
+
+
+def test_instrumento_sem_cadastro_pede_cadastro_e_nao_tenta_como_simbolo():
+    """'AA UN' não é ticker de mercado: tentar daria um 404 obscuro da fonte."""
+    from precificador import cotacoes as C
+    with pytest.raises(C.ErroCotacao) as exc:
+        C.historico(C.ACOES, "CODIGO INEXISTENTE", "2026-09-01", "2026-09-05")
+    assert "não tem símbolo de mercado" in str(exc.value)
+
+
+def test_lista_de_instrumentos_deixa_o_padrao_de_fora():
+    """Padrão é regra, não instrumento: listado, viraria opção que não resolve."""
+    from precificador import cotacoes as C
+    codigos = [c for c, _ in C.instrumentos(C.COMMODITIES)]
+    assert "BO1" in codigos                      # literal entra
+    assert not any('"MY"' in c for c in codigos)  # padrão não
+    # mas o padrão continua valendo para quem digitar o vencimento
+    assert C.simbolo_de(C.COMMODITIES, "BOK6")
+    # na PTAX o código é o próprio símbolo
+    assert C.instrumentos(C.PTAX) == [[m, m] for m in C.MOEDAS_PTAX]
+
+
+def test_excesso_de_consultas_vira_frase_propria(monkeypatch):
+    """429 não é bloqueio de rede: a ação é esperar, não olhar o proxy."""
+    from precificador import cotacoes as C, rede
+
+    def recusa(*a, **k):
+        raise rede.ErroRede("HTTP 429 em https://query1.finance.yahoo.com/", status=429)
+
+    monkeypatch.setattr(rede, "obter_json", recusa)
+    with pytest.raises(C.ErroCotacao) as exc:
+        C.historico_ohlc("PETR4.SA", "2026-09-01", "2026-09-05")
+    texto = str(exc.value)
+    assert "429" in texto and "alguns minutos" in texto
+    assert "proxy" not in texto.lower()

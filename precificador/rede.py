@@ -76,6 +76,16 @@ TIMEOUT = 40
 
 
 class ErroRede(ErroDeFonte):
+    """Falha de rede. ``status`` traz o código HTTP quando houve resposta.
+
+    Sem ele, quem chama só tem a frase — e distinguir "a fonte recusou" de
+    "a saída está bloqueada" viraria busca de substring numa mensagem que
+    muda. Um 429 do Yahoo pede esperar; um 10060 pede olhar o proxy.
+    """
+
+    def __init__(self, mensagem: str, status: Optional[int] = None) -> None:
+        super().__init__(mensagem)
+        self.status = status
     """Falha de rede ou de autenticação numa chamada externa."""
 
 
@@ -225,10 +235,13 @@ def obter(url: str, cabecalho: Optional[dict] = None, timeout: int = TIMEOUT) ->
     if s is not None:
         try:
             resposta = s.get(url, headers=cabecalho, timeout=timeout)
+            codigo = resposta.status_code
             resposta.raise_for_status()
             return resposta.content
         except Exception as exc:         # requests tem sua própria árvore de erros
-            raise ErroRede(f"falha na chamada autenticada a {url}: {exc}") from exc
+            codigo = locals().get("codigo")
+            raise ErroRede(f"falha na chamada autenticada a {url}: {exc}",
+                           status=codigo if codigo and codigo >= 400 else None) from exc
 
     abridor = urllib.request.urlopen
     proxy = proxy_configurado()
@@ -241,7 +254,7 @@ def obter(url: str, cabecalho: Optional[dict] = None, timeout: int = TIMEOUT) ->
                      timeout=timeout) as r:
             return r.read()
     except urllib.error.HTTPError as exc:
-        raise ErroRede(f"HTTP {exc.code} em {url}") from exc
+        raise ErroRede(f"HTTP {exc.code} em {url}", status=exc.code) from exc
     except OSError as exc:
         raise ErroRede(f"falha de conexão com {url}: {exc}{_pista_de_proxy(exc)}") from exc
 

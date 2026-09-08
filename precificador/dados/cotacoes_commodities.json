@@ -1,0 +1,87 @@
+[
+  {
+    "LABEL": "BO1",
+    "SYMBOL": "ZL=F",
+    "NOTES": "OLEO DE SOJA — contrato continuo (1o vencimento). Linha LITERAL: vence o padrao BO\"MY\", que so casa mes+ano."
+  },
+  {
+    "LABEL": "C 1",
+    "SYMBOL": "ZC=F",
+    "NOTES": "MILHO — contrato continuo (1o vencimento)"
+  },
+  {
+    "LABEL": "CC1",
+    "SYMBOL": "CC=F",
+    "NOTES": "CACAU — contrato continuo (1o vencimento)"
+  },
+  {
+    "LABEL": "CO1",
+    "SYMBOL": "BZ=F",
+    "NOTES": "PETROLEO BRENT — contrato continuo (1o vencimento)"
+  },
+  {
+    "LABEL": "KC1",
+    "SYMBOL": "KC=F",
+    "NOTES": "CAFE — contrato continuo (1o vencimento)"
+  },
+  {
+    "LABEL": "S 1",
+    "SYMBOL": "ZS=F",
+    "NOTES": "SOJA — contrato continuo (1o vencimento)"
+  },
+  {
+    "LABEL": "W 1",
+    "SYMBOL": "ZW=F",
+    "NOTES": "TRIGO — contrato continuo (1o vencimento)"
+  },
+  {
+    "LABEL": "BO\"MY\"",
+    "SYMBOL": "ZL\"MY\".CBT",
+    "NOTES": "OLEO DE SOJA — Soybean Oil (CBOT)"
+  },
+  {
+    "LABEL": "C_\"MY\"",
+    "SYMBOL": "ZC\"MY\".CBT",
+    "NOTES": "MILHO — Corn (CBOT)"
+  },
+  {
+    "LABEL": "CC\"MY\"",
+    "SYMBOL": "CC\"MY\".NYB",
+    "NOTES": "CACAU — Cocoa (ICE Futures US)"
+  },
+  {
+    "LABEL": "CO\"MY\"",
+    "SYMBOL": "BZ\"MY\".NYM",
+    "NOTES": "PETROLEO BRENT — Brent Last Day Financial (NYMEX). Era CO\"MY\".NYB, que o Yahoo nao tem."
+  },
+  {
+    "LABEL": "CT\"MY\"",
+    "SYMBOL": "CT\"MY\".NYB",
+    "NOTES": "ALGODAO — Cotton No. 2 (ICE Futures US)"
+  },
+  {
+    "LABEL": "DF\"MY\"",
+    "SYMBOL": "DF\"MY\".NYB",
+    "NOTES": "CAFE — simbolo herdado do app de desktop, nao confirmado na fonte"
+  },
+  {
+    "LABEL": "KC\"MY\"",
+    "SYMBOL": "KC\"MY\".NYB",
+    "NOTES": "CAFE — Coffee C (ICE Futures US)"
+  },
+  {
+    "LABEL": "S_\"MY\"",
+    "SYMBOL": "ZS\"MY\".CBT",
+    "NOTES": "SOJA — Soybean (CBOT)"
+  },
+  {
+    "LABEL": "SB\"MY\"",
+    "SYMBOL": "SB\"MY\".NYB",
+    "NOTES": "ACUCAR — Sugar No. 11 (ICE Futures US)"
+  },
+  {
+    "LABEL": "W_\"MY\"",
+    "SYMBOL": "ZW\"MY\".CBT",
+    "NOTES": "TRIGO — Chicago SRW Wheat (CBOT)"
+  }
+]

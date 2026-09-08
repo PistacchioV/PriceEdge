@@ -1464,6 +1464,60 @@ TRADUCOES: Dict[str, str] = {
     "saída · soma": "outflow · adds",
     "entrada · desconta": "inflow · subtracts",
 
+
+    # -------------------------------------------------------------- cotações
+    "Cotações": "Quotes",
+    "Histórico de mercado": "Market history",
+    "O que fechou, dia a dia.": "What closed, day by day.",
+    "PTAX do Banco Central, ações e commodities. Da PTAX vem só o boletim de "
+    "fechamento — é o que a mesa usa, e trazer os intermediários poria quatro linhas "
+    "no mesmo dia.":
+        "Central bank PTAX, equities and commodities. From PTAX only the closing "
+        "bulletin — that is what the desk uses, and pulling the intraday ones would "
+        "put four rows on the same day.",
+    "PTAX — Banco Central": "PTAX — Central Bank",
+    "Ações e índices": "Equities and indices",
+    "Commodities": "Commodities",
+    "Boletim de fechamento por moeda.": "Closing bulletin per currency.",
+    "Fechamento diário do Yahoo Finance.": "Daily close from Yahoo Finance.",
+    "Futuros e contratos contínuos, pelo de-para da B3.":
+        "Futures and continuous contracts, through the B3 mapping.",
+    "Tipo": "Kind",
+    "Instrumento": "Instrument",
+    "De": "From",
+    "Até": "To",
+    "Buscar": "Search",
+    "O símbolo cadastrado aparece ao lado do código. Em commodities, o código do "
+    "vencimento é resolvido pelo padrão mesmo fora da lista.":
+        "The registered symbol shows next to the code. In commodities, a contract "
+        "code is resolved by the pattern even when it is not in the list.",
+    "Símbolo consultado": "Symbol queried",
+    "na fonte": "at the source",
+    "o código é o símbolo": "the code is the symbol",
+    "Linhas": "Rows",
+    "Última publicação": "Latest publication",
+    "a tabela abre pela mais recente": "the table opens with the most recent",
+    "Banco Central · boletim de fechamento": "Central bank · closing bulletin",
+    "Yahoo Finance · fechamento diário": "Yahoo Finance · daily close",
+    "A fonte respondeu, mas não há publicação no período escolhido.":
+        "The source answered, but there is no publication in the chosen period.",
+    "Sobre a tabela": "About the table",
+    "Célula vazia não é zero: a fonte não publicou aquele valor naquele dia — no "
+    "Yahoo, o papel não teve pregão. Um zero ali afirmaria um preço que não existiu.":
+        "An empty cell is not a zero: the source published no value that day — on "
+        "Yahoo, the instrument did not trade. A zero there would assert a price that "
+        "never existed.",
+    "Compra CCY/BRL": "CCY/BRL bid",
+    "Venda CCY/BRL": "CCY/BRL ask",
+    "Compra CCY/USD": "CCY/USD bid",
+    "Venda CCY/USD": "CCY/USD ask",
+    "Fechamento ajustado": "Adjusted close",
+    "Fechamento": "Close",
+    "Máxima": "High",
+    "Mínima": "Low",
+    "Abertura": "Open",
+    "Volume": "Volume",
+
 }
 
 

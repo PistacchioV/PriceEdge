@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% from "_componentes.html" import alerta, estatistica, link_secundario, botao %}
+{% block titulo %}{{ t("Cotações") }}{% endblock %}
+
+{% block conteudo %}
+<section class="sm:px-6 lg:px-8 pt-16 pr-5 pb-10 pl-5">
+  <div class="w-full max-w-[1600px] mr-auto ml-auto">
+    <div class="reveal grid gap-8 lg:grid-cols-[1fr_0.72fr] lg:items-end">
+      <div class="max-w-3xl">
+        <p class="text-sm font-medium text-cyan-100 font-geist">{{ t("Histórico de mercado") }}</p>
+        <h1 class="mt-4 text-4xl text-white sm:text-5xl tracking-tighter leading-[1.05] font-jakarta font-medium">{{ t("O que fechou, dia a dia.") }}</h1>
+      </div>
+      <div class="lg:ml-auto lg:max-w-md">
+        <p class="text-base leading-7 text-slate-400 font-geist">
+          {{ t("PTAX do Banco Central, ações e commodities. Da PTAX vem só o boletim de fechamento — é o que a mesa usa, e trazer os intermediários poria quatro linhas no mesmo dia.") }}
+        </p>
+      </div>
+    </div>
+
+    <form method="post" class="mt-10 rounded-[2rem] border border-white/[0.09] bg-gradient-to-b from-white/[0.05] to-transparent p-6 backdrop-blur-xl sm:p-8">
+      <div class="grid gap-5 lg:grid-cols-[0.9fr_1.3fr_0.8fr_0.8fr_auto] lg:items-end">
+        <div>
+          <label class="rotulo" for="tipo">{{ t("Tipo") }}</label>
+          <select class="campo" id="tipo" name="tipo"
+                  data-instrumentos="{{ instrumentos | tojson | forceescape }}">
+            {% for codigo, nome, _ in tipos %}
+            <option value="{{ codigo }}" {{ 'selected' if form.tipo == codigo }}>{{ t(nome) }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label class="rotulo" for="instrumento">{{ t("Instrumento") }}</label>
+          {# lista + campo livre: o cadastro cobre o que é literal, e o código de
+             vencimento (BOK6) é resolvido pelo padrão sem estar na lista #}
+          <input class="campo" id="instrumento" name="instrumento" list="lista-instrumentos"
+                 value="{{ form.instrumento }}" autocomplete="off" required/>
+          <datalist id="lista-instrumentos">
+            {% for codigo, simbolo in instrumentos.get(form.tipo, []) %}
+            <option value="{{ codigo }}">{{ simbolo }}</option>
+            {% endfor %}
+          </datalist>
+        </div>
+        <div>
+          <label class="rotulo" for="inicio">{{ t("De") }}</label>
+          <input class="campo" id="inicio" name="inicio" type="date" value="{{ form.inicio }}" required/>
+        </div>
+        <div>
+          <label class="rotulo" for="fim">{{ t("Até") }}</label>
+          <input class="campo" id="fim" name="fim" type="date" value="{{ form.fim }}"
+                 data-maximo-hoje="{{ hoje }}" required/>
+        </div>
+        <div>{{ botao(t('Buscar'), 'solar:magnifer-linear') }}</div>
+      </div>
+      <p class="mt-4 text-xs leading-5 text-slate-600 font-geist">
+        {{ t("O símbolo cadastrado aparece ao lado do código. Em commodities, o código do vencimento é resolvido pelo padrão mesmo fora da lista.") }}
+      </p>
+    </form>
+
+    {% if erro %}{{ alerta(erro) }}{% endif %}
+
+    {% if resultado %}
+    <div class="sem-reveal mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      {{ estatistica(t('Instrumento'), resultado.instrumento, t(resultado.nome_do_tipo), destaque=true) }}
+      {{ estatistica(t('Símbolo consultado'), resultado.simbolo,
+                     t('na fonte') if resultado.simbolo != resultado.instrumento else t('o código é o símbolo')) }}
+      {{ estatistica(t('Linhas'), resultado.linhas | length | numero,
+                     (form.inicio | data_br) ~ ' ' ~ t('a') ~ ' ' ~ (form.fim | data_br)) }}
+      {{ estatistica(t('Última publicação'),
+                     resultado.linhas[0][0] if resultado.linhas else '—',
+                     t('a tabela abre pela mais recente')) }}
+    </div>
+
+    {% if resultado.linhas %}
+    <div class="sem-reveal mt-6 rounded-[2rem] border border-white/[0.09] bg-slate-950/40 backdrop-blur-xl">
+      <div class="flex flex-wrap items-center justify-between gap-3 border-b border-white/[0.07] px-6 py-4">
+        <div>
+          <p class="text-sm font-medium text-white font-geist">{{ t("Valores publicados") }}</p>
+          <p class="mt-0.5 text-xs text-slate-500 font-geist">
+            {% if resultado.tipo == 'ptax' %}
+            {{ t("Banco Central · boletim de fechamento") }}
+            {% else %}
+            {{ t("Yahoo Finance · fechamento diário") }}
+            {% endif %}
+          </p>
+        </div>
+        {{ link_secundario(t('Baixar CSV'),
+             url_for('principal.cotacoes_csv', tipo=resultado.tipo,
+                     instrumento=resultado.instrumento, inicio=form.inicio, fim=form.fim),
+             'solar:file-download-linear') }}
+      </div>
+      <div class="rolagem max-h-[38rem] px-2">
+        <table class="tabela-dados">
+          <thead>
+            <tr>{% for coluna in resultado.colunas %}<th>{{ t(coluna) }}</th>{% endfor %}</tr>
+          </thead>
+          <tbody>
+          {% for linha in resultado.linhas %}
+            <tr>
+              {% for celula in linha %}
+              <td class="{{ 'text-white' if loop.first else ('text-cyan-100' if loop.index == 2 else 'text-slate-300') }}">
+                {{ celula if celula != '' else '—' }}
+              </td>
+              {% endfor %}
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% else %}
+    {{ alerta(t("A fonte respondeu, mas não há publicação no período escolhido."), 'aviso') }}
+    {% endif %}
+
+    <div class="sem-reveal mt-6 rounded-2xl border border-white/[0.08] bg-black/25 px-5 py-4">
+      <p class="text-xs text-slate-500 font-geist">{{ t("Sobre a tabela") }}</p>
+      <p class="mt-2 text-xs leading-6 text-slate-400 font-geist">
+        {{ t("Célula vazia não é zero: a fonte não publicou aquele valor naquele dia — no Yahoo, o papel não teve pregão. Um zero ali afirmaria um preço que não existiu.") }}
+      </p>
+    </div>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/cotacoes.js') }}"></script>
+{% endblock %}

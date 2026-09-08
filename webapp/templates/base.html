@@ -62,6 +62,7 @@
       ('principal.metodologia', 'Metodologia'),
     ] %}
     {% set ferramentas = [
+      ('principal.cotacoes_pagina', 'Cotações'),
       ('principal.liquidacao_swap', 'Liquidação'),
       ('principal.calculadora_renda_fixa', 'Renda fixa'),
       ('principal.interpolador', 'Interpolação'),
@@ -116,6 +117,7 @@
           <a class="text-sm text-slate-300 transition hover:text-cyan-100 font-geist" href="{{ url_for('principal.term_sofr') }}">Term SOFR</a>
           <a class="text-sm text-slate-300 transition hover:text-cyan-100 font-geist" href="{{ url_for('principal.sofr_indice') }}">SOFR Index</a>
           <a class="text-sm text-slate-300 transition hover:text-cyan-100 font-geist" href="{{ url_for('principal.euribor_diario') }}">EURIBOR</a>
+          <a class="text-sm text-slate-300 transition hover:text-cyan-100 font-geist" href="{{ url_for('principal.cotacoes_pagina') }}">{{ t("Cotações") }}</a>
           <a class="text-sm text-slate-300 transition hover:text-cyan-100 font-geist" href="{{ url_for('principal.liquidacao_swap') }}">{{ t("Liquidação de swap") }}</a>
           <a class="text-sm text-slate-300 transition hover:text-cyan-100 font-geist" href="{{ url_for('principal.calculadora_renda_fixa') }}">{{ t("Renda fixa") }}</a>
           <a class="text-sm text-slate-300 transition hover:text-cyan-100 font-geist" href="{{ url_for('principal.interpolador') }}">{{ t("Interpolação") }}</a>
