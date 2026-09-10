@@ -1388,26 +1388,35 @@ def test_nenhum_select_da_aplicacao_chega_vazio_a_tela():
                         f"variável no contexto da rota: {vazios}")
 
 
-def test_toda_tela_abre_na_mesma_data_de_referencia_hoje():
-    """A data de referência é uma só em toda a aplicação, e é hoje.
+def test_toda_tela_abre_na_mesma_data_de_referencia():
+    """A data de referência é uma só em toda a aplicação, e é o dia útil anterior.
 
-    Metade das telas nascia em D-1 (``data_sugerida``, cautela com o horário de
-    publicação da B3) e a outra metade em ``date.today()``. Quem monta a curva
-    na tela de NDF e confere na de extração vê duas datas diferentes, e a
-    diferença de um dia útil não aparece como erro: aparece como taxa diferente.
+    Duas regras, e as duas já quebraram uma vez:
+
+    **A mesma em todas.** Metade das telas nascia em ``data_sugerida`` e a outra
+    metade em ``date.today()``. Quem monta a curva na tela de NDF e confere na de
+    extração via duas datas diferentes, e um dia útil de distância não aparece
+    como erro: aparece como taxa diferente.
+
+    **D-1, e não hoje.** A B3 publica o arquivo do dia no fim do pregão. Aberta
+    em hoje, a tela de curvas passa a manhã inteira devolvendo erro em vez de
+    curva, enquanto o dia útil anterior está sempre lá, fechado e completo.
 
     A varredura é por nome de campo e não por lista de telas, para que uma tela
-    nova com ``data_curva`` entre no teste sozinha.
+    nova com ``data_curva`` entre no teste sozinha. ``inicio``, ``fim`` e
+    ``vencimento`` ficam de fora de propósito: são prazos de uma operação, não a
+    referência do mercado.
     """
     from datetime import date
     from webapp import create_app, servicos
+    from precificador.calendario import calendario_anbima
 
-    hoje = date.today().isoformat()
-    assert servicos.data_sugerida() == date.today()
+    cal = calendario_anbima()
+    esperada = cal.workday(date.today(), -1)
+    assert servicos.data_sugerida() == esperada
+    assert esperada < date.today() and cal.eh_dia_util(esperada)
+    alvo = esperada.isoformat()
 
-    # os campos que significam "a data em que o mercado é lido". `inicio`,
-    # `fim` e `vencimento` ficam de fora de propósito: são prazos de uma
-    # operação, não a referência da curva.
     DE_REFERENCIA = {"data", "data_curva", "referencia"}
 
     app = create_app()
@@ -1423,11 +1432,11 @@ def test_toda_tela_abre_na_mesma_data_de_referencia_hoje():
                 continue
             valor = re.search(r'value="([^"]*)"', campo)
             vistos.add(nome.group(1))
-            if not valor or valor.group(1) != hoje:
+            if not valor or valor.group(1) != alvo:
                 fora.append(f"{rota}: {nome.group(1)}="
                             f"{valor.group(1) if valor else '(sem value)'}")
 
-    assert not fora, f"estas telas não abrem na data de hoje ({hoje}): {fora}"
+    assert not fora, f"estas telas não abrem em {alvo}: {fora}"
     # e o teste está mesmo olhando para alguma coisa
     assert vistos == DE_REFERENCIA, f"campos de referência não varridos: {DE_REFERENCIA - vistos}"
 

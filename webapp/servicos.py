@@ -90,20 +90,23 @@ def curva_derivada(codigo: str, data) -> Curva:
 
 
 def data_sugerida() -> date:
-    """A data de referência que toda tela abre: **hoje**.
+    """A data de referência que toda tela abre: **D-1**, o dia útil anterior.
 
-    Era D-1, por cautela com o horário de publicação da B3 — e o resultado é
-    que metade das telas nascia num dia e a outra metade em outro. Quem monta
-    uma curva na tela de NDF e confere na de extração precisa dos dois lados
-    falando da mesma data; a diferença de um dia útil não aparece como erro,
-    aparece como taxa diferente.
+    A B3 publica o arquivo do dia no fim do pregão. Abrir em hoje deixava as
+    telas de curva erradas a manhã inteira — nenhum vértice, e um erro em vez de
+    uma curva — enquanto o dia útil anterior está sempre lá, fechado e completo.
 
-    A B3 publica o arquivo do dia durante o pregão, então hoje costuma existir.
-    Quando não existe — fim de semana, feriado, ou antes da publicação — a
-    própria extração diz por extenso qual é o problema, e a data continua
-    editável em todas as telas.
+    O que **não** volta é a bagunça de antes: a data sai daqui e de nenhum outro
+    lugar, então as telas continuam abrindo todas no mesmo dia. Quem monta uma
+    curva no NDF e confere na extração precisa dos dois lados falando da mesma
+    data — a diferença de um dia útil não aparece como erro, aparece como taxa
+    diferente.
+
+    Fim de semana e feriado andam para trás junto: numa segunda-feira depois de
+    um feriado de sexta, D-1 é a quinta. E a data continua editável em todas as
+    telas, para quem quiser a curva do próprio dia depois da publicação.
     """
-    return date.today()
+    return calendario_anbima().workday(date.today(), -1)
 
 
 def datas_uteis_recentes(quantidade: int = 25) -> List[date]:

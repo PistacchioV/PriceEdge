@@ -578,7 +578,9 @@ def _compor_sofr(form) -> dict:
 def term_sofr():
     """Estrutura a termo realizada do SOFR, com base histórica local."""
     hoje = date.today()
-    referencia = para_data(request.args.get("referencia") or hoje.isoformat())
+    # a referência é a mesma de toda a aplicação; `hoje` fica só como teto do campo
+    referencia = para_data(request.args.get("referencia")
+                           or servicos.data_sugerida().isoformat())
     meses = int(request.args.get("meses") or 6)
 
     contexto = {
@@ -713,7 +715,9 @@ def term_sofr_sincronizar():
 def euribor_diario():
     """EURIBOR diário: base histórica local, atualizada com a janela da fonte."""
     hoje = date.today()
-    referencia = para_data(request.args.get("referencia") or hoje.isoformat())
+    # a referência é a mesma de toda a aplicação; `hoje` fica só como teto do campo
+    referencia = para_data(request.args.get("referencia")
+                           or servicos.data_sugerida().isoformat())
     meses = int(request.args.get("meses") or 6)
 
     contexto = {
