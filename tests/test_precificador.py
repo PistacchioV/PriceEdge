@@ -2715,6 +2715,58 @@ def test_o_script_da_liquidacao_encontra_os_campos_que_procura():
         assert f'id="{campo}"' in pagina, f"{campo} não está na tela"
 
 
+def test_o_calendario_nao_fecha_ao_trocar_de_mes():
+    """A seta de mês redesenha o painel, e o botão clicado sai do DOM.
+
+    ``painel.innerHTML = html`` destrói o botão em que a pessoa acabou de
+    clicar. O handler de "clique fora", que roda depois na subida do evento,
+    testava ``caixa.contains(e.target)`` — e um nó solto não está dentro de
+    nada, então o calendário fechava justamente ao navegar entre os meses.
+    Sintoma na tela: clicar na seta fecha o calendário e não acontece nada.
+
+    Verificado no navegador contra a página real: sem a guarda, o alvo do
+    clique chega ao ``document`` com ``document.contains(alvo) === false``.
+    """
+    from pathlib import Path
+    script = (Path(__file__).resolve().parent.parent / "webapp" / "static" / "js"
+              / "data-picker.js").read_text(encoding="utf-8")
+
+    fora = re.search(r"document\.addEventListener\(\"click\",(.*?)\}\);", script, re.S)
+    assert fora, "o handler de clique fora sumiu — teste desatualizado"
+    assert "document.contains(e.target)" in fora.group(1), (
+        "o handler de clique fora voltou a testar só `contains` na caixa: "
+        "trocar de mês fecha o calendário")
+
+
+def test_quem_escreve_numa_data_passa_pelo_campoData():
+    """O campo de data é um par, e escrever num lado só não muda o outro.
+
+    O picker troca ``<input type="date">`` por escondido (com o ``name``, em
+    ISO, que é o que o formulário envia) + texto (com o ``id``, em dd/mm/aaaa).
+    Quem acha o campo por ``getElementById`` pega a caixa de texto: escrever o
+    ISO nela mostra "2025-08-28" na tela e manda o valor **antigo** ao servidor,
+    e comparar o valor dela com um ISO nunca dá igual.
+
+    Foi o que aconteceu com o preenchimento automático da data do fixing: ele
+    nasceu morto no navegador e os testes de servidor não tinham como ver.
+    """
+    from pathlib import Path
+
+    raiz = Path(__file__).resolve().parent.parent / "webapp" / "static" / "js"
+    script = (raiz / "liquidacao.js").read_text(encoding="utf-8")
+
+    # nada de `campo.value` cru num campo de data: tudo por campoData
+    assert "campoData.valor" in script and "campoData.definir" in script
+    assert "campoData.escondido" in script, (
+        "o `change` de um campo trocado sai do input escondido; ouvir no "
+        "elemento achado por id não pega nada")
+
+    # e o picker precisa mesmo expor as três
+    picker = (raiz / "data-picker.js").read_text(encoding="utf-8")
+    for nome in ("escondido(el)", "valor(el)", "definir(el, valorIso)"):
+        assert nome in picker, f"campoData.{nome} sumiu do picker"
+
+
 def test_a_data_do_fixing_nasce_em_d_menos_2_do_inicio():
     """O campo chega preenchido, e com o mesmo dia que o motor usaria.
 

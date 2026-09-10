@@ -115,7 +115,13 @@ GLOSSARIO: List[Verbete] = [
     Verbete("Produtos", "Pontos de NDF",
             "Diferença entre o termo e o spot, em pips: (NDF − spot) × 10.000."),
     Verbete("Produtos", "Casado",
-            "Diferença entre o primeiro futuro de dólar e o spot."),
+            "A distância entre o dólar à vista e o primeiro futuro da B3, cotada em "
+            "pips do DOL — milésimos de real: casado = 1º futuro − spot × 1.000.",
+            "Entra no NDF com o sinal do fluxo: saída de moeda estrangeira soma, "
+            "entrada desconta. Numa saída, spot + casado/1.000 dá exatamente o 1º "
+            "futuro dividido por 1.000 — precificar pelo casado é precificar pelo "
+            "futuro, que é o que o casado significa. Moeda sem futuro na B3 não tem "
+            "casado, e o spot passa direto."),
     Verbete("Produtos", "Rolagem",
             "Diferença entre o segundo e o primeiro futuro de dólar, em pips."),
     Verbete("Produtos", "Bullet",

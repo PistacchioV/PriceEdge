@@ -23,17 +23,30 @@
   // formato do mercado aqui, e ambíguo em lugar nenhum quando o dia vem antes.
   const TEXTOS = EN
     ? { hoje: "Today", limpar: "Clear", abrir: "Open calendar",
-        anterior: "Previous month", proximo: "Next month",
-        formato: "dd/mm/yyyy" }
+        formato: "dd/mm/yyyy",
+        meses: { anterior: "Previous month", proximo: "Next month" },
+        anos: { anterior: "Previous year", proximo: "Next year" },
+        paginas: { anterior: "Previous years", proximo: "Next years" } }
     : { hoje: "Hoje", limpar: "Limpar", abrir: "Abrir calendário",
-        anterior: "Mês anterior", proximo: "Próximo mês",
-        formato: "dd/mm/aaaa" };
+        formato: "dd/mm/aaaa",
+        meses: { anterior: "Mês anterior", proximo: "Próximo mês" },
+        anos: { anterior: "Ano anterior", proximo: "Próximo ano" },
+        paginas: { anterior: "Anos anteriores", proximo: "Próximos anos" } };
 
   const MESES = EN
     ? ["January", "February", "March", "April", "May", "June",
        "July", "August", "September", "October", "November", "December"]
     : ["janeiro", "fevereiro", "março", "abril", "maio", "junho",
        "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
+
+  const MESES_CURTOS = EN
+    ? ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+       "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    : ["jan", "fev", "mar", "abr", "mai", "jun",
+       "jul", "ago", "set", "out", "nov", "dez"];
+
+  // 12 anos por página: três colunas por quatro linhas, a mesma grade dos meses
+  const ANOS_POR_PAGINA = 12;
 
   // as duas convenções começam a semana no domingo
   const DIAS = EN ? ["S", "M", "T", "W", "T", "F", "S"]
@@ -174,7 +187,39 @@
       escondido.dispatchEvent(new Event("change", { bubbles: true }));
     }
 
-    function desenhar() {
+    // Três vistas, do mais fino ao mais grosso: dias, meses do ano, anos da
+    // página. Clicar no mês ou no ano do cabeçalho sobe um nível — chegar a
+    // 2031 pela seta seriam sessenta cliques, e uma data de vencimento de swap
+    // mora anos à frente.
+    let vista = "dias";
+    let anoBase = mesVisivel.getFullYear() - (mesVisivel.getFullYear() % ANOS_POR_PAGINA);
+
+    function mesForaDosLimites(ano, mes) {
+      const primeiro = new Date(ano, mes, 1);
+      const ultimo = new Date(ano, mes + 1, 0);
+      return foraDosLimites(primeiro) && foraDosLimites(ultimo)
+        && !(iso(primeiro) < (escondido.dataset.min || "0000-00-00")
+             && iso(ultimo) > (escondido.dataset.max || "9999-99-99"));
+    }
+
+    function anoForaDosLimites(ano) {
+      return mesForaDosLimites(ano, 0) && mesForaDosLimites(ano, 11);
+    }
+
+    function cabecalho(miolo, passo) {
+      return '<div class="campo-data-cabecalho">' + miolo +
+        '<span class="campo-data-navegacao">' +
+          `<button type="button" data-passo="-1" aria-label="${passo.anterior}">&#8593;</button>` +
+          `<button type="button" data-passo="1" aria-label="${passo.proximo}">&#8595;</button>` +
+        "</span></div>";
+    }
+
+    function celula(classes, atributos, rotulo, bloqueado) {
+      return `<button type="button" class="${classes.join(" ")}" ${atributos}` +
+             `${bloqueado ? " disabled" : ""}>${rotulo}</button>`;
+    }
+
+    function desenharDias() {
       const ano = mesVisivel.getFullYear();
       const mes = mesVisivel.getMonth();
       const primeiro = new Date(ano, mes, 1);
@@ -182,14 +227,12 @@
       const selecionado = escondido.value;
       const hoje = iso(new Date());
 
-      let html =
-        '<div class="campo-data-cabecalho">' +
-          `<span>${MESES[mes]} ${EN ? "" : "de "}${ano}</span>` +
-          `<span class="campo-data-navegacao">` +
-            `<button type="button" data-passo="-1" aria-label="${TEXTOS.anterior}">&#8593;</button>` +
-            `<button type="button" data-passo="1" aria-label="${TEXTOS.proximo}">&#8595;</button>` +
-          "</span>" +
-        "</div><div class=\"campo-data-grade\">";
+      let html = cabecalho(
+        '<span class="campo-data-titulo">' +
+          `<button type="button" data-vista="meses">${MESES[mes]}</button>` +
+          (EN ? " " : " de ") +
+          `<button type="button" data-vista="anos">${ano}</button>` +
+        "</span>", TEXTOS.meses) + '<div class="campo-data-grade">';
 
       DIAS.forEach((d) => { html += `<span class="campo-data-semana">${d}</span>`; });
 
@@ -200,20 +243,68 @@
         if (dia.getMonth() !== mes) classes.push("fora");
         if (valor === selecionado) classes.push("escolhido");
         if (valor === hoje) classes.push("hoje");
-        const bloqueado = foraDosLimites(dia) ? " disabled" : "";
-        html += `<button type="button" class="${classes.join(" ")}" ` +
-                `data-valor="${valor}"${bloqueado}>${dia.getDate()}</button>`;
+        html += celula(classes, `data-valor="${valor}"`, dia.getDate(),
+                       foraDosLimites(dia));
       }
+      return html + "</div>";
+    }
 
-      html += '</div><div class="campo-data-rodape">' +
+    function desenharMeses() {
+      const ano = mesVisivel.getFullYear();
+      const escolhido = deIso(escondido.value);
+      const agora = new Date();
+
+      let html = cabecalho(
+        '<span class="campo-data-titulo">' +
+          `<button type="button" data-vista="anos">${ano}</button>` +
+        "</span>", TEXTOS.anos) + '<div class="campo-data-grade compacta">';
+
+      for (let mes = 0; mes < 12; mes += 1) {
+        const classes = ["campo-data-dia"];
+        if (escolhido && escolhido.getFullYear() === ano && escolhido.getMonth() === mes) {
+          classes.push("escolhido");
+        }
+        if (agora.getFullYear() === ano && agora.getMonth() === mes) classes.push("hoje");
+        html += celula(classes, `data-mes="${mes}"`, MESES_CURTOS[mes],
+                       mesForaDosLimites(ano, mes));
+      }
+      return html + "</div>";
+    }
+
+    function desenharAnos() {
+      const escolhido = deIso(escondido.value);
+      const agora = new Date();
+      const fim = anoBase + ANOS_POR_PAGINA - 1;
+
+      let html = cabecalho(
+        `<span class="campo-data-titulo">${anoBase} – ${fim}</span>`,
+        TEXTOS.paginas) + '<div class="campo-data-grade compacta">';
+
+      for (let ano = anoBase; ano <= fim; ano += 1) {
+        const classes = ["campo-data-dia"];
+        if (escolhido && escolhido.getFullYear() === ano) classes.push("escolhido");
+        if (agora.getFullYear() === ano) classes.push("hoje");
+        html += celula(classes, `data-ano="${ano}"`, ano, anoForaDosLimites(ano));
+      }
+      return html + "</div>";
+    }
+
+    function desenhar() {
+      const corpo = vista === "anos" ? desenharAnos()
+                  : vista === "meses" ? desenharMeses()
+                  : desenharDias();
+      painel.innerHTML = corpo + '<div class="campo-data-rodape">' +
         `<button type="button" data-acao="limpar">${TEXTOS.limpar}</button>` +
         `<button type="button" data-acao="hoje">${TEXTOS.hoje}</button></div>`;
-      painel.innerHTML = html;
     }
 
     function abrir() {
       const atual = deIso(escondido.value);
       if (atual) mesVisivel = new Date(atual.getFullYear(), atual.getMonth(), 1);
+      // reabrir sempre nos dias: quem abre o calendário quer escolher um dia,
+      // e voltar na vista de anos de uma consulta anterior seria uma surpresa
+      vista = "dias";
+      anoBase = mesVisivel.getFullYear() - (mesVisivel.getFullYear() % ANOS_POR_PAGINA);
       desenhar();
       painel.hidden = false;
     }
@@ -273,9 +364,36 @@
     painel.addEventListener("click", (e) => {
       const alvo = e.target.closest("button");
       if (!alvo) return;
+      if (alvo.dataset.vista) {          // sobe um nível: dia -> mês -> ano
+        vista = alvo.dataset.vista;
+        if (vista === "anos") {
+          const ano = mesVisivel.getFullYear();
+          anoBase = ano - (ano % ANOS_POR_PAGINA);
+        }
+        desenhar();
+        return;
+      }
+      if (alvo.hasAttribute("data-mes")) {
+        mesVisivel = new Date(mesVisivel.getFullYear(), Number(alvo.dataset.mes), 1);
+        vista = "dias";
+        desenhar();
+        return;
+      }
+      if (alvo.hasAttribute("data-ano")) {
+        mesVisivel = new Date(Number(alvo.dataset.ano), mesVisivel.getMonth(), 1);
+        vista = "meses";                 // ano -> mês -> dia, um passo de cada vez
+        desenhar();
+        return;
+      }
       if (alvo.dataset.passo) {
-        mesVisivel = new Date(mesVisivel.getFullYear(),
-                              mesVisivel.getMonth() + Number(alvo.dataset.passo), 1);
+        const passo = Number(alvo.dataset.passo);
+        if (vista === "anos") anoBase += passo * ANOS_POR_PAGINA;
+        else if (vista === "meses") {
+          mesVisivel = new Date(mesVisivel.getFullYear() + passo, mesVisivel.getMonth(), 1);
+        } else {
+          mesVisivel = new Date(mesVisivel.getFullYear(),
+                                mesVisivel.getMonth() + passo, 1);
+        }
         desenhar();
         return;
       }
@@ -290,6 +408,12 @@
     });
 
     document.addEventListener("click", (e) => {
+      // Trocar de mês redesenha o painel inteiro (`painel.innerHTML = ...`), e
+      // quando este handler roda — ele é o último, na subida do evento — o botão
+      // de seta clicado já saiu do DOM. `contains` num nó solto responde "não
+      // está dentro", e o painel fechava justamente ao navegar: a pessoa clicava
+      // na seta, o calendário sumia e nada acontecia.
+      if (!document.contains(e.target)) return;
       if (!caixa.contains(e.target)) fechar();
     });
 
@@ -305,6 +429,28 @@
     escondido(el) {
       const caixa = el && el.closest ? el.closest(".campo-data") : null;
       return caixa ? caixa.querySelector('input[type="hidden"]') : el;
+    },
+    /** O valor em ISO, venha do campo nativo ou do substituto. */
+    valor(el) {
+      const alvo = window.campoData.escondido(el);
+      return alvo ? alvo.value : "";
+    },
+    /** Escreve uma data ISO no campo — nos dois lados do par, quando há par.
+     *
+     * Escrever direto no elemento que se achou por `id` não basta: depois da
+     * troca esse elemento é a caixa de texto, que mostra dd/mm/aaaa e **não** é
+     * a que vai no formulário. O valor apareceria em ISO na tela e o servidor
+     * receberia o valor antigo. */
+    definir(el, valorIso) {
+      const alvo = window.campoData.escondido(el);
+      if (!alvo) return;
+      alvo.value = valorIso;
+      if (alvo !== el) {
+        const caixa = el.closest(".campo-data");
+        const texto = caixa && caixa.querySelector('input[type="text"]');
+        if (texto) texto.value = exibir(valorIso);
+      }
+      alvo.dispatchEvent(new Event("change", { bubbles: true }));
     },
     limiteMaximo(el, valorIso) {
       const alvo = window.campoData.escondido(el);

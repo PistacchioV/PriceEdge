@@ -48,30 +48,45 @@
   // O dia útil vem do servidor. Refazer a contagem aqui criaria duas verdades
   // para a mesma pergunta — a do navegador e a do pacote — e elas divergiriam
   // no primeiro Carnaval, num campo que ninguém reconfere.
+  // O campo de data é trocado pelo picker próprio por um par escondido+texto: o
+  // `id` fica na caixa de texto (que mostra dd/mm/aaaa) e o `name` no escondido
+  // (que guarda o ISO e é o que o formulário envia). Ler ou escrever direto no
+  // que se achou por `id` compara "28/08/2025" com "2025-08-28" e escreve o ISO
+  // na tela sem trocar o valor enviado — por isso tudo aqui passa por
+  // `campoData`, que atende os dois casos.
+  function valorDe(campo) {
+    return window.campoData ? window.campoData.valor(campo) : campo.value;
+  }
+
+  function escreverEm(campo, valorIso) {
+    if (window.campoData) window.campoData.definir(campo, valorIso);
+    else campo.value = valorIso;
+  }
+
   function camposDeFixing() {
     var todos = document.querySelectorAll('input[id$="_data_fixing"]');
     // só os que ainda estão no automático: o campo digitado é escolha de
     // alguém, e sobrescrevê-lo perderia a data sem avisar
     return Array.prototype.filter.call(todos, function (campo) {
-      return campo.value === (campo.getAttribute("data-padrao") || "");
+      return valorDe(campo) === (campo.getAttribute("data-padrao") || "");
     });
   }
 
   function trazerFixing() {
     var inicio = document.getElementById("inicio");
     var calendario = document.getElementById("calendario");
-    if (!inicio || !inicio.value) return;
+    if (!inicio || !valorDe(inicio)) return;
     var campos = camposDeFixing();
     if (!campos.length) return;
 
-    var endereco = "/api/liquidacao/fixing?inicio=" + encodeURIComponent(inicio.value) +
+    var endereco = "/api/liquidacao/fixing?inicio=" + encodeURIComponent(valorDe(inicio)) +
       "&calendario=" + encodeURIComponent(calendario ? calendario.value : "ANBIMA");
     fetch(endereco)
       .then(function (r) { return r.json(); })
       .then(function (dados) {
         if (!dados || !dados.data) return;
         campos.forEach(function (campo) {
-          campo.value = dados.data;
+          escreverEm(campo, dados.data);
           campo.setAttribute("data-padrao", dados.data);
         });
       })
@@ -92,9 +107,13 @@
       });
     });
 
+    // o `change` de um campo trocado sai do input escondido, que é irmão da
+    // caixa de texto — ouvir no elemento achado por `id` não pegaria nada
     ["inicio", "calendario"].forEach(function (id) {
       var campo = document.getElementById(id);
-      if (campo) campo.addEventListener("change", trazerFixing);
+      if (!campo) return;
+      var alvo = window.campoData ? window.campoData.escondido(campo) : campo;
+      (alvo || campo).addEventListener("change", trazerFixing);
     });
   }
 

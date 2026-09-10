@@ -39,7 +39,7 @@
     <!-- decisões do porte -->
     <div class="mt-20">
       <p class="text-sm font-medium text-slate-400 font-geist">{{ t("01 · Critérios de cálculo") }}</p>
-      <h2 class="mt-4 max-w-3xl text-3xl leading-[1.15] tracking-tight text-white sm:text-4xl font-jakarta font-medium">{{ t("Três escolhas de cálculo que valem explicação.") }}</h2>
+      <h2 class="mt-4 max-w-3xl text-3xl leading-[1.15] tracking-tight text-white sm:text-4xl font-jakarta font-medium">{{ t("Quatro escolhas de cálculo que valem explicação.") }}</h2>
 
       <div class="mt-10 space-y-4">
         {% set decisoes = [
@@ -47,6 +47,8 @@
            'O eixo publicado pela B3 vai até 12.556 — são dias corridos. Consultar essa curva num valor de dias úteis (126 em vez de 183) devolve a taxa de um prazo mais curto, e a diferença chega a 15 bp no vértice de seis meses. Por isso o eixo é explícito em Curva.eixo e taxa_para(dc, du) escolhe o certo sozinha.'),
           ('Fora do domínio, a curva trava na ponta',
            'Prolongar o polinômio cúbico além do último vértice pode devolver qualquer coisa. O padrão aqui é travar no último valor publicado; a extrapolação cúbica e a tangente continuam disponíveis na tela de interpolação, para conferir contra outra fonte.'),
+          ('O casado entra com o sinal do fluxo',
+           'O casado é a distância entre o dólar à vista e o primeiro futuro, cotada em pips do DOL. Ele não é um custo fixo: entra com o sinal do fluxo — saída de moeda estrangeira soma, entrada desconta. A diferença entre os dois sinais não é de arredondamento: num NDF de USD 10 milhões com casado de 8 pips, eles estão a R$ 160 mil um do outro. A identidade que confirma a regra: numa saída, spot + casado/1.000 é o próprio primeiro futuro dividido por 1.000 — precificar pelo casado é precificar pelo futuro.'),
           ('O endpoint GetReferenceRates saiu',
            'O endereço referenceRatesProxy/api/pt-br/GetReferenceRates/ responde 404 hoje. Só o GetDownloadFile, do link “Histórico de arquivos”, continua de pé — e é o único usado aqui. O Search/GetList também foi descartado: ignora o parâmetro de data e devolve sempre a curva mais recente, disfarçada de histórico.'),
         ] %}

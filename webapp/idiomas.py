@@ -468,8 +468,8 @@ TRADUCOES: Dict[str, str] = {
         "Everything the package decides on your behalf is listed here. Where the port "
         "disagrees with an original spreadsheet, the reason is written down.",
     "01 · Critérios de cálculo": "01 · Porting decisions",
-    "Três escolhas de cálculo que valem explicação.":
-        "Three places where the code does not copy the spreadsheet.",
+    "Quatro escolhas de cálculo que valem explicação.":
+        "Four places where the code does not copy the spreadsheet.",
     "02 · Curvas disponíveis": "02 · Available curves",
     "Sete curvas, com o código que a B3 usa no arquivo.":
         "Seven curves, with the code B3 uses in the file.",
@@ -812,6 +812,22 @@ TRADUCOES: Dict[str, str] = {
         "return anything at all. The default here is to hold the last published value; "
         "cubic extrapolation is still available on the interpolation screen, to "
         "reproduce a spreadsheet number.",
+    "O casado entra com o sinal do fluxo":
+        "The casado enters with the sign of the flow",
+    "O casado é a distância entre o dólar à vista e o primeiro futuro, cotada em "
+    "pips do DOL. Ele não é um custo fixo: entra com o sinal do fluxo — saída de "
+    "moeda estrangeira soma, entrada desconta. A diferença entre os dois sinais não "
+    "é de arredondamento: num NDF de USD 10 milhões com casado de 8 pips, eles estão "
+    "a R$ 160 mil um do outro. A identidade que confirma a regra: numa saída, spot + "
+    "casado/1.000 é o próprio primeiro futuro dividido por 1.000 — precificar pelo "
+    "casado é precificar pelo futuro.":
+        "The casado is the gap between spot dollar and the first future, quoted in "
+        "DOL pips. It is not a flat cost: it enters with the sign of the flow — "
+        "foreign currency going out adds, coming in subtracts. The two signs are not "
+        "a rounding apart: on a USD 10 million NDF with an 8-pip casado they sit R$ "
+        "160 thousand from each other. The identity that settles the rule: on an "
+        "outflow, spot + casado/1,000 is the first future itself divided by 1,000 — "
+        "pricing off the casado is pricing off the future.",
     "O endpoint GetReferenceRates saiu": "The GetReferenceRates endpoint is gone",
     "A planilha do collar Garman-Kohlhagen busca DI1 e DDI em "
     "referenceRatesProxy/api/pt-br/GetReferenceRates/. Esse endereço responde 404 hoje. "
@@ -984,8 +1000,19 @@ TRADUCOES: Dict[str, str] = {
     "Diferença entre o termo e o spot, em pips: (NDF − spot) × 10.000.":
         "The difference between forward and spot, in pips: (NDF − spot) × 10,000.",
     "Casado": "Casado (spot vs. 1st future)",
-    "Diferença entre o primeiro futuro de dólar e o spot.":
-        "The difference between the first dollar future and spot.",
+    "A distância entre o dólar à vista e o primeiro futuro da B3, cotada em pips "
+    "do DOL — milésimos de real: casado = 1º futuro − spot × 1.000.":
+        "The gap between spot dollar and B3's first future, quoted in DOL pips — "
+        "thousandths of a real: casado = 1st future − spot × 1,000.",
+    "Entra no NDF com o sinal do fluxo: saída de moeda estrangeira soma, entrada "
+    "desconta. Numa saída, spot + casado/1.000 dá exatamente o 1º futuro dividido "
+    "por 1.000 — precificar pelo casado é precificar pelo futuro, que é o que o "
+    "casado significa. Moeda sem futuro na B3 não tem casado, e o spot passa direto.":
+        "It enters the NDF with the sign of the flow: foreign currency going out "
+        "adds, coming in subtracts. On an outflow, spot + casado/1,000 is exactly "
+        "the first future divided by 1,000 — pricing off the casado is pricing off "
+        "the future, which is what the casado means. A currency with no B3 future "
+        "has no casado, and spot goes through untouched.",
     "Rolagem": "Roll (future-to-future)",
     "Diferença entre o segundo e o primeiro futuro de dólar, em pips.":
         "The difference between the second and the first dollar future, in pips.",
@@ -1892,6 +1919,16 @@ def do_pedido() -> str:
         return PADRAO                                    # fora de um pedido
 
 
+def _e_frase(valor) -> bool:
+    """Texto que vale procurar no dicionário: o que tem letra.
+
+    Data, número e código numérico são dado, não frase. Mandá-los para o
+    ``traduzir`` não quebra nada — voltam iguais —, mas suja a auditoria de
+    traduções faltando com valores que mudam a cada execução.
+    """
+    return isinstance(valor, str) and any(c.isalpha() for c in valor)
+
+
 def mensagem(exc, idioma=None) -> str:
     """A frase de um erro no idioma da tela.
 
@@ -1909,8 +1946,10 @@ def mensagem(exc, idioma=None) -> str:
     molde, valores = partes(exc)
     # o rótulo que entra no molde é texto, e texto também se traduz: "preencha o
     # campo {campo}" com campo="notional remanescente" daria meia frase em cada
-    # idioma. Número e data passam direto, porque não estão no dicionário.
-    valores = {chave: traduzir(valor, escolhido) if isinstance(valor, str) else valor
+    # idioma. Já uma data ou um número **não** é frase: "10/09/2026" passaria
+    # pelo dicionário, voltaria igual e ainda entraria na lista de traduções
+    # faltando — uma falta que muda todo dia e que ninguém pode preencher.
+    valores = {chave: traduzir(valor, escolhido) if _e_frase(valor) else valor
                for chave, valor in valores.items()}
     traduzido = traduzir(molde, escolhido)
     if not valores:

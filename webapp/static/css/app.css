@@ -127,6 +127,19 @@ select.campo option { background: #0b1220; color: #e2e8f0; }
   font-weight: 500;
   color: #a5f3fc;
 }
+/* o mês e o ano do cabeçalho são botões: clicar sobe para a grade de meses ou
+   de anos, que é como se chega a um vencimento a cinco anos daqui sem sessenta
+   cliques na seta */
+.campo-data-titulo { display: inline-flex; align-items: center; gap: 0.15rem; }
+.campo-data-titulo button {
+  border-radius: 0.4rem;
+  padding: 0.1rem 0.3rem;
+  color: inherit;
+  font: inherit;
+  transition: background 150ms ease, color 150ms ease;
+}
+.campo-data-titulo button:hover { background: rgba(255, 255, 255, 0.1); color: #e0f2fe; }
+
 .campo-data-navegacao { display: flex; gap: 0.25rem; }
 .campo-data-navegacao button {
   height: 1.6rem;
@@ -144,6 +157,10 @@ select.campo option { background: #0b1220; color: #e2e8f0; }
   grid-template-columns: repeat(7, 1fr);
   gap: 0.15rem;
 }
+/* meses e anos: três colunas, células mais largas que as de dia */
+.campo-data-grade.compacta { grid-template-columns: repeat(3, 1fr); gap: 0.3rem; }
+.campo-data-grade.compacta .campo-data-dia { height: 2.3rem; }
+
 .campo-data-semana {
   padding-bottom: 0.35rem;
   text-align: center;
