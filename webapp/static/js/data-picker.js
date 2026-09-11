@@ -162,8 +162,15 @@
     painel.className = "campo-data-painel";
     painel.hidden = true;
 
-    caixa.append(escondido, texto, botao, painel);
+    caixa.append(escondido, texto, botao);
     original.replaceWith(caixa);
+    // O painel mora no <body>, não dentro da caixa. Um ancestral com
+    // backdrop-filter (o cartão do formulário usa `backdrop-blur-xl`) cria um
+    // contexto de empilhamento, e o z-index do painel passa a valer só lá
+    // dentro: o rodapé, que vem depois na página, era pintado por cima do
+    // calendário. O clique num dia caía no rodapé, o "clique fora" fechava o
+    // painel, e a data não era aplicada. No <body> nenhum ancestral o prende.
+    document.body.appendChild(painel);
 
     // limites herdados do campo original
     const maximo = original.getAttribute("max") || original.dataset.maximoHoje || "";
@@ -296,6 +303,25 @@
       painel.innerHTML = corpo + '<div class="campo-data-rodape">' +
         `<button type="button" data-acao="limpar">${TEXTOS.limpar}</button>` +
         `<button type="button" data-acao="hoje">${TEXTOS.hoje}</button></div>`;
+      // a grade de meses é mais baixa que a de dias: aberto para cima, o
+      // painel descolaria do campo sem reposicionar
+      if (!painel.hidden) posicionar();
+    }
+
+    function posicionar() {
+      const margem = 8;
+      const campo = caixa.getBoundingClientRect();
+      const altura = painel.offsetHeight;
+      const largura = painel.offsetWidth;
+      let topo = campo.bottom + margem;
+      // sem espaço embaixo e com espaço em cima: abre para cima
+      if (topo + altura > window.innerHeight - margem
+          && campo.top - margem - altura >= margem) {
+        topo = campo.top - margem - altura;
+      }
+      const esquerda = Math.min(campo.left, window.innerWidth - largura - margem);
+      painel.style.top = `${Math.max(margem, topo)}px`;
+      painel.style.left = `${Math.max(margem, esquerda)}px`;
     }
 
     function abrir() {
@@ -307,6 +333,7 @@
       anoBase = mesVisivel.getFullYear() - (mesVisivel.getFullYear() % ANOS_POR_PAGINA);
       desenhar();
       painel.hidden = false;
+      posicionar();                    // só dá para medir depois de visível
     }
 
     function fechar() { painel.hidden = true; }
@@ -414,8 +441,15 @@
       // está dentro", e o painel fechava justamente ao navegar: a pessoa clicava
       // na seta, o calendário sumia e nada acontecia.
       if (!document.contains(e.target)) return;
-      if (!caixa.contains(e.target)) fechar();
+      // o painel está no <body>, fora da caixa: sem este segundo teste,
+      // qualquer clique dentro do calendário contaria como clique fora
+      if (!caixa.contains(e.target) && !painel.contains(e.target)) fechar();
     });
+
+    // position: fixed não acompanha a rolagem sozinho
+    const acompanhar = () => { if (!painel.hidden) posicionar(); };
+    window.addEventListener("scroll", acompanhar, true);
+    window.addEventListener("resize", acompanhar);
 
     return { escondido, texto };
   }

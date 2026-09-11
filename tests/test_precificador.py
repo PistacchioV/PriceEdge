@@ -2810,6 +2810,35 @@ def test_o_calendario_nao_fecha_ao_trocar_de_mes():
         "trocar de mês fecha o calendário")
 
 
+def test_o_calendario_fica_por_cima_do_resto_da_pagina():
+    """O painel mora no <body>, e o clique fora sabe disso.
+
+    Dentro da caixa, o painel herdava o contexto de empilhamento do cartão do
+    formulário — ``backdrop-blur-xl`` cria um —, e o z-index dele só valia lá
+    dentro. O rodapé, que vem depois na página, era pintado por cima: no
+    navegador, os 42 dias do calendário da data das curvas estavam cobertos
+    por ele. O clique num dia caía no rodapé, o "clique fora" fechava o painel
+    e a data não era aplicada.
+
+    O teste anterior clicava com ``element.click()``, que entrega o evento ao
+    botão mesmo com outra coisa por cima — por isso não viu. A verificação que
+    vale é ``document.elementFromPoint`` no centro de cada dia.
+    """
+    from pathlib import Path
+    raiz = Path(__file__).resolve().parent.parent / "webapp" / "static"
+    script = (raiz / "js" / "data-picker.js").read_text(encoding="utf-8")
+    estilo = (raiz / "css" / "app.css").read_text(encoding="utf-8")
+
+    assert "document.body.appendChild(painel)" in script, (
+        "o painel voltou para dentro da caixa: qualquer ancestral com "
+        "backdrop-filter o prende de novo")
+    assert "caixa.append(escondido, texto, botao, painel)" not in script
+    # fora da caixa, o clique dentro do painel não pode contar como clique fora
+    assert "!painel.contains(e.target)" in script
+    regra = re.search(r"\.campo-data-painel \{(.*?)\}", estilo, re.S).group(1)
+    assert "position: fixed" in regra
+
+
 def test_quem_escreve_numa_data_passa_pelo_campoData():
     """O campo de data é um par, e escrever num lado só não muda o outro.
 

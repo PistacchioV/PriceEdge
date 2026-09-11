@@ -104,10 +104,13 @@ select.campo option { background: #0b1220; color: #e2e8f0; }
 .campo-data-botao:hover { color: #a5f3fc; background: rgba(255, 255, 255, 0.06); }
 .campo-data-botao svg { height: 1.05rem; width: 1.05rem; }
 
+/* fixo e no <body>: o script põe top/left junto ao campo. Absoluto dentro do
+   cartão, o painel ficava preso ao contexto de empilhamento do backdrop-blur e
+   o rodapé era pintado por cima dele. */
 .campo-data-painel {
-  position: absolute;
-  z-index: 60;
-  top: calc(100% + 0.5rem);
+  position: fixed;
+  z-index: 70;
+  top: 0;
   left: 0;
   width: 17.5rem;
   padding: 0.85rem;
