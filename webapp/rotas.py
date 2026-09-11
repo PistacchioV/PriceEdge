@@ -256,16 +256,18 @@ def _form_do_construtor(hoje: date, template=None) -> dict:
         "nocional": "100.000.000,00", "meses_periodo": "6",
         "amortizacao": BULLET, "fee": "0", "calendario": "ANBIMA",
         "convencao_dia_util": MODIFIED_FOLLOWING, "sem_fluxo": "",
-        "perna_ativa": "pre_brl", "valor_ativa": "17",
-        "perna_passiva": "cdi", "valor_passiva": "",
-        "modo_cdi": SPREAD, "resolver": "passiva", "spot": "5,15",
+        # resolve a ativa por padrão: dado CDI flat, que taxa pré zera o MtM
+        "perna_ativa": "pre_brl", "valor_ativa": "",
+        "perna_passiva": "cdi", "valor_passiva": "0",
+        "modo_cdi": SPREAD, "resolver": "ativa", "spot": "5,15",
         "sofr": ", ".join(str(preco) for preco in SOFR_PADRAO),
         "term_sofr": "3,64637, 3,65811, 3,67358, 3,73148",
     }
     if template:
         padrao.update({
             "perna_ativa": template.ativa, "perna_passiva": template.passiva,
-            "valor_ativa": template.valor_ativa, "valor_passiva": "",
+            "valor_ativa": template.valor_ativa,
+            "valor_passiva": template.valor_passiva,
             "modo_cdi": template.modo_cdi,
         })
     return padrao
@@ -473,7 +475,7 @@ def _montar_personalizado(form) -> dict:
             {meses: taxa / 100.0 for meses, taxa in zip(TENORES_TERM, term)})
 
     extras = {"modo_cdi": modo_cdi}
-    lado = form.get("resolver") or "passiva"
+    lado = form.get("resolver") or "ativa"
 
     def ler(campo: str, tipo) -> float:
         if tipo.id == "cdi" and modo_cdi == PERCENTUAL:

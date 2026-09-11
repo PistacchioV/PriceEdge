@@ -1,9 +1,9 @@
 {
  "fonte": "https://markets.newyorkfed.org/api/rates/secured",
- "atualizado_em": "2026-09-10 14:05:19",
+ "atualizado_em": "2026-09-11 14:26:48",
  "inicio": "2018-04-02",
- "fim": "2026-09-10",
- "dias": 2109,
+ "fim": "2026-09-11",
+ "dias": 2110,
  "campos": [
   "overnight",
   "media30",
@@ -12860,7 +12860,14 @@
    "media30": 0.036491699999999995,
    "media90": 0.0364793,
    "media180": 0.0365864,
-   "indice": 1.25820822
+   "indice": 1.25820822,
+   "overnight": 0.0362
+  },
+  "2026-09-11": {
+   "media30": 0.036485,
+   "media90": 0.0364761,
+   "media180": 0.0365847,
+   "indice": 1.25833474
   }
  }
 }

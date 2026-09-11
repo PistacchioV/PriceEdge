@@ -1,9 +1,9 @@
 {
  "fonte": "https://www.suomenpankki.fi/en/statistics/data-and-charts/interest-rates/charts/korot_kuviot_en/euriborkorot_pv_chrt_en/",
- "atualizado_em": "2026-09-10 14:35:03",
+ "atualizado_em": "2026-09-11 14:26:52",
  "inicio": "2006-01-02",
- "fim": "2026-09-09",
- "dias": 5313,
+ "fim": "2026-09-10",
+ "dias": 5314,
  "tenores": [
   "1 week",
   "1 month",
@@ -37193,6 +37193,13 @@
    "1 month": 0.023690000000000003,
    "3 month": 0.02626,
    "6 month": 0.027999999999999997,
+   "12 month": 0.03138
+  },
+  "2026-09-10": {
+   "1 week": 0.02191,
+   "1 month": 0.023860000000000003,
+   "3 month": 0.02643,
+   "6 month": 0.02806,
    "12 month": 0.03138
   }
  }

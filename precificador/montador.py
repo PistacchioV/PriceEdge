@@ -125,6 +125,11 @@ class Template:
     passiva: str
     icone: str
     resumo: str
+    # O padrão da tela é resolver a ponta **ativa**: a pergunta de mesa é "que
+    # taxa pré dá CDI flat?". Então o valor dado mora na passiva, e a ativa nasce
+    # vazia. Um valor na ponta que o solver vai calcular seria ignorado em
+    # silêncio, e a outra ponta, vazia, entraria como zero.
+    valor_passiva: str = ""
     valor_ativa: str = ""
     modo_cdi: str = SPREAD
 
@@ -133,24 +138,24 @@ TEMPLATES: List[Template] = [
     Template("pre_cdi", "Pré BRL × CDI ± spread", "pre_brl", "cdi",
              "solar:chart-2-linear",
              "Uma curva só. O spread é multiplicativo: (1+CDI)·(1+spread) = (1+pré).",
-             valor_ativa="17"),
+             valor_passiva="0"),
     Template("usd_brl", "Pré USD × Pré BRL", "pre_usd", "pre_brl",
              "solar:dollar-minimalistic-linear",
              "Cross-currency. Fluxo em reais desconta no DI, fluxo em dólar no cupom cambial.",
-             valor_ativa="10"),
+             valor_passiva="17"),
     Template("usd_cdi", "Pré USD × CDI ± spread", "pre_usd", "cdi",
              "solar:card-transfer-linear",
              "Cross-currency com a ponta em reais flutuante. Duas curvas de desconto, "
              "spread multiplicativo.",
-             valor_ativa="10"),
+             valor_passiva="0"),
     Template("ipca_cdi", "IPCA capitalizado × CDI ± spread", "ipca", "cdi",
              "solar:graph-up-linear",
              "Inflação implícita de (1+DI)/(1+DI×IPCA)−1, capitalizada por período.",
-             valor_ativa="6"),
+             valor_passiva="0"),
     Template("usd_sofr", "Pré USD × Term SOFR ± spread", "pre_usd_sofr", "term_sofr",
              "solar:global-linear",
              "Bootstrap dos futuros SR3 em datas IMM. Spread aditivo, linear 360.",
-             valor_ativa="5"),
+             valor_passiva="0"),
 ]
 
 TEMPLATE_POR_ID: Dict[str, Template] = {t.id: t for t in TEMPLATES}

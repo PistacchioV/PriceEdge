@@ -490,6 +490,69 @@ def test_montador_reproduz_o_produto_pronto():
     assert swap.mtm == pytest.approx(0.0, abs=1e-6)
 
 
+def test_montador_resolve_a_ponta_ativa_de_volta():
+    """Resolver a ativa é o caminho inverso, e tem que voltar ao mesmo número.
+
+    Dado o spread que zera o MtM contra 17% pré, pedir a taxa pré que zera o
+    MtM contra esse spread devolve os 17%. É o padrão da tela agora — "que pré
+    dá CDI flat?" —, então o lado ativo do solver deixou de ser caminho raro.
+    """
+    from precificador.montador import Mercado, resolver
+    mercado = Mercado(di=curva_di())
+    spread = resolver(PARAMS, mercado, "pre_brl", 0.17, "cdi", 0.0, "passiva")
+    pre = resolver(PARAMS, mercado, "pre_brl", 0.0, "cdi", spread, "ativa")
+    assert pre == pytest.approx(0.17, abs=1e-9)
+
+
+def test_a_tela_de_precificar_resolve_a_ponta_ativa_por_padrao():
+    """O padrão é resolver a ponta que recebe, com o valor dado na que paga.
+
+    As duas coisas andam juntas. Mudar só o seletor deixaria o valor do template
+    na ponta que o solver ignora e a outra vazia — que entra como zero, sem
+    erro nenhum, e devolve uma taxa que parece taxa.
+    """
+    from datetime import date
+    from webapp import create_app
+    from webapp.rotas import _form_do_construtor
+    from precificador.montador import TEMPLATES
+
+    for template in [None, *TEMPLATES]:
+        nome = template.id if template else "livre"
+        form = _form_do_construtor(date(2026, 9, 10), template)
+        assert form["resolver"] == "ativa", nome
+        assert form["valor_ativa"] == "", f"{nome}: valor na ponta que vai ser calculada"
+        assert form["valor_passiva"] != "", f"{nome}: a ponta dada nasceu vazia"
+
+    pagina = create_app().test_client().get("/precificar").data.decode()
+    seletor = re.search(r'id="resolver"[^>]*>(.*?)</select>', pagina, re.S).group(1)
+    assert re.search(r'value="ativa"\s+selected', seletor)
+
+    # o selo "calculada" aparece só no cartão da ativa
+    selos = {lado: atributos for lado, _, atributos in
+             re.findall(r'data-ponta="(\w+)"(.*?)data-selo-resolvida([^>]*)>', pagina, re.S)}
+    assert set(selos) == {"ativa", "passiva"}
+    assert "hidden" not in selos["ativa"]
+    assert "hidden" in selos["passiva"]
+
+
+def test_o_script_de_precificar_encontra_o_que_procura():
+    """O selo acompanha o seletor por script, e seletor errado falha calado."""
+    from pathlib import Path
+    from webapp import create_app
+
+    script = (Path(__file__).resolve().parent.parent / "webapp" / "static" / "js"
+              / "precificar.js").read_text(encoding="utf-8")
+    pagina = create_app().test_client().get("/precificar").data.decode()
+
+    for campo in re.findall(r'getElementById\("(\w+)"\)', script):
+        assert f'id="{campo}"' in pagina, f"{campo} não está na tela"
+    for atributo in re.findall(r'\[(data-[\w-]+)\]', script):
+        assert atributo in pagina, f"{atributo} não está na tela"
+    for atributo in re.findall(r'getAttribute\("(data-[\w-]+)"\)', script):
+        assert atributo in pagina, f"{atributo} não está na tela"
+    assert "js/precificar.js" in pagina
+
+
 # --------------------------------------------------------- CDI realizado ---
 
 def test_acumulo_do_cdi_segue_a_convencao_da_b3():

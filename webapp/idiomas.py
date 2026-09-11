@@ -259,6 +259,7 @@ TRADUCOES: Dict[str, str] = {
     "Spread sobre o CDI (% a.a.)": "Spread over CDI (% p.a.)",
     "Percentual do CDI (%)": "Percentage of CDI (%)",
     "deixe vazio para calcular": "leave empty to solve for it",
+    "calculada": "solved",
     "O que resolver": "What to solve for",
     "A ponta CDI, dada a taxa pré": "The CDI leg, given the fixed rate",
     "A ponta CDI, dada a taxa em dólar": "The CDI leg, given the dollar rate",

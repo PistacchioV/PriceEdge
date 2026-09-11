@@ -2,14 +2,61 @@
 {% from "_componentes.html" import alerta, estatistica, botao %}
 {% block titulo %}{{ t("Precificar") }}{% endblock %}
 
-{% macro seletor_perna(nome_campo, escolhido, rotulo, tipos) %}
-<div>
-  <label class="rotulo" for="{{ nome_campo }}">{{ rotulo }}</label>
-  <select class="campo" id="{{ nome_campo }}" name="{{ nome_campo }}" onchange="this.form.submit()">
-    {% for tipo in tipos %}
-    <option value="{{ tipo.id }}" {{ 'selected' if escolhido == tipo.id }}>{{ t(tipo.nome) }}</option>
-    {% endfor %}
-  </select>
+{# Cada ponta é um cartão só, com tudo o que é dela: o indexador, o que ele
+   significa, o valor e — quando é CDI — a convenção. Antes os campos das duas
+   pontas vinham intercalados numa grade (seletor | seletor, resumo, resumo,
+   valor | valor), e ler uma ponta obrigava a atravessar a outra. #}
+{% macro ponta_card(lado, campo_perna, campo_valor, rotulo, cor) %}
+{% set escolhido = form[campo_perna] %}
+{% set resolvida = (form.resolver or 'ativa') == lado %}
+<div data-ponta="{{ lado }}"
+     class="rounded-2xl border {{ 'border-cyan-200/20 bg-cyan-400/[0.05]' if cor == 'cyan' else 'border-white/[0.08] bg-white/[0.02]' }} p-5">
+  <div class="mb-4 flex items-center justify-between gap-3">
+    <div class="flex items-center gap-2">
+      <span class="h-1.5 w-1.5 rounded-full {{ 'bg-cyan-200' if cor == 'cyan' else 'bg-slate-400' }}"></span>
+      <p class="text-[11px] font-semibold uppercase tracking-widest {{ 'text-cyan-200' if cor == 'cyan' else 'text-slate-400' }} font-geist">{{ rotulo }}</p>
+    </div>
+    <span data-selo-resolvida
+          class="rounded-full border border-emerald-300/20 bg-emerald-400/10 px-2 py-0.5 text-[10px] font-medium text-emerald-200 font-geist"
+          {{ 'hidden' if not resolvida }}>{{ t("calculada") }}</span>
+  </div>
+  <div class="grid gap-4">
+    <div>
+      <label class="rotulo" for="{{ campo_perna }}">{{ t("Indexador") }}</label>
+      <select class="campo" id="{{ campo_perna }}" name="{{ campo_perna }}" onchange="this.form.submit()">
+        {% for tipo in tipos %}
+        <option value="{{ tipo.id }}" {{ 'selected' if escolhido == tipo.id }}>{{ t(tipo.nome) }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    {% for tipo in tipos %}{% if tipo.id == escolhido %}
+    <p class="rounded-xl border border-white/[0.06] bg-black/20 px-4 py-3 text-xs leading-5 text-slate-400 font-geist">{{ t(tipo.resumo) }}</p>
+    <div>
+      <label class="rotulo" for="{{ campo_valor }}">{{ t(tipo.parametro) }}</label>
+      <input class="campo" id="{{ campo_valor }}" name="{{ campo_valor }}" value="{{ form[campo_valor] }}"
+             data-valor-ponta data-dica="{{ t('deixe vazio para calcular') }}"
+             placeholder="{{ t('deixe vazio para calcular') if resolvida }}"
+             inputmode="decimal" data-formato="percentual"/>
+    </div>
+    {% if tipo.id == 'cdi' %}
+    {# a convenção é da ponta CDI, então mora no cartão dela — e só pode haver
+       uma: CDI contra CDI é recusado pelo montador #}
+    <div>
+      <label class="rotulo">{{ t("Remuneração da ponta CDI") }}</label>
+      <div class="inline-flex rounded-full border border-white/[0.12] bg-white/[0.04] p-1">
+        <label class="cursor-pointer">
+          <input type="radio" name="modo_cdi" value="spread" class="peer sr-only" {{ 'checked' if form.modo_cdi != 'percentual' }}/>
+          <span class="block rounded-full px-4 py-1.5 text-sm font-medium text-slate-300 transition peer-checked:bg-cyan-100 peer-checked:text-slate-950 font-geist">{{ t("CDI ± spread") }}</span>
+        </label>
+        <label class="cursor-pointer">
+          <input type="radio" name="modo_cdi" value="percentual" class="peer sr-only" {{ 'checked' if form.modo_cdi == 'percentual' }}/>
+          <span class="block rounded-full px-4 py-1.5 text-sm font-medium text-slate-300 transition peer-checked:bg-cyan-100 peer-checked:text-slate-950 font-geist">{{ t("% do CDI") }}</span>
+        </label>
+      </div>
+    </div>
+    {% endif %}
+    {% endif %}{% endfor %}
+  </div>
 </div>
 {% endmacro %}
 
@@ -55,67 +102,17 @@
 
         <p class="text-[11px] font-semibold uppercase tracking-widest text-cyan-200 font-geist">{{ t("Pontas") }}</p>
 
-        <div class="mt-5 grid gap-4 sm:grid-cols-2">
-          {{ seletor_perna('perna_ativa', form.perna_ativa, t('Ponta ativa (recebe)'), tipos) }}
-          {{ seletor_perna('perna_passiva', form.perna_passiva, t('Ponta passiva (paga)'), tipos) }}
+        <div class="mt-5 grid gap-4">
+          {{ ponta_card('ativa', 'perna_ativa', 'valor_ativa', t('Ponta ativa (recebe)'), 'cyan') }}
+          {{ ponta_card('passiva', 'perna_passiva', 'valor_passiva', t('Ponta passiva (paga)'), 'slate') }}
 
-          {% for tipo in tipos %}
-            {% if tipo.id == form.perna_ativa %}
-            <div class="sm:col-span-2 rounded-xl border border-white/[0.06] bg-black/20 px-4 py-3">
-              <p class="text-xs leading-5 text-slate-400 font-geist">
-                <span class="text-cyan-100">{{ t("Recebe") }}:</span> {{ t(tipo.resumo) }}
-              </p>
-            </div>
-            {% endif %}
-          {% endfor %}
-          {% for tipo in tipos %}
-            {% if tipo.id == form.perna_passiva %}
-            <div class="sm:col-span-2 rounded-xl border border-white/[0.06] bg-black/20 px-4 py-3">
-              <p class="text-xs leading-5 text-slate-400 font-geist">
-                <span class="text-cyan-100">{{ t("Paga") }}:</span> {{ t(tipo.resumo) }}
-              </p>
-            </div>
-            {% endif %}
-          {% endfor %}
-
-          {% for tipo in tipos %}{% if tipo.id == form.perna_ativa %}
           <div>
-            <label class="rotulo" for="valor_ativa">{{ t(tipo.parametro) }}</label>
-            <input class="campo" id="valor_ativa" name="valor_ativa" value="{{ form.valor_ativa }}"
-                   inputmode="decimal" data-formato="percentual"/>
-          </div>
-          {% endif %}{% endfor %}
-          {% for tipo in tipos %}{% if tipo.id == form.perna_passiva %}
-          <div>
-            <label class="rotulo" for="valor_passiva">{{ t(tipo.parametro) }}</label>
-            <input class="campo" id="valor_passiva" name="valor_passiva" value="{{ form.valor_passiva }}"
-                   placeholder="{{ t('deixe vazio para calcular') }}" inputmode="decimal" data-formato="percentual"/>
-          </div>
-          {% endif %}{% endfor %}
-
-          <div class="sm:col-span-2">
             <label class="rotulo" for="resolver">{{ t("O que resolver") }}</label>
             <select class="campo" id="resolver" name="resolver">
+              <option value="ativa" {{ 'selected' if (form.resolver or 'ativa') == 'ativa' }}>{{ t("A ponta ativa, dada a passiva") }}</option>
               <option value="passiva" {{ 'selected' if form.resolver == 'passiva' }}>{{ t("A ponta passiva, dada a ativa") }}</option>
-              <option value="ativa" {{ 'selected' if form.resolver == 'ativa' }}>{{ t("A ponta ativa, dada a passiva") }}</option>
             </select>
           </div>
-
-          {% if form.perna_ativa == 'cdi' or form.perna_passiva == 'cdi' %}
-          <div class="sm:col-span-2">
-            <label class="rotulo">{{ t("Remuneração da ponta CDI") }}</label>
-            <div class="inline-flex rounded-full border border-white/[0.12] bg-white/[0.04] p-1">
-              <label class="cursor-pointer">
-                <input type="radio" name="modo_cdi" value="spread" class="peer sr-only" {{ 'checked' if form.modo_cdi != 'percentual' }}/>
-                <span class="block rounded-full px-4 py-1.5 text-sm font-medium text-slate-300 transition peer-checked:bg-cyan-100 peer-checked:text-slate-950 font-geist">{{ t("CDI ± spread") }}</span>
-              </label>
-              <label class="cursor-pointer">
-                <input type="radio" name="modo_cdi" value="percentual" class="peer sr-only" {{ 'checked' if form.modo_cdi == 'percentual' }}/>
-                <span class="block rounded-full px-4 py-1.5 text-sm font-medium text-slate-300 transition peer-checked:bg-cyan-100 peer-checked:text-slate-950 font-geist">{{ t("% do CDI") }}</span>
-              </label>
-            </div>
-          </div>
-          {% endif %}
         </div>
 
         <div class="my-7 h-px w-full bg-white/[0.08]"></div>
@@ -320,4 +317,8 @@
     </form>
   </div>
 </section>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/precificar.js') }}"></script>
 {% endblock %}
