@@ -1326,6 +1326,17 @@ TRADUCOES: Dict[str, str] = {
     "Moeda do fluxo": "Flow currency",
     "Fixing inicial da moeda": "Opening currency fixing",
     "Fixing final da moeda": "Closing currency fixing",
+    "Defasagem do fixing (dias úteis)": "Fixing lag (business days)",
+    "Em branco, os dois vêm da PTAX de fechamento da data recuada pela defasagem "
+    "— 1 é o D-1 da maioria dos contratos, 0 é a própria data. Em reais, não há "
+    "conversão.":
+        "Left blank, both come from the closing PTAX of the date moved back by the "
+        "lag — 1 is the D-1 most contracts use, 0 is the date itself. In reais "
+        "there is no conversion.",
+    "a defasagem do fixing de moeda é de {defasagem} dias úteis, fora da faixa de "
+    "0 a {limite}.":
+        "the currency fixing lag is {defasagem} business days, outside the 0 to "
+        "{limite} range.",
     "PTAX, busca sozinha": "PTAX, fetched automatically",
     "Em branco, os dois vêm da PTAX de fechamento do dia útil anterior a cada data. "
     "Em reais, não há conversão.":
@@ -1951,13 +1962,21 @@ def faltando() -> set:
     return set(_FALTANDO)
 
 
-def traduzir(texto: str, idioma: str = PADRAO) -> str:
-    """Traduz uma frase; sem tradução, devolve o original."""
+def traduzir(texto: str, idioma: str = PADRAO, auditar_falta: bool = True) -> str:
+    """Traduz uma frase; sem tradução, devolve o original.
+
+    ``auditar_falta=False`` traduz sem anotar a falta. Serve para o que entra
+    no molde de um erro como **valor**: um rótulo de campo vale traduzir, mas
+    ali também passam textos que não são frase nossa — a mensagem crua de uma
+    exceção de rede, por exemplo. Auditados, eles entravam na lista de
+    traduções faltando, mudavam a cada falha de rede e ninguém podia
+    preenchê-los; o teste de cobertura quebrava sozinho de vez em quando.
+    """
     if idioma == PADRAO:
         return texto
     traduzido = TRADUCOES.get(texto)
     if traduzido is None:
-        if _AUDITANDO and texto and texto.strip():
+        if _AUDITANDO and auditar_falta and texto and texto.strip():
             _FALTANDO.add(texto)
         return texto
     return traduzido
@@ -2003,7 +2022,8 @@ def mensagem(exc, idioma=None) -> str:
     # idioma. Já uma data ou um número **não** é frase: "10/09/2026" passaria
     # pelo dicionário, voltaria igual e ainda entraria na lista de traduções
     # faltando — uma falta que muda todo dia e que ninguém pode preencher.
-    valores = {chave: traduzir(valor, escolhido) if _e_frase(valor) else valor
+    valores = {chave: traduzir(valor, escolhido, auditar_falta=False)
+               if _e_frase(valor) else valor
                for chave, valor in valores.items()}
     traduzido = traduzir(molde, escolhido)
     if not valores:

@@ -80,8 +80,13 @@
         <input class="campo" id="{{ lado }}_ptax_final" name="{{ lado }}_ptax_final"
                value="{{ f[lado ~ '_ptax_final'] }}" inputmode="decimal" placeholder="{{ t('PTAX, busca sozinha') }}"/>
       </div>
+      <div>
+        <label class="rotulo" for="{{ lado }}_ptax_offset">{{ t("Defasagem do fixing (dias úteis)") }}</label>
+        <input class="campo" id="{{ lado }}_ptax_offset" name="{{ lado }}_ptax_offset"
+               value="{{ f[lado ~ '_ptax_offset'] }}" inputmode="numeric"/>
+      </div>
       <p class="sm:col-span-3 text-xs leading-5 text-slate-600 font-geist">
-        {{ t("Em branco, os dois vêm da PTAX de fechamento do dia útil anterior a cada data. Em reais, não há conversão.") }}
+        {{ t("Em branco, os dois vêm da PTAX de fechamento da data recuada pela defasagem — 1 é o D-1 da maioria dos contratos, 0 é a própria data. Em reais, não há conversão.") }}
         {{ t("O Banco Central boletina dez moedas; nas de fora dela — o yuan, por exemplo — os dois fixings entram digitados.") }}
       </p>
     </div>
@@ -108,7 +113,7 @@
            campo enquanto ele estiver igual a esse valor: quem digitou uma data
            não a perde quando mexe no início do fluxo. #}
         <input class="campo" id="{{ lado }}_data_fixing" name="{{ lado }}_data_fixing" type="date"
-               value="{{ f[lado ~ '_data_fixing'] }}" data-padrao="{{ fixing_padrao }}"/>
+               value="{{ f[lado ~ '_data_fixing'] }}" data-padrao="{{ fixings_padrao[lado] }}"/>
       </div>
       <div data-bloco="{{ lado }}" data-mostrar-em="term_sofr">
         <label class="rotulo" for="{{ lado }}_taxa_indice">{{ t("Taxa do fixing (% a.a.)") }}</label>

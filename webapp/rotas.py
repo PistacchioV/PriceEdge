@@ -952,7 +952,7 @@ def api_instrumentos(tipo: str):
 
 # --------------------------------------------------------------- liquidação
 
-def _fixing_padrao(inicio: str, calendario: str) -> str:
+def _fixing_padrao(inicio: str, indexador: str = "") -> str:
     """A data de fixing que o motor usaria: D-2 dias úteis do início do fluxo.
 
     A tela mostra o padrão em vez de deixar o campo em branco. Quem confere uma
@@ -960,15 +960,16 @@ def _fixing_padrao(inicio: str, calendario: str) -> str:
     trimestre, D-2 e D-1 estão a vários pontos-base de distância, e um campo
     vazio esconde a escolha em vez de declará-la.
 
-    O dia útil sai do calendário escolhido na tela — o mesmo que o motor usa,
-    para que o que aparece no campo seja o que a conta faria.
+    O dia útil sai do calendário do **índice** — SOFR no Term SOFR, TARGET2 na
+    EURIBOR —, que é o mesmo que o motor usa. Por isso cada ponta tem o seu
+    padrão: num feriado americano que não é europeu, as duas datas diferem.
 
-    Volta vazio quando a data ou o calendário não dão pé; a tela então deixa o
-    campo em branco e o motor decide, que é como era antes.
+    Volta vazio quando a data não dá pé; a tela então deixa o campo em branco e
+    o motor decide, que é como era antes.
     """
     try:
         return liquidacao.data_de_fixing(para_data(inicio),
-                                         obter_calendario(calendario)).isoformat()
+                                         indexador=indexador).isoformat()
     except (ValueError, TypeError, ErroDeDado):
         return ""
 
@@ -999,7 +1000,8 @@ def liquidacao_swap():
         "calendarios": CALENDARIOS,
         "fixings_ipca": ipca.FIXINGS,
         "hoje": hoje.isoformat(),
-        "fixing_padrao": _fixing_padrao(ano_passado.isoformat(), "ANBIMA"),
+        # um padrão por ponta: o calendário é o do índice de cada uma
+        "fixings_padrao": {},
         "resultado": None, "erro": None,
     }
     # cada ponta repete os mesmos campos com o seu prefixo
@@ -1015,23 +1017,29 @@ def liquidacao_swap():
             f"{lado}_convencao": convencao, f"{lado}_regime": regime,
             f"{lado}_moeda": liquidacao.SEM_CONVERSAO,
             f"{lado}_ptax_inicial": "", f"{lado}_ptax_final": "",
+            f"{lado}_ptax_offset": "1",
             f"{lado}_ni_inicial": "", f"{lado}_ni_final": "", f"{lado}_fator": "",
             f"{lado}_ipca_fixing": ipca.DIGITADO,
             f"{lado}_tenor": "3 month",
-            f"{lado}_data_fixing": contexto["fixing_padrao"],
+            f"{lado}_data_fixing": _fixing_padrao(contexto["form"]["inicio"],
+                                                  escolhas["indexador"]),
             f"{lado}_taxa_indice": "", f"{lado}_lookback": "0", f"{lado}_shift": "0",
             f"{lado}_ativo": "", f"{lado}_preco_inicial": "", f"{lado}_preco_final": "",
         })
 
     if request.method == "POST":
         contexto["form"] = {k: v for k, v in request.form.items()}
-        contexto["fixing_padrao"] = _fixing_padrao(
-            request.form.get("inicio") or "",
-            request.form.get("calendario") or "ANBIMA")
         try:
             contexto["resultado"] = _liquidar(request.form)
         except (servicos.ErroFormulario, ErroDeFonte, ValueError) as exc:
             contexto["erro"] = idiomas.mensagem(exc)
+
+    # recalculado depois do formulário: é por ele que o script sabe se a data
+    # no campo ainda é a automática ou se alguém digitou a dela
+    contexto["fixings_padrao"] = {
+        lado: _fixing_padrao(contexto["form"].get("inicio") or "",
+                             contexto["form"].get(f"{lado}_indexador") or "")
+        for lado in ("ativa", "passiva")}
     return render_template("liquidacao.html", **contexto)
 
 
@@ -1061,6 +1069,7 @@ def _ponta_do_form(form, prefixo: str) -> liquidacao.Ponta:
         ni_inicial=opcional("ni_inicial", f"número-índice inicial da ponta {lado}"),
         ni_final=opcional("ni_final", f"número-índice final da ponta {lado}"),
         ipca_fixing=form.get(campo("ipca_fixing")) or ipca.DIGITADO,
+        ptax_offset=int(texto("ptax_offset") or 1),
         percentual=(servicos.taxa_do_form(form, campo("percentual"),
                                           f"percentual do CDI da ponta {lado}", 1.0)
                     if texto("percentual") else 1.0),
@@ -1115,7 +1124,7 @@ def api_fixing_padrao():
     primeiro Carnaval.
     """
     data = _fixing_padrao(request.args.get("inicio") or "",
-                          request.args.get("calendario") or "ANBIMA")
+                          request.args.get("indexador") or "")
     return jsonify({"data": data})
 
 

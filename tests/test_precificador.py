@@ -3003,9 +3003,11 @@ def test_a_data_do_fixing_nasce_em_d_menos_2_do_inicio():
     pagina = create_app().test_client().get("/liquidacao").data.decode()
 
     inicio = re.search(r'id="inicio"[^>]*value="([\d-]+)"', pagina).group(1)
-    esperado = L.data_de_fixing(para_data(inicio), obter_calendario("ANBIMA"))
 
     for lado in ("ativa", "passiva"):
+        indexador = re.search(r'id="' + lado + r'_indexador".*?value="([^"]+)"\s+selected',
+                              pagina, re.S).group(1)
+        esperado = L.data_de_fixing(para_data(inicio), indexador=indexador)
         campo = re.search(r'id="' + lado + r'_data_fixing"[^>]*>', pagina).group(0)
         valor = re.search(r'value="([\d-]+)"', campo).group(1)
         assert valor == esperado.isoformat(), lado
@@ -3027,25 +3029,96 @@ def test_o_endereco_do_fixing_responde_o_mesmo_que_o_motor():
 
     cliente = create_app().test_client()
 
-    for nome in ("ANBIMA", "SOFR", "EURIBOR"):
-        # 2026-02-18 é quarta-feira de cinzas: o D-2 no Brasil pula o Carnaval
-        resposta = cliente.get("/api/liquidacao/fixing",
-                               query_string={"inicio": "2026-02-18", "calendario": nome})
-        assert resposta.status_code == 200
-        esperado = L.data_de_fixing(date(2026, 2, 18), obter_calendario(nome))
-        assert resposta.get_json()["data"] == esperado.isoformat(), nome
-
-    # o calendário brasileiro e o americano não podem responder o mesmo aqui,
-    # senão o teste passaria mesmo se a rota ignorasse o parâmetro
-    def em(nome):
+    def em(indexador, inicio="2026-06-22"):
         return cliente.get("/api/liquidacao/fixing",
-                           query_string={"inicio": "2026-02-18",
-                                         "calendario": nome}).get_json()["data"]
-    assert em("ANBIMA") != em("SOFR")
+                           query_string={"inicio": inicio,
+                                         "indexador": indexador}).get_json()["data"]
+
+    for indexador in (L.TERM_SOFR, L.EURIBOR, L.PRE):
+        esperado = L.data_de_fixing(date(2026, 6, 22), indexador=indexador)
+        assert em(indexador) == esperado.isoformat(), indexador
+
+    # 19/06/2026 é Juneteenth: o Term SOFR não pode responder o mesmo que os
+    # outros, senão o teste passaria mesmo se a rota ignorasse o índice
+    assert em(L.TERM_SOFR) != em(L.EURIBOR)
 
     # data impossível não derruba a tela: volta vazio e o motor decide
     vazio = cliente.get("/api/liquidacao/fixing", query_string={"inicio": "30/02/2026"})
     assert vazio.status_code == 200 and vazio.get_json()["data"] == ""
+
+
+def test_o_fixing_a_termo_conta_no_calendario_do_indice():
+    """D-2 é no calendário do ÍNDICE, não no do swap.
+
+    O Term SOFR é fixado dois *US Government Securities business days* antes, e
+    a EURIBOR dois dias TARGET2. Contando tudo pelo ANBIMA, todo feriado
+    americano que não é brasileiro deslocava a data em um dia — e a conta
+    fechava consigo mesma, porque o motor buscava a taxa da data que ele mesmo
+    calculou errado.
+
+    O caso: o fluxo começa na segunda 22/06/2026. Pelo ANBIMA, D-2 é a quinta
+    18/06. Mas a sexta 19/06 é Juneteenth, que não é dia útil do SOFR — então
+    para o Term SOFR D-1 é a quinta 18 e D-2 é a quarta 17.
+    """
+    from datetime import date
+    from precificador import liquidacao as L
+    from precificador.calendario import obter_calendario
+
+    inicio = date(2026, 6, 22)
+    assert L.data_de_fixing(inicio, indexador=L.TERM_SOFR) == date(2026, 6, 17)
+    assert L.data_de_fixing(inicio, indexador=L.EURIBOR) == date(2026, 6, 18)
+    assert L.data_de_fixing(inicio, indexador=L.PRE) == date(2026, 6, 18)
+
+    # o calendário explícito continua vencendo — é o que a tela usa quando
+    # alguém quer reproduzir a régua de uma contraparte
+    assert L.data_de_fixing(inicio, obter_calendario("ANBIMA"),
+                            indexador=L.TERM_SOFR) == date(2026, 6, 18)
+
+    # e cada índice cai no calendário certo
+    assert L.calendario_do_fixing(L.TERM_SOFR).nome == obter_calendario("SOFR").nome
+    assert L.calendario_do_fixing(L.EURIBOR).nome == obter_calendario("EURIBOR").nome
+    assert L.calendario_do_fixing(L.CDI).nome == obter_calendario("ANBIMA").nome
+
+
+def test_a_defasagem_do_fixing_de_moeda_e_escolhida(monkeypatch):
+    """D-1 é a convenção mais comum, não a única.
+
+    A planilha da mesa traz isso numa coluna — o ``Fixing Moeda: -1`` do Cetip —
+    e o motor fixava D-1 sem perguntar. Um contrato que fixa em D-2 liquidava
+    com a PTAX do dia errado, e nada na tela dizia qual dia foi usado.
+    """
+    from datetime import date
+    from precificador import cambio, liquidacao as L
+
+    pedidas = []
+
+    class _Ptax:
+        def __init__(self, quando):
+            self.data, self.venda, self.compra = quando, 5.0, 5.0
+
+    def falsa(moeda, referencia, *a, **k):
+        pedidas.append(referencia)
+        return _Ptax(referencia)
+
+    monkeypatch.setattr(cambio, "ptax_moeda", falsa)
+
+    def liquidar(offset):
+        pedidas.clear()
+        L.liquidar("2026-06-01", "2026-06-22", "2026-09-22", 1e6,
+                   L.Ponta(L.CAMBIO, taxa=0.05, moeda="USD", convencao="act_360",
+                           regime="simples", ptax_offset=offset),
+                   L.Ponta(L.PRE, 0.14), reter_ir=False)
+        return list(pedidas)
+
+    # 22/06/2026 é segunda: D-1 é a sexta 19/06, D-2 a quinta 18/06
+    assert liquidar(1)[0] == date(2026, 6, 19)
+    assert liquidar(2)[0] == date(2026, 6, 18)
+    # defasagem 0 é a própria data do fluxo
+    assert liquidar(0)[0] == date(2026, 6, 22)
+
+    # fora da faixa para com erro em vez de buscar uma data absurda
+    with pytest.raises(L.ErroLiquidacao):
+        liquidar(99)
 
 
 def test_a_data_digitada_no_fixing_volta_da_liquidacao():

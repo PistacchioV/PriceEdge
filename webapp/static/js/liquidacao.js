@@ -74,26 +74,28 @@
 
   function trazerFixing() {
     var inicio = document.getElementById("inicio");
-    var calendario = document.getElementById("calendario");
     if (!inicio || !valorDe(inicio)) return;
-    var campos = camposDeFixing();
-    if (!campos.length) return;
 
-    var endereco = "/api/liquidacao/fixing?inicio=" + encodeURIComponent(valorDe(inicio)) +
-      "&calendario=" + encodeURIComponent(calendario ? calendario.value : "ANBIMA");
-    fetch(endereco)
-      .then(function (r) { return r.json(); })
-      .then(function (dados) {
-        if (!dados || !dados.data) return;
-        campos.forEach(function (campo) {
+    // uma busca por ponta: o calendário é o do ÍNDICE de cada uma — SOFR no
+    // Term SOFR, TARGET2 na EURIBOR —, e num feriado americano que não é
+    // europeu as duas datas não são a mesma
+    camposDeFixing().forEach(function (campo) {
+      var lado = campo.id.replace("_data_fixing", "");
+      var indexador = document.getElementById(lado + "_indexador");
+      var endereco = "/api/liquidacao/fixing?inicio=" + encodeURIComponent(valorDe(inicio)) +
+        "&indexador=" + encodeURIComponent(indexador ? indexador.value : "");
+      fetch(endereco)
+        .then(function (r) { return r.json(); })
+        .then(function (dados) {
+          if (!dados || !dados.data) return;
           escreverEm(campo, dados.data);
           campo.setAttribute("data-padrao", dados.data);
+        })
+        .catch(function () {
+          // sem rede o campo fica com o que já estava, e o motor calcula o D-2
+          // sozinho no envio: a tela perde a prévia, não a conta
         });
-      })
-      .catch(function () {
-        // sem rede o campo fica com o que já estava, e o motor calcula o D-2
-        // sozinho no envio: a tela perde a prévia, não a conta
-      });
+    });
   }
 
   function iniciar() {
@@ -104,12 +106,13 @@
       seletor.addEventListener("change", function () {
         aplicar(lado);
         trazerConvencao(lado, seletor);
+        trazerFixing();          // o calendário do fixing é o do índice
       });
     });
 
     // o `change` de um campo trocado sai do input escondido, que é irmão da
     // caixa de texto — ouvir no elemento achado por `id` não pegaria nada
-    ["inicio", "calendario"].forEach(function (id) {
+    ["inicio"].forEach(function (id) {
       var campo = document.getElementById(id);
       if (!campo) return;
       var alvo = window.campoData ? window.campoData.escondido(campo) : campo;

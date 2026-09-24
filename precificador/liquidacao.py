@@ -76,8 +76,8 @@ from datetime import date, timedelta
 from typing import List, Optional
 
 from . import cambio, cdi, contagem, euribor, ipca as ipca_ibge, sofr, term_sofr
-from .calendario import (Calendario, calendario_anbima, calendario_sofr,
-                         para_data)
+from .calendario import (Calendario, calendario_anbima, calendario_bce,
+                         calendario_sofr, para_data)
 from .renda_fixa import aliquota_ir
 from .erros import ErroTraduzido
 
@@ -314,6 +314,9 @@ class Ponta:
     ptax_final: Optional[float] = None
     # só no CDI: 1,10 = 110% do CDI. Vive ao lado da taxa, que ali é o SPREAD
     percentual: float = 1.0
+    # dias úteis de defasagem da PTAX buscada: 1 = D-1 (o mais comum), 0 = a
+    # própria data. Não vale para fixing digitado, que já é o número final
+    ptax_offset: int = 1
     ni_inicial: Optional[float] = None
     ni_final: Optional[float] = None
     # '' = os dois números-índice digitados; 'm1'/'m2' = buscados no IBGE pela
@@ -427,25 +430,58 @@ def _numero(valor: float, casas: int = 4) -> str:
     return f"{valor:.{casas}f}".replace(".", ",")
 
 
-def _ptax_do_dia_anterior(moeda: str, referencia: date) -> cambio.Ptax:
-    """PTAX de fechamento do dia útil anterior — a convenção do contrato.
+def _ptax_do_fixing(moeda: str, referencia: date, defasagem: int = 1) -> cambio.Ptax:
+    """PTAX de fechamento da data recuada ``defasagem`` **dias úteis**.
+
+    D-1 é a convenção mais comum e é o padrão, mas não é a única: um contrato
+    pode fixar em D-2, e há os que fixam na própria data (defasagem 0). A
+    planilha da mesa traz isso numa coluna — o ``Fixing Moeda: -1`` do Cetip —,
+    e até aqui o motor fixava D-1 sem perguntar.
+
+    O calendário é o ANBIMA mesmo quando o swap conta noutro: quem publica a
+    PTAX é o Banco Central, e o dia útil dele é o brasileiro.
 
     A busca já anda para trás sozinha até dez dias, o que resolve fim de semana,
     feriado e o dia corrente antes das 13h.
     """
-    return cambio.ptax_moeda(moeda, referencia - timedelta(days=1))
+    n = int(defasagem or 0)
+    quando = calendario_anbima().workday(referencia, -n) if n else referencia
+    return cambio.ptax_moeda(moeda, quando)
+
+
+def calendario_do_fixing(indexador: Optional[str] = None) -> Calendario:
+    """O calendário em que a taxa a termo conta os dias até o fixing.
+
+    É o do **índice**, não o do contrato: o Term SOFR é fixado dois *US
+    Government Securities business days* antes, e a EURIBOR dois dias TARGET2.
+    Índice sem calendário próprio cai no ANBIMA.
+    """
+    if indexador == TERM_SOFR:
+        return calendario_sofr()
+    if indexador == EURIBOR:
+        return calendario_bce()
+    return calendario_anbima()
 
 
 def data_de_fixing(inicio, calendario: Optional[Calendario] = None,
-                   defasagem: int = DEFASAGEM_FIXING) -> date:
+                   defasagem: int = DEFASAGEM_FIXING,
+                   indexador: Optional[str] = None) -> date:
     """A data em que a taxa a termo foi lida — D-2 úteis do início do fluxo.
 
     EURIBOR e Term SOFR são taxas *forward-looking*: valem para o período
     inteiro e são fixadas antes de ele começar. Dois dias úteis é a defasagem
     padrão, e ela não é decoração — num fim de trimestre a taxa de D-2 e a de
     D-1 podem estar a vários pontos-base de distância.
+
+    A contagem é no calendário do **índice** (``calendario_do_fixing``), e não
+    no do swap. Contando pelo ANBIMA, todo feriado americano que não é
+    brasileiro deslocava a data em um dia: um fluxo que começa na segunda
+    22/06/2026 dava D-2 = quinta 18/06, mas a sexta 19/06 é Juneteenth — D-1 é
+    a quinta 18 e D-2 a quarta 17. Entrava a taxa de um dia depois da que o
+    contrato manda, e a conta fechava consigo mesma. ``calendario`` explícito
+    continua vencendo.
     """
-    cal = calendario or calendario_anbima()
+    cal = calendario or calendario_do_fixing(indexador)
     return cal.workday(para_data(inicio), -abs(defasagem))
 
 
@@ -489,8 +525,14 @@ def _fator_cambial(ponta: Ponta, d0: date, d1: date) -> tuple:
                 "o Banco Central não boletina {moeda}: informe o fixing {qual} da "
                 "moeda. Os dois entram digitados.",
                 moeda=ponta.moeda, qual=faltando)
-        b0 = _ptax_do_dia_anterior(ponta.moeda, d0)
-        b1 = _ptax_do_dia_anterior(ponta.moeda, d1)
+        defasagem = 1 if ponta.ptax_offset is None else int(ponta.ptax_offset)
+        if not 0 <= defasagem <= LIMITE_DEFASAGEM:
+            raise ErroLiquidacao(
+                "a defasagem do fixing de moeda é de {defasagem} dias úteis, fora "
+                "da faixa de 0 a {limite}.",
+                defasagem=defasagem, limite=LIMITE_DEFASAGEM)
+        b0 = _ptax_do_fixing(ponta.moeda, d0, defasagem)
+        b1 = _ptax_do_fixing(ponta.moeda, d1, defasagem)
         p0 = p0 if p0 is not None else b0.venda
         p1 = p1 if p1 is not None else b1.venda
         data0, data1 = b0.data, b1.data
@@ -616,7 +658,7 @@ def liquidar_ponta(ponta: Ponta, nocional: float, inicio, fim,
             obs_inicio=composto.obs_inicio, obs_fim=composto.obs_fim)
 
     if ponta.indexador in (TERM_SOFR, EURIBOR):
-        quando = ponta.data_fixing or data_de_fixing(d0, cal)
+        quando = ponta.data_fixing or data_de_fixing(d0, indexador=ponta.indexador)
         if ponta.indexador == EURIBOR:
             # a base local guarda o histórico; o Term SOFR da CME é licenciado
             # e não pode ser redistribuído, então ele entra digitado
