@@ -1327,6 +1327,15 @@ TRADUCOES: Dict[str, str] = {
     "Fixing inicial da moeda": "Opening currency fixing",
     "Fixing final da moeda": "Closing currency fixing",
     "Defasagem do fixing (dias úteis)": "Fixing lag (business days)",
+    "Multiplicador da taxa": "Rate multiplier",
+    "O gross-up escrito na descrição da curva — o 1,1765 de (3M SOFR + 0,75%) × "
+    "1,1765. Ele incide na taxa anual que capitaliza, não no fator. Em branco, "
+    "não há multiplicador.":
+        "The gross-up written into the curve description — the 1.1765 in "
+        "(3M SOFR + 0.75%) × 1.1765. It applies to the annual rate that "
+        "compounds, not to the factor. Left blank, there is no multiplier.",
+    "o multiplicador da taxa precisa ser positivo":
+        "the rate multiplier must be positive",
     "Em branco, os dois vêm da PTAX de fechamento da data recuada pela defasagem "
     "— 1 é o D-1 da maioria dos contratos, 0 é a própria data. Em reais, não há "
     "conversão.":

@@ -3047,6 +3047,44 @@ def test_o_endereco_do_fixing_responde_o_mesmo_que_o_motor():
     assert vazio.status_code == 200 and vazio.get_json()["data"] == ""
 
 
+def test_o_multiplicador_incide_na_taxa_e_nao_no_fator():
+    """`(3M SOFR + 0,75%) × 1,1765` é gross-up de IR, e multiplica a TAXA.
+
+    A descrição da curva de uma ponta VCP traz o multiplicador, e onde ele
+    entra muda o número: `(1 + r·k)^τ` não é `((1 + r)^τ)·k`. As duas leituras
+    só coincidem em τ = 1 — fora disso divergem, e a segunda ainda multiplica o
+    principal, o que não é gross-up nenhum.
+    """
+    from precificador import liquidacao as L
+
+    def fator(**campos):
+        r = L.liquidar("2026-01-02", "2026-01-02", "2027-07-02", 1e6,
+                       L.Ponta(L.PRE, **campos), L.Ponta(L.FATOR, fator_manual=1.0),
+                       reter_ir=False)
+        return r.ativa
+
+    com_mult = fator(taxa=0.10, multiplicador=1.1765)
+    ja_multiplicada = fator(taxa=0.10 * 1.1765)
+    simples = fator(taxa=0.10)
+
+    # multiplicar a taxa antes é exatamente a mesma conta
+    assert com_mult.fator_do_indice == pytest.approx(ja_multiplicada.fator_do_indice,
+                                                     rel=1e-12)
+    # e não é o fator vezes o multiplicador — o τ aqui é maior que 1
+    assert com_mult.fracao_de_ano > 1.0
+    assert com_mult.fator_do_indice != pytest.approx(
+        simples.fator_do_indice * 1.1765, rel=1e-6)
+
+    # o resultado carrega o multiplicador, para a tela poder mostrá-lo: sem
+    # isso o fator não se reproduz a partir da taxa que está no formulário
+    assert com_mult.multiplicador == pytest.approx(1.1765)
+    assert simples.multiplicador == 1.0
+
+    # multiplicador zerado ou negativo não é "sem multiplicador": é engano
+    with pytest.raises(L.ErroLiquidacao):
+        fator(taxa=0.10, multiplicador=0.0)
+
+
 def test_o_fixing_a_termo_conta_no_calendario_do_indice():
     """D-2 é no calendário do ÍNDICE, não no do swap.
 

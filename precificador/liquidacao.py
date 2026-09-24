@@ -317,6 +317,10 @@ class Ponta:
     # dias úteis de defasagem da PTAX buscada: 1 = D-1 (o mais comum), 0 = a
     # própria data. Não vale para fixing digitado, que já é o número final
     ptax_offset: int = 1
+    # O multiplicador da descrição da curva: `(3M SOFR + 0,75%) × 1,1765` é
+    # 1,1765 aqui. É o gross-up do IR escrito no contrato, e ele incide na taxa
+    # ANUAL que capitaliza — nunca no fator. 1,0 = nenhum.
+    multiplicador: float = 1.0
     ni_inicial: Optional[float] = None
     ni_final: Optional[float] = None
     # '' = os dois números-índice digitados; 'm1'/'m2' = buscados no IBGE pela
@@ -382,6 +386,7 @@ class PontaLiquidada:
     quanto: bool = False           # cotada em moeda estrangeira, liquida sem converter
     fator_cambial: float = 1.0     # (fixing final / fixing inicial)
     fator_do_indice: float = 1.0   # o que a ponta rendeu na moeda dela
+    multiplicador: float = 1.0     # o gross-up da descrição da curva
     ptax_inicial: Optional[float] = None
     ptax_final: Optional[float] = None
     data_ptax_inicial: Optional[date] = None
@@ -558,8 +563,11 @@ def liquidar_ponta(ponta: Ponta, nocional: float, inicio, fim,
     # numa ponta sem taxa a contagem não entrou em conta nenhuma; deixá-la no
     # resultado faria o consumidor achar que ela pesou no número
     sem_taxa = ponta.indexador in SEM_TAXA
+    mult = 1.0 if ponta.multiplicador is None else float(ponta.multiplicador)
+    if mult <= 0:
+        raise ErroLiquidacao("o multiplicador da taxa precisa ser positivo")
     comum = dict(
-        indexador=ponta.indexador, nocional=nocional,
+        indexador=ponta.indexador, nocional=nocional, multiplicador=mult,
         convencao=None if sem_taxa else ponta.convencao,
         regime=None if sem_taxa else ponta.regime,
         dias_contados=None if sem_taxa else contagem.dias(ponta.convencao, d0, d1, cal),
@@ -572,9 +580,17 @@ def liquidar_ponta(ponta: Ponta, nocional: float, inicio, fim,
     )
 
     def capitalizar(taxa: float) -> float:
-        return contagem.fator(taxa, ponta.convencao, ponta.regime, d0, d1, cal)
+        # O multiplicador incide na taxa ANUAL que capitaliza — `(fixing +
+        # spread) × 1,1765` —, nunca no fator: (1 + r·k)^τ, e não ((1 + r)^τ)·k.
+        # As duas leituras só coincidem em τ = 1, e num swap de um ano e meio já
+        # divergem no terceiro decimal do fator.
+        return contagem.fator(taxa * mult, ponta.convencao, ponta.regime, d0, d1, cal)
 
     def montar(indice: float, descricao: tuple, **extra) -> PontaLiquidada:
+        # O gross-up não entra no molde da descrição: compor texto aqui exigiria
+        # uma entrada de tradução para cada molde vezes duas. Ele viaja no campo
+        # `multiplicador` e a tela o mostra numa linha própria, que é onde a
+        # memória de cálculo precisa dele.
         fator = fx * indice
         return PontaLiquidada(fator=fator, valor=nocional * fator,
                               fator_do_indice=indice, descricao=descricao,

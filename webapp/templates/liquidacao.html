@@ -98,6 +98,15 @@
       </p>
     </div>
 
+    <div data-bloco="{{ lado }}" data-mostrar-em="pre,cdi,cambio,sofr,term_sofr,euribor,ipca,equity">
+      <label class="rotulo" for="{{ lado }}_multiplicador">{{ t("Multiplicador da taxa") }}</label>
+      <input class="campo" id="{{ lado }}_multiplicador" name="{{ lado }}_multiplicador"
+             value="{{ f[lado ~ '_multiplicador'] }}" inputmode="decimal" placeholder="1"/>
+      <p class="mt-2 text-xs leading-5 text-slate-600 font-geist">
+        {{ t("O gross-up escrito na descrição da curva — o 1,1765 de (3M SOFR + 0,75%) × 1,1765. Ele incide na taxa anual que capitaliza, não no fator. Em branco, não há multiplicador.") }}
+      </p>
+    </div>
+
     <div class="grid gap-4 sm:grid-cols-3" data-bloco="{{ lado }}" data-mostrar-em="term_sofr,euribor">
       <div>
         <label class="rotulo" for="{{ lado }}_tenor">{{ t("Prazo do fixing") }}</label>
@@ -243,6 +252,12 @@
       <span class="tabular-nums {{ 'text-emerald-200' if p.efeito_cambial > 0 else 'text-rose-200' }}">
         R$ {{ p.efeito_cambial | moeda(2) }}
       </span>
+    </div>
+    {% endif %}
+    {% if p.multiplicador and p.multiplicador != 1.0 %}
+    <div class="flex justify-between gap-3 text-xs font-geist">
+      <span class="text-slate-500">{{ t("Multiplicador da taxa") }}</span>
+      <span class="text-slate-300 tabular-nums">× {{ '%.6f' | format(p.multiplicador) | replace('.', ',') }}</span>
     </div>
     {% endif %}
     {% if p.convencao %}

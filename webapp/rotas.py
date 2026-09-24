@@ -1017,7 +1017,7 @@ def liquidacao_swap():
             f"{lado}_convencao": convencao, f"{lado}_regime": regime,
             f"{lado}_moeda": liquidacao.SEM_CONVERSAO,
             f"{lado}_ptax_inicial": "", f"{lado}_ptax_final": "",
-            f"{lado}_ptax_offset": "1",
+            f"{lado}_ptax_offset": "1", f"{lado}_multiplicador": "",
             f"{lado}_ni_inicial": "", f"{lado}_ni_final": "", f"{lado}_fator": "",
             f"{lado}_ipca_fixing": ipca.DIGITADO,
             f"{lado}_tenor": "3 month",
@@ -1070,6 +1070,8 @@ def _ponta_do_form(form, prefixo: str) -> liquidacao.Ponta:
         ni_final=opcional("ni_final", f"número-índice final da ponta {lado}"),
         ipca_fixing=form.get(campo("ipca_fixing")) or ipca.DIGITADO,
         ptax_offset=int(texto("ptax_offset") or 1),
+        multiplicador=(opcional("multiplicador", f"multiplicador da ponta {lado}")
+                       if texto("multiplicador") else 1.0),
         percentual=(servicos.taxa_do_form(form, campo("percentual"),
                                           f"percentual do CDI da ponta {lado}", 1.0)
                     if texto("percentual") else 1.0),
