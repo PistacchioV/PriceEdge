@@ -1379,6 +1379,16 @@ TRADUCOES: Dict[str, str] = {
         "Compounded SOFR looks backwards: it accrues the period's own fixings, with "
         "no fixing date.",
 
+    "Fixing do IPCA": "IPCA fixing",
+    "Números digitados": "Typed numbers",
+    "M-1 — o mês anterior ao fluxo": "M-1 — the month before the flow",
+    "M-2 — dois meses antes do fluxo": "M-2 — two months before the flow",
+    "Escolhido o M-1 ou o M-2, os dois números-índice vêm do IBGE (tabela 1737) "
+    "pelo mês que a defasagem pede — o inicial contado do início do fluxo, o "
+    "final contado do fim. Deixe os campos abaixo vazios.":
+        "With M-1 or M-2 picked, both index numbers come from IBGE (table 1737) "
+        "for the month the lag calls for — the opening one counted from the flow "
+        "start, the closing one from the end. Leave the fields below empty.",
     "Número-índice inicial": "Opening index number",
     "Número-índice final": "Closing index number",
     "Ação ou índice": "Stock or index",
@@ -1751,6 +1761,25 @@ TRADUCOES: Dict[str, str] = {
         "nothing",
     "a ponta de equity precisa do preço inicial e do preço final":
         "the equity leg needs an opening and a closing price",
+    "a ponta de IPCA tem os números-índice digitados e o fixing {fixing} "
+    "escolhido ao mesmo tempo. Escolha um: apague os números para buscá-los no "
+    "IBGE, ou volte o fixing para digitado.":
+        "the IPCA leg has the index numbers typed in and the {fixing} fixing "
+        "picked at the same time. Pick one: clear the numbers to fetch them from "
+        "IBGE, or set the fixing back to typed.",
+    "correção de {correcao}% ({ni_inicial} de {mes_inicial} a {ni_final} de "
+    "{mes_final}) mais cupom real de {taxa}% a.a.":
+        "{correcao}% inflation adjustment ({ni_inicial} for {mes_inicial} to "
+        "{ni_final} for {mes_final}) plus a {taxa}% p.a. real coupon",
+    "não foi possível obter o número-índice do IPCA no IBGE: {motivo}":
+        "could not fetch the IPCA index number from IBGE: {motivo}",
+    "resposta inesperada do IBGE: {motivo}": "unexpected answer from IBGE: {motivo}",
+    "o número-índice do IPCA de {mes} ainda não foi publicado (IBGE, tabela 1737)":
+        "the IPCA index number for {mes} has not been published yet "
+        "(IBGE, table 1737)",
+    "o número-índice do IPCA de {mes} veio zerado":
+        "the IPCA index number for {mes} came back as zero",
+    "fixing de IPCA desconhecido: {fixing}": "unknown IPCA fixing: {fixing}",
     "a ponta de IPCA precisa do número-índice inicial e do final":
         "the IPCA leg needs an opening and a closing index number",
     "informe o fator acumulado da ponta": "enter the leg's accrued factor",

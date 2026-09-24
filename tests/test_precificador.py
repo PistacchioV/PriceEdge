@@ -553,6 +553,84 @@ def test_o_script_de_precificar_encontra_o_que_procura():
     assert "js/precificar.js" in pagina
 
 
+def test_o_mes_do_fixing_do_ipca_conta_do_fluxo():
+    """M-1 e M-2 são meses de calendário, e a virada do ano é onde se erra.
+
+    A conta é em meses absolutos de propósito: ``mes - 2`` em janeiro dá −1,
+    que não é mês nenhum.
+    """
+    from datetime import date
+    from precificador import ipca
+    from precificador.erros import ErroDeDado
+
+    assert ipca.mes_do_fixing(date(2026, 9, 11), ipca.M1) == (2026, 8)
+    assert ipca.mes_do_fixing(date(2026, 9, 11), ipca.M2) == (2026, 7)
+    # janeiro com M-2 é novembro do ano anterior
+    assert ipca.mes_do_fixing(date(2026, 1, 15), ipca.M2) == (2025, 11)
+    assert ipca.mes_do_fixing(date(2026, 1, 15), ipca.M1) == (2025, 12)
+    assert ipca.rotulo(2025, 11) == "11/2025"
+
+    with pytest.raises(ErroDeDado):
+        ipca.mes_do_fixing(date(2026, 1, 15), "m3")
+
+
+def test_mes_de_ipca_nao_publicado_diz_qual_mes(monkeypatch):
+    """A chave que falta não pode virar zero.
+
+    O IPCA sai por volta do dia 10 do mês seguinte: um fluxo que liquida no dia
+    5 com M-1 pede um número que ainda não existe. Zero ali zeraria a correção
+    e o ajuste sairia com um número inteiro de aparência normal.
+    """
+    from precificador import ipca
+
+    monkeypatch.setattr(ipca, "_memo", {})
+    monkeypatch.setattr(ipca, "serie", lambda *a, **k: {})
+    with pytest.raises(ipca.ErroIBGE) as erro:
+        ipca.numeros_indice([(2026, 8)])
+    assert "08/2026" in str(erro.value)
+
+
+def test_a_ponta_de_ipca_busca_os_numeros_indice_no_ibge(monkeypatch):
+    """Com o fixing escolhido, a correção sai do IBGE e diz de onde veio.
+
+    Os dois números entravam digitados, copiados do SIDRA à mão — e um dígito
+    trocado ali não aparece: a correção sai plausível e o ajuste fecha errado.
+    """
+    from precificador import ipca, liquidacao as L
+
+    # fevereiro e agosto de 2026, os meses que M-1 pede para 11/03 → 11/09
+    monkeypatch.setattr(ipca, "_memo", {"202602": 7479.71, "202608": 7633.23})
+    monkeypatch.setattr(ipca, "serie", lambda *a, **k: {})
+
+    r = L.liquidar("2026-03-11", "2026-03-11", "2026-09-11", 10e6,
+                   L.Ponta(L.IPCA, taxa=0.06, ipca_fixing=ipca.M1),
+                   L.Ponta(L.FATOR, fator_manual=1.0), reter_ir=False)
+
+    correcao = 7633.23 / 7479.71
+    assert r.ativa.fator_do_indice == pytest.approx(
+        correcao * (1.06 ** r.ativa.fracao_de_ano), rel=1e-12)
+    # a memória de cálculo nomeia os dois meses e os dois números
+    molde, valores = r.ativa.descricao
+    assert valores["mes_inicial"] == "02/2026" and valores["mes_final"] == "08/2026"
+    assert "7.479,71" in valores["ni_inicial"] or "7479,71" in valores["ni_inicial"]
+
+
+def test_ipca_com_numero_digitado_e_fixing_ao_mesmo_tempo_para():
+    """Duas leituras para a mesma correção: a tela tem que escolher uma.
+
+    Descartar em silêncio o que a pessoa digitou é o pior dos desfechos — foi
+    o que já aconteceu uma vez com os fixings de moeda.
+    """
+    from precificador import ipca, liquidacao as L
+
+    with pytest.raises(L.ErroLiquidacao) as erro:
+        L.liquidar("2026-03-11", "2026-03-11", "2026-09-11", 10e6,
+                   L.Ponta(L.IPCA, taxa=0.06, ipca_fixing=ipca.M1,
+                           ni_inicial=7000.0, ni_final=7100.0),
+                   L.Ponta(L.FATOR, fator_manual=1.0), reter_ir=False)
+    assert "M1" in str(erro.value)
+
+
 # --------------------------------------------------------- CDI realizado ---
 
 def test_acumulo_do_cdi_segue_a_convencao_da_b3():

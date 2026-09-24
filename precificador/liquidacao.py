@@ -75,7 +75,7 @@ from dataclasses import dataclass, field
 from datetime import date, timedelta
 from typing import List, Optional
 
-from . import cambio, cdi, contagem, euribor, sofr, term_sofr
+from . import cambio, cdi, contagem, euribor, ipca as ipca_ibge, sofr, term_sofr
 from .calendario import (Calendario, calendario_anbima, calendario_sofr,
                          para_data)
 from .renda_fixa import aliquota_ir
@@ -316,6 +316,9 @@ class Ponta:
     ptax_final: Optional[float] = None
     ni_inicial: Optional[float] = None
     ni_final: Optional[float] = None
+    # '' = os dois números-índice digitados; 'm1'/'m2' = buscados no IBGE pela
+    # defasagem, contada do início (inicial) e do fim (final) do fluxo
+    ipca_fixing: str = ipca_ibge.DIGITADO
     fator_manual: Optional[float] = None
     ativo: str = ""                        # equity: ticker ou nome do índice
     preco_inicial: Optional[float] = None  # equity
@@ -653,15 +656,35 @@ def liquidar_ponta(ponta: Ponta, nocional: float, inicio, fim,
             preco_final=ponta.preco_final)
 
     if ponta.indexador == IPCA:
-        if not ponta.ni_inicial or ponta.ni_final is None:
-            raise ErroLiquidacao(
-                "a ponta de IPCA precisa do número-índice inicial e do final")
-        correcao = ponta.ni_final / ponta.ni_inicial
-        return montar(
-            correcao * capitalizar(ponta.taxa),
-            ("correção de {correcao}% mais cupom real de {taxa}% a.a.",
-             {"correcao": _numero((correcao - 1) * 100),
-              "taxa": _numero(ponta.taxa * 100)}))
+        if ponta.ipca_fixing:
+            # Digitar os números **e** pedir o fixing é ambíguo, e as duas
+            # leituras dão correções diferentes. Descartar em silêncio o que a
+            # pessoa digitou é o pior dos desfechos.
+            if ponta.ni_inicial is not None or ponta.ni_final is not None:
+                raise ErroLiquidacao(
+                    "a ponta de IPCA tem os números-índice digitados e o fixing "
+                    "{fixing} escolhido ao mesmo tempo. Escolha um: apague os "
+                    "números para buscá-los no IBGE, ou volte o fixing para "
+                    "digitado.", fixing=ponta.ipca_fixing.upper())
+            achado = ipca_ibge.correcao(d0, d1, ponta.ipca_fixing)
+            correcao = achado.fator
+            molde = ("correção de {correcao}% ({ni_inicial} de {mes_inicial} a "
+                     "{ni_final} de {mes_final}) mais cupom real de {taxa}% a.a.")
+            valores = {"correcao": _numero((correcao - 1) * 100),
+                       "ni_inicial": _numero(achado.ni_inicial, 2),
+                       "ni_final": _numero(achado.ni_final, 2),
+                       "mes_inicial": achado.rotulo_inicial,
+                       "mes_final": achado.rotulo_final,
+                       "taxa": _numero(ponta.taxa * 100)}
+        else:
+            if not ponta.ni_inicial or ponta.ni_final is None:
+                raise ErroLiquidacao(
+                    "a ponta de IPCA precisa do número-índice inicial e do final")
+            correcao = ponta.ni_final / ponta.ni_inicial
+            molde = "correção de {correcao}% mais cupom real de {taxa}% a.a."
+            valores = {"correcao": _numero((correcao - 1) * 100),
+                       "taxa": _numero(ponta.taxa * 100)}
+        return montar(correcao * capitalizar(ponta.taxa), (molde, valores))
 
     if ponta.indexador == FATOR:
         if ponta.fator_manual is None:

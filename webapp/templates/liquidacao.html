@@ -165,6 +165,17 @@
     </div>
 
     <div class="grid gap-4 sm:grid-cols-2" data-bloco="{{ lado }}" data-mostrar-em="ipca">
+      <div class="sm:col-span-2">
+        <label class="rotulo" for="{{ lado }}_ipca_fixing">{{ t("Fixing do IPCA") }}</label>
+        <select class="campo" id="{{ lado }}_ipca_fixing" name="{{ lado }}_ipca_fixing">
+          {% for valor, rotulo in fixings_ipca %}
+          <option value="{{ valor }}" {{ 'selected' if f[lado ~ '_ipca_fixing'] == valor }}>{{ t(rotulo) }}</option>
+          {% endfor %}
+        </select>
+        <p class="mt-2 text-xs leading-5 text-slate-600 font-geist">
+          {{ t("Escolhido o M-1 ou o M-2, os dois números-índice vêm do IBGE (tabela 1737) pelo mês que a defasagem pede — o inicial contado do início do fluxo, o final contado do fim. Deixe os campos abaixo vazios.") }}
+        </p>
+      </div>
       <div>
         <label class="rotulo" for="{{ lado }}_ni_inicial">{{ t("Número-índice inicial") }}</label>
         <input class="campo" id="{{ lado }}_ni_inicial" name="{{ lado }}_ni_inicial"

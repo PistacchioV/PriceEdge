@@ -10,8 +10,8 @@ from flask import (Blueprint, Response, jsonify, redirect, render_template,
                    request, url_for)
 
 from precificador import (b3, cambio, cdi, contagem, cotacoes, euribor, fontes,
-                          glossario, liquidacao, montador, rede, renda_fixa, sofr,
-                          term_sofr as term)
+                          glossario, ipca, liquidacao, montador, rede, renda_fixa,
+                          sofr, term_sofr as term)
 from precificador.calendario import (CALENDARIOS_DISPONIVEIS, CONVENCOES_DIA_UTIL,
                                      MODIFIED_FOLLOWING, calendario_anbima,
                                      obter_calendario, para_data, soma_meses)
@@ -997,6 +997,7 @@ def liquidacao_swap():
                              for codigo, _ in liquidacao.INDEXADORES},
         "tenores_euribor": liquidacao.TENORES_EURIBOR,
         "calendarios": CALENDARIOS,
+        "fixings_ipca": ipca.FIXINGS,
         "hoje": hoje.isoformat(),
         "fixing_padrao": _fixing_padrao(ano_passado.isoformat(), "ANBIMA"),
         "resultado": None, "erro": None,
@@ -1014,6 +1015,7 @@ def liquidacao_swap():
             f"{lado}_moeda": liquidacao.SEM_CONVERSAO,
             f"{lado}_ptax_inicial": "", f"{lado}_ptax_final": "",
             f"{lado}_ni_inicial": "", f"{lado}_ni_final": "", f"{lado}_fator": "",
+            f"{lado}_ipca_fixing": ipca.DIGITADO,
             f"{lado}_tenor": "3 month",
             f"{lado}_data_fixing": contexto["fixing_padrao"],
             f"{lado}_taxa_indice": "", f"{lado}_lookback": "0", f"{lado}_shift": "0",
@@ -1057,6 +1059,7 @@ def _ponta_do_form(form, prefixo: str) -> liquidacao.Ponta:
         ptax_final=opcional("ptax_final", f"fixing final da ponta {lado}"),
         ni_inicial=opcional("ni_inicial", f"número-índice inicial da ponta {lado}"),
         ni_final=opcional("ni_final", f"número-índice final da ponta {lado}"),
+        ipca_fixing=form.get(campo("ipca_fixing")) or ipca.DIGITADO,
         fator_manual=opcional("fator", f"fator da ponta {lado}"),
         ativo=texto("ativo"),
         preco_inicial=opcional("preco_inicial", f"preço inicial da ponta {lado}"),
