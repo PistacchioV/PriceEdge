@@ -810,7 +810,7 @@ FORMULARIOS = {
                        ativa_convencao="du_252", ativa_regime="composto",
                        ativa_moeda="BRL", ativa_tenor="3 month",
                        ativa_lookback="0", ativa_shift="0",
-                       passiva_indexador="cdi_percentual", passiva_taxa="100",
+                       passiva_indexador="cdi", passiva_taxa="0", passiva_percentual="100",
                        passiva_convencao="du_252", passiva_regime="composto",
                        passiva_moeda="BRL", passiva_tenor="3 month",
                        passiva_lookback="0", passiva_shift="0"),
@@ -824,7 +824,7 @@ FORMULARIOS = {
                        ativa_ptax_final="5,3188", ativa_convencao="act_360",
                        ativa_regime="simples", ativa_lookback="5",
                        ativa_shift="2", ativa_tenor="3 month",
-                       passiva_indexador="cdi_percentual", passiva_taxa="100",
+                       passiva_indexador="cdi", passiva_taxa="0", passiva_percentual="100",
                        passiva_convencao="du_252", passiva_regime="composto",
                        passiva_moeda="BRL", passiva_tenor="3 month",
                        passiva_lookback="0", passiva_shift="0"),
@@ -834,7 +834,7 @@ FORMULARIOS = {
                        ativa_indexador="moeda", ativa_moeda="CNH",
                        ativa_ptax_inicial="0,7620", ativa_ptax_final="0,7845",
                        ativa_tenor="3 month", ativa_lookback="0", ativa_shift="0",
-                       passiva_indexador="cdi_percentual", passiva_taxa="105",
+                       passiva_indexador="cdi", passiva_taxa="0", passiva_percentual="105",
                        passiva_convencao="du_252", passiva_regime="composto",
                        passiva_moeda="BRL", passiva_tenor="3 month",
                        passiva_lookback="0", passiva_shift="0"),
@@ -857,7 +857,7 @@ FORMULARIOS = {
                        ativa_moeda="USD", ativa_ptax_inicial="5,40",
                        ativa_ptax_final="5,32", ativa_convencao="act_360",
                        ativa_regime="simples",
-                       passiva_indexador="cdi_spread", passiva_taxa="2",
+                       passiva_indexador="cdi", passiva_taxa="2",
                        passiva_convencao="du_252", passiva_regime="composto",
                        passiva_moeda="BRL"),
     "/interpolar": dict(x="1\n365\n1826", y="14\n13,5\n13,8", alvos="180, 900",
@@ -1460,7 +1460,7 @@ def test_liquidacao_recusa_indice_realizado_no_futuro():
     amanha = date.today() + __import__("datetime").timedelta(days=30)
     with pytest.raises(L.ErroLiquidacao) as exc:
         L.liquidar("2025-01-02", "2025-01-02", amanha, 10e6,
-                   L.Ponta(L.CDI_PERCENTUAL, 1.0), L.Ponta(L.PRE, 0.14))
+                   L.Ponta(L.CDI, percentual=1.0), L.Ponta(L.PRE, 0.14))
     assert "realizado" in str(exc.value)
 
 
@@ -1666,7 +1666,7 @@ def test_resultado_serializa_para_quem_chama_de_fora():
     r = L.liquidar("2025-09-08", "2025-09-08", "2026-09-04", 30e6,
                    L.Ponta(L.MOEDA, moeda="CNH",
                            ptax_inicial=0.7620, ptax_final=0.7845),
-                   L.Ponta(L.CDI_PERCENTUAL, 1.05))
+                   L.Ponta(L.CDI, percentual=1.05))
     d = r.para_dict()
     texto = json.dumps(d, ensure_ascii=False)      # falha se sobrar date ou objeto
     assert d["fim"] == "2026-09-04"
@@ -1744,7 +1744,7 @@ def test_fixings_das_duas_fontes_chegam_na_mesma_forma():
     from precificador import liquidacao as L
     comum = dict(data_operacao="2025-09-08", inicio="2025-09-08", fim="2026-09-04",
                  nocional=30e6, ponta_passiva=L.Ponta(L.PRE, 0.14), reter_ir=False)
-    de_cdi = L.liquidar(ponta_ativa=L.Ponta(L.CDI_PERCENTUAL, 1.0), **comum).ativa
+    de_cdi = L.liquidar(ponta_ativa=L.Ponta(L.CDI, percentual=1.0), **comum).ativa
     de_sofr = L.liquidar(ponta_ativa=L.Ponta(L.SOFR, taxa=0.0, moeda=L.SEM_CONVERSAO,
                                              convencao="act_360", regime="simples",
                                              lookback=5), **comum).ativa
@@ -2454,7 +2454,7 @@ def test_swap_de_cdi_mais_spread_bate_com_a_planilha_da_mesa(monkeypatch):
         lambda inicio, fim, *a, **k: _serie_de_cdi_constante(inicio, fim, 0.14100639586478247))
 
     r = L.liquidar("2026-05-28", "2026-06-05", "2026-09-08", 15_210_000.0,
-                   L.Ponta(L.CDI_SPREAD, 0.008),
+                   L.Ponta(L.CDI, taxa=0.008),
                    L.Ponta(L.CAMBIO, taxa=0.053882, moeda="USD",
                            ptax_inicial=5.07000, ptax_final=5.12530,
                            convencao="act_360", regime="simples"),
@@ -2471,6 +2471,48 @@ def test_swap_de_cdi_mais_spread_bate_com_a_planilha_da_mesa(monkeypatch):
     assert r.base_de_ajuste == L.BASE_JUROS
     assert r.ajuste_bruto == pytest.approx(348_922.19, abs=0.02)
     assert r.passiva.efeito_cambial == pytest.approx(165_900.00, abs=0.02)
+
+
+def test_a_ponta_de_cdi_aceita_percentual_e_spread_juntos(monkeypatch):
+    """105% do CDI + 0,5% existe, e não era escrevível aqui.
+
+    A tela pedia uma escolha entre "% do CDI" e "CDI + spread", enquanto a
+    planilha da mesa traz as duas colunas — `% Indicador` e `Spread` — sempre.
+    Agora a ponta tem os dois campos, e cada um entra onde é a sua definição: o
+    percentual na taxa DIÁRIA, o spread capitalizado sobre τ.
+    """
+    from precificador import cdi, liquidacao as L
+
+    monkeypatch.setattr(
+        cdi, "serie",
+        lambda inicio, fim, *a, **k: _serie_de_cdi_constante(inicio, fim, 0.141))
+
+    def fator(**campos):
+        r = L.liquidar("2026-05-28", "2026-06-05", "2026-09-08", 15_210_000.0,
+                       L.Ponta(L.CDI, **campos), L.Ponta(L.PRE, 0.14), reter_ir=False)
+        return r.ativa.fator_do_indice
+
+    du, base = 66, 252.0
+    so_percentual = fator(percentual=1.05)
+    so_spread = fator(taxa=0.005)
+    juntos = fator(percentual=1.05, taxa=0.005)
+
+    # o spread é multiplicativo e não toca no percentual: o fator dos dois é o
+    # do percentual vezes o fator do spread, exatamente
+    assert juntos == pytest.approx(so_percentual * (1.005 ** (du / base)), rel=1e-12)
+    assert juntos > so_percentual > 1.0 and juntos > so_spread
+
+    # e o percentual incide na taxa DIÁRIA: 105% do CDI não é o CDI vezes 1,05
+    cheio = fator(percentual=1.0)
+    assert so_percentual != pytest.approx((cheio - 1) * 1.05 + 1, rel=1e-6)
+
+    # a descrição nomeia os dois, para a memória de cálculo não esconder nenhum
+    r = L.liquidar("2026-05-28", "2026-06-05", "2026-09-08", 15_210_000.0,
+                   L.Ponta(L.CDI, percentual=1.05, taxa=0.005),
+                   L.Ponta(L.PRE, 0.14), reter_ir=False)
+    _, valores = r.ativa.descricao
+    assert valores["pct"].startswith("105") and valores["sinal"] == "+"
+    assert valores["taxa"].startswith("0,5")
 
 
 def test_o_percentual_e_o_spread_do_cdi_nao_se_confundem(monkeypatch):
@@ -2493,19 +2535,19 @@ def test_o_percentual_e_o_spread_do_cdi_nao_se_confundem(monkeypatch):
         return L.liquidar("2026-05-28", "2026-06-05", "2026-09-08", 15_210_000.0,
                           ponta, L.Ponta(L.PRE, 0.14), reter_ir=False)
 
-    # o spread na opção de percentual
+    # o spread digitado no campo do percentual
     with pytest.raises(L.ErroLiquidacao) as erro:
-        liquidar(L.Ponta(L.CDI_PERCENTUAL, 0.008))
-    assert "CDI + spread" in str(erro.value)
+        liquidar(L.Ponta(L.CDI, percentual=0.008))
+    assert "campo do spread" in str(erro.value)
 
-    # e o percentual na opção de spread
+    # e o percentual digitado no campo do spread
     with pytest.raises(L.ErroLiquidacao) as erro:
-        liquidar(L.Ponta(L.CDI_SPREAD, 1.0))
-    assert "% do CDI" in str(erro.value)
+        liquidar(L.Ponta(L.CDI, taxa=1.0))
+    assert "campo do percentual" in str(erro.value)
 
     # o que é de mercado continua passando, dos dois lados da faixa
-    for ponta in (L.Ponta(L.CDI_PERCENTUAL, 1.05), L.Ponta(L.CDI_PERCENTUAL, 0.5),
-                  L.Ponta(L.CDI_SPREAD, 0.008), L.Ponta(L.CDI_SPREAD, 0.05)):
+    for ponta in (L.Ponta(L.CDI, percentual=1.05), L.Ponta(L.CDI, percentual=0.5),
+                  L.Ponta(L.CDI, taxa=0.008), L.Ponta(L.CDI, taxa=0.05)):
         assert liquidar(ponta).ativa.fator_do_indice > 1.0
 
     # a faixa vazia entre as duas é deliberada: nada de mercado cai nela
@@ -2789,7 +2831,7 @@ def test_cada_indexador_traz_a_convencao_que_o_mercado_usa():
     local = (contagem.DU_252, contagem.COMPOSTO)
     dolar = (contagem.ACT_360, contagem.SIMPLES)
     esperado = {
-        L.PRE: local, L.CDI_PERCENTUAL: local, L.CDI_SPREAD: local,
+        L.PRE: local, L.CDI: local,
         L.IPCA: local, L.EQUITY: local, L.FATOR: local,
         L.MOEDA: dolar, L.CAMBIO: dolar, L.SOFR: dolar,
         L.TERM_SOFR: dolar, L.EURIBOR: dolar,
@@ -2831,7 +2873,7 @@ def test_a_tela_nasce_com_a_convencao_de_cada_ponta():
     tabela = re.search(r'data-convencoes="([^"]+)"', pagina)
     enviada = _json.loads(_html.unescape(tabela.group(1)))
     assert enviada[L.CAMBIO] == [contagem.ACT_360, contagem.SIMPLES]
-    assert enviada[L.CDI_PERCENTUAL] == [contagem.DU_252, contagem.COMPOSTO]
+    assert enviada[L.CDI] == [contagem.DU_252, contagem.COMPOSTO]
     assert set(enviada) == {c for c, _ in L.INDEXADORES}
 
 
@@ -3020,7 +3062,7 @@ def test_a_data_digitada_no_fixing_volta_da_liquidacao():
         "nocional": "1.000.000,00", "nocional_original": "1.000.000,00",
         "amortizacao": "0", "calendario": "ANBIMA", "reter_ir": "1",
         "ativa_indexador": "pre", "ativa_taxa": "14",
-        "passiva_indexador": "cdi_percentual", "passiva_taxa": "100",
+        "passiva_indexador": "cdi", "passiva_taxa": "0", "passiva_percentual": "100",
         "ativa_data_fixing": "2024-12-20",
     }
     pagina = create_app().test_client().post("/liquidacao", data=dados).data.decode()

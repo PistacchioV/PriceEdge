@@ -82,8 +82,7 @@ from .renda_fixa import aliquota_ir
 from .erros import ErroTraduzido
 
 PRE = "pre"
-CDI_PERCENTUAL = "cdi_percentual"
-CDI_SPREAD = "cdi_spread"
+CDI = "cdi"
 MOEDA = "moeda"
 CAMBIO = "cambio"
 SOFR = "sofr"
@@ -95,8 +94,7 @@ FATOR = "fator"
 
 INDEXADORES = [
     (PRE, "Pré — taxa fixa ao ano"),
-    (CDI_PERCENTUAL, "CDI — % do CDI realizado"),
-    (CDI_SPREAD, "CDI + spread realizado"),
+    (CDI, "CDI — % do CDI realizado ± spread"),
     (MOEDA, "Moeda — só a variação cambial"),
     (CAMBIO, "Variação cambial + cupom"),
     (SOFR, "SOFR composto realizado + spread"),
@@ -109,7 +107,7 @@ INDEXADORES = [
 INDEXADOR_POR_CODIGO = dict(INDEXADORES)
 
 # indexadores que leem o que já aconteceu: o fluxo não pode terminar no futuro
-REALIZADOS = {CDI_PERCENTUAL, CDI_SPREAD, MOEDA, CAMBIO, SOFR, EURIBOR}
+REALIZADOS = {CDI, MOEDA, CAMBIO, SOFR, EURIBOR}
 
 # indexadores cujo fluxo é denominado em moeda estrangeira. Todos eles pedem o
 # par de fixings que traz a ponta de volta para reais — sem isso a variação
@@ -138,15 +136,16 @@ SEM_TAXA = {MOEDA, FATOR}
 # teto de lookback e observation shift, o mesmo da tela de SOFR Index
 LIMITE_DEFASAGEM = 15
 
-# As duas leituras do CDI usam o mesmo campo de taxa, e trocá-las dá um número
-# plausível em vez de um erro: "CDI + 0,8%" digitado em "% do CDI" vira 0,8% do
-# CDI, um fator de 1,0003 que passa por juros de fim de trimestre. Numa planilha
-# da mesa os dois vêm em colunas separadas — "% Indicador 100%" e "Spread
-# 0,8000%" — e a tradução para uma escolha só é onde a mão erra.
+# A ponta de CDI tem os DOIS campos, como a planilha da mesa: "% Indicador" e
+# "Spread". Eles não são alternativas — 105% do CDI + 0,5% existe, e antes não
+# havia como escrevê-lo aqui: a tela pedia uma escolha entre um e outro, e o
+# spread digitado no campo do percentual virava 0,8% do CDI, um fator de 1,0003
+# que passa por juros de fim de trimestre.
 #
-# Os limites separam as duas faixas com folga: percentual de CDI é cotado em 98,
-# 100, 105; spread sobre CDI vive entre 0,1% e 5% ao ano. Nada de mercado cai
-# entre 10% e 50%, então o que cair ali é digitação na opção errada.
+# Com dois campos a troca fica difícil, mas não impossível — os limites ficam
+# como rede. Percentual de CDI é cotado em 98, 100, 105; spread sobre CDI vive
+# entre 0,1% e 5% ao ano. Nada de mercado cai entre 10% e 50%, então o que cair
+# ali é digitação no campo errado.
 MINIMO_PERCENTUAL_CDI = 0.10        # 10% do CDI
 MAXIMO_SPREAD_CDI = 0.50            # 50% ao ano
 
@@ -166,8 +165,7 @@ MAXIMO_SPREAD_CDI = 0.50            # 50% ao ano
 # contra uma perna de funding local, e o spread segue a régua de cá.
 CONVENCAO_PADRAO = {
     PRE:            (contagem.DU_252, contagem.COMPOSTO),
-    CDI_PERCENTUAL: (contagem.DU_252, contagem.COMPOSTO),
-    CDI_SPREAD:     (contagem.DU_252, contagem.COMPOSTO),
+    CDI:            (contagem.DU_252, contagem.COMPOSTO),
     IPCA:           (contagem.DU_252, contagem.COMPOSTO),
     EQUITY:         (contagem.DU_252, contagem.COMPOSTO),
     FATOR:          (contagem.DU_252, contagem.COMPOSTO),
@@ -314,6 +312,8 @@ class Ponta:
     moeda: str = "USD"
     ptax_inicial: Optional[float] = None
     ptax_final: Optional[float] = None
+    # só no CDI: 1,10 = 110% do CDI. Vive ao lado da taxa, que ali é o SPREAD
+    percentual: float = 1.0
     ni_inicial: Optional[float] = None
     ni_final: Optional[float] = None
     # '' = os dois números-índice digitados; 'm1'/'m2' = buscados no IBGE pela
@@ -543,33 +543,37 @@ def liquidar_ponta(ponta: Ponta, nocional: float, inicio, fim,
                       ("{taxa}% a.a. sobre τ = {tau}",
                        {"taxa": _numero(ponta.taxa * 100), "tau": _numero(tau, 6)}))
 
-    if ponta.indexador in (CDI_PERCENTUAL, CDI_SPREAD):
-        com_spread = ponta.indexador == CDI_SPREAD
-        if not com_spread and 0 < ponta.taxa < MINIMO_PERCENTUAL_CDI:
+    if ponta.indexador == CDI:
+        pct = 1.0 if ponta.percentual is None else float(ponta.percentual)
+        if 0 < pct < MINIMO_PERCENTUAL_CDI:
             raise ErroLiquidacao(
-                "{taxa}% do CDI não é um percentual de mercado — ele é cotado em "
-                "98, 100, 105. Se {taxa}% é o spread sobre o CDI, escolha "
-                "\"CDI + spread realizado\": em \"% do CDI\" ele daria um fator de "
-                "quase 1, e a conta sairia baixa sem acusar nada.",
-                taxa=_numero(ponta.taxa * 100, 4))
-        if com_spread and ponta.taxa >= MAXIMO_SPREAD_CDI:
+                "{pct}% do CDI não é um percentual de mercado — ele é cotado em "
+                "98, 100, 105. Se {pct}% é o spread sobre o CDI, ele vai no campo "
+                "do spread: no do percentual daria um fator de quase 1, e a conta "
+                "sairia baixa sem acusar nada.",
+                pct=_numero(pct * 100, 4))
+        if abs(ponta.taxa) >= MAXIMO_SPREAD_CDI:
             raise ErroLiquidacao(
                 "um spread de {taxa}% ao ano sobre o CDI não existe. Se {taxa} é o "
-                "percentual do CDI, escolha \"CDI — % do CDI realizado\".",
+                "percentual do CDI, ele vai no campo do percentual.",
                 taxa=_numero(ponta.taxa * 100, 4))
+        # O PERCENTUAL incide na taxa DIÁRIA — é a definição do índice, e é por
+        # isso que 110% do CDI a 14% dá 15,5031% e não os 15,40% de multiplicar
+        # a taxa anual. O SPREAD é multiplicativo e capitaliza sobre τ, na
+        # contagem escolhida: (1+CDI)·(1+spread).
         acumulado = cdi.acumular(cdi.serie(d0, d1), d0, d1, valor=1.0,
-                                 percentual=1.0 if com_spread else ponta.taxa,
-                                 arredondar=arredondar_di)
+                                 percentual=pct, arredondar=arredondar_di)
         indice = acumulado.fator
+        com_spread = bool(ponta.taxa)
         if com_spread:
-            # o produto diário é a definição do índice; a contagem escolhida
-            # capitaliza só o spread, que é onde ela de fato tem escolha
             indice *= capitalizar(ponta.taxa)
-            molde = "CDI + {taxa}% em {du} dias úteis publicados"
-            valores = {"taxa": _numero(ponta.taxa * 100), "du": acumulado.dias_uteis}
+            molde = "{pct}% do CDI {sinal} {taxa}% em {du} dias úteis publicados"
+            valores = {"pct": _numero(pct * 100, 2), "du": acumulado.dias_uteis,
+                       "sinal": "+" if ponta.taxa >= 0 else "−",
+                       "taxa": _numero(abs(ponta.taxa) * 100)}
         else:
-            molde = "{taxa}% do CDI em {du} dias úteis publicados"
-            valores = {"taxa": _numero(ponta.taxa * 100, 2), "du": acumulado.dias_uteis}
+            molde = "{pct}% do CDI em {du} dias úteis publicados"
+            valores = {"pct": _numero(pct * 100, 2), "du": acumulado.dias_uteis}
         return montar(indice, (molde, valores), fixings=_dias_do_cdi(acumulado),
                       contagem_vale_para_spread=com_spread)
 

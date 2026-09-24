@@ -1005,12 +1005,13 @@ def liquidacao_swap():
     # cada ponta repete os mesmos campos com o seu prefixo
     padrao = {
         "ativa": dict(indexador=liquidacao.PRE, taxa="14"),
-        "passiva": dict(indexador=liquidacao.CDI_PERCENTUAL, taxa="100"),
+        "passiva": dict(indexador=liquidacao.CDI, taxa="0", percentual="100"),
     }
     for lado, escolhas in padrao.items():
         convencao, regime = liquidacao.convencao_padrao(escolhas["indexador"])
         contexto["form"].update({
             f"{lado}_indexador": escolhas["indexador"], f"{lado}_taxa": escolhas["taxa"],
+            f"{lado}_percentual": escolhas.get("percentual", "100"),
             f"{lado}_convencao": convencao, f"{lado}_regime": regime,
             f"{lado}_moeda": liquidacao.SEM_CONVERSAO,
             f"{lado}_ptax_inicial": "", f"{lado}_ptax_final": "",
@@ -1060,6 +1061,9 @@ def _ponta_do_form(form, prefixo: str) -> liquidacao.Ponta:
         ni_inicial=opcional("ni_inicial", f"número-índice inicial da ponta {lado}"),
         ni_final=opcional("ni_final", f"número-índice final da ponta {lado}"),
         ipca_fixing=form.get(campo("ipca_fixing")) or ipca.DIGITADO,
+        percentual=(servicos.taxa_do_form(form, campo("percentual"),
+                                          f"percentual do CDI da ponta {lado}", 1.0)
+                    if texto("percentual") else 1.0),
         fator_manual=opcional("fator", f"fator da ponta {lado}"),
         ativo=texto("ativo"),
         preco_inicial=opcional("preco_inicial", f"preço inicial da ponta {lado}"),

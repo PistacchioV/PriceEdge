@@ -1311,6 +1311,7 @@ TRADUCOES: Dict[str, str] = {
     "Pré — taxa fixa ao ano": "Fixed — rate per annum",
     "CDI — % do CDI realizado": "CDI — % of realised CDI",
     "CDI + spread realizado": "Realised CDI + spread",
+    "CDI — % do CDI realizado ± spread": "CDI — % of realised CDI ± spread",
     "Variação cambial + cupom": "Currency move + coupon",
     "SOFR composto realizado + spread": "Realised compounded SOFR + spread",
     "Term SOFR do fixing + spread": "Term SOFR fixing + spread",
@@ -1465,11 +1466,23 @@ TRADUCOES: Dict[str, str] = {
     "14 para 14% a.a. · 100 para 100% do CDI · 2 para CDI+2% · 3,25 para um cupom de "
     "3,25%":
         "14 for 14% p.a. · 100 for 100% of CDI · 2 for CDI+2% · 3.25 for a 3.25% coupon",
+    "14 para 14% a.a. · 2 para CDI+2% · 0 para CDI sem spread · 3,25 para um cupom "
+    "de 3,25%":
+        "14 for 14% p.a. · 2 for CDI+2% · 0 for CDI with no spread · 3.25 for a "
+        "3.25% coupon",
+    "100 para o CDI cheio · 105 para 105% do CDI. O percentual incide na taxa "
+    "diária, que é a definição do índice.":
+        "100 for the full CDI · 105 for 105% of CDI. The percentage applies to the "
+        "daily rate, which is how the index is defined.",
 
     # moldes de descrição de cada ponta
     "{taxa}% a.a. sobre τ = {tau}": "{taxa}% p.a. over τ = {tau}",
     "{taxa}% do CDI em {du} dias úteis publicados":
         "{taxa}% of CDI over {du} published business days",
+    "{pct}% do CDI em {du} dias úteis publicados":
+        "{pct}% of CDI over {du} published business days",
+    "{pct}% do CDI {sinal} {taxa}% em {du} dias úteis publicados":
+        "{pct}% of CDI {sinal} {taxa}% over {du} published business days",
     "CDI + {taxa}% em {du} dias úteis publicados":
         "CDI + {taxa}% over {du} published business days",
     "variação de {variacao}% mais cupom de {taxa}% sobre τ = {tau}":
@@ -1751,6 +1764,17 @@ TRADUCOES: Dict[str, str] = {
         "If {taxa}% is the spread over CDI, pick \"CDI + realised spread\": under "
         "\"% of CDI\" it would give a factor of almost 1, and the settlement would "
         "come out low without flagging anything.",
+    "{pct}% do CDI não é um percentual de mercado — ele é cotado em 98, 100, 105. "
+    "Se {pct}% é o spread sobre o CDI, ele vai no campo do spread: no do "
+    "percentual daria um fator de quase 1, e a conta sairia baixa sem acusar nada.":
+        "{pct}% of CDI is not a market percentage — it is quoted at 98, 100, 105. "
+        "If {pct}% is the spread over CDI, it belongs in the spread field: in the "
+        "percentage one it would give a factor of almost 1, and the settlement "
+        "would come out low without flagging anything.",
+    "um spread de {taxa}% ao ano sobre o CDI não existe. Se {taxa} é o percentual "
+    "do CDI, ele vai no campo do percentual.":
+        "a spread of {taxa}% a year over CDI does not exist. If {taxa} is the "
+        "percentage of CDI, it belongs in the percentage field.",
     "um spread de {taxa}% ao ano sobre o CDI não existe. Se {taxa} é o percentual "
     "do CDI, escolha \"CDI — % do CDI realizado\".":
         "a spread of {taxa}% a year over CDI does not exist. If {taxa} is the "

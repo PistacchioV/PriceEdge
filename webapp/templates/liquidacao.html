@@ -20,16 +20,27 @@
       </select>
     </div>
 
-    <div data-bloco="{{ lado }}" data-mostrar-em="pre,cdi_percentual,cdi_spread,cambio,sofr,term_sofr,euribor,ipca,equity">
+    {# A ponta de CDI tem os dois campos, como a planilha da mesa: o percentual
+       e o spread. 105% do CDI + 0,5% existe e não era escrevível aqui. #}
+    <div data-bloco="{{ lado }}" data-mostrar-em="cdi">
+      <label class="rotulo" for="{{ lado }}_percentual">{{ t("% do CDI") }}</label>
+      <input class="campo" id="{{ lado }}_percentual" name="{{ lado }}_percentual"
+             data-formato="percentual" value="{{ f[lado ~ '_percentual'] }}" inputmode="decimal"/>
+      <p class="mt-2 text-xs leading-5 text-slate-600 font-geist">
+        {{ t("100 para o CDI cheio · 105 para 105% do CDI. O percentual incide na taxa diária, que é a definição do índice.") }}
+      </p>
+    </div>
+
+    <div data-bloco="{{ lado }}" data-mostrar-em="pre,cdi,cambio,sofr,term_sofr,euribor,ipca,equity">
       <label class="rotulo" for="{{ lado }}_taxa">{{ t("Taxa contratada ou spread") }}</label>
       <input class="campo" id="{{ lado }}_taxa" name="{{ lado }}_taxa" data-formato="percentual"
              value="{{ f[lado ~ '_taxa'] }}" inputmode="decimal"/>
       <p class="mt-2 text-xs leading-5 text-slate-600 font-geist">
-        {{ t("14 para 14% a.a. · 100 para 100% do CDI · 2 para CDI+2% · 3,25 para um cupom de 3,25%") }}
+        {{ t("14 para 14% a.a. · 2 para CDI+2% · 0 para CDI sem spread · 3,25 para um cupom de 3,25%") }}
       </p>
     </div>
 
-    <div class="grid gap-4 sm:grid-cols-2" data-bloco="{{ lado }}" data-mostrar-em="pre,cdi_spread,cambio,sofr,term_sofr,euribor,ipca,equity">
+    <div class="grid gap-4 sm:grid-cols-2" data-bloco="{{ lado }}" data-mostrar-em="pre,cdi,cambio,sofr,term_sofr,euribor,ipca,equity">
       <div>
         <label class="rotulo" for="{{ lado }}_convencao">{{ t("Contagem de dias") }}</label>
         <select class="campo" id="{{ lado }}_convencao" name="{{ lado }}_convencao">
