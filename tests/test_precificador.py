@@ -3628,12 +3628,13 @@ def test_a_data_digitada_no_fixing_volta_da_liquidacao():
 
 
 def test_dias_uteis_em_ingles_sao_bd_e_corridos_sao_cd():
-    """DU, DC, dup e dut são siglas do português: em inglês, BD, CD, bde e bdp."""
+    """DU, DC, dup e dut são siglas do português: em inglês, BD, CD, bdp e bdt."""
     from webapp import create_app
     cliente = create_app().test_client()
     ni = cliente.post("/ni-pro-rata?idioma=en",
                       data=FORMULARIOS["/ni-pro-rata"]).data.decode()
-    assert "(bde / bdp)" in ni and "bde = business days elapsed" in ni
+    assert "(bdp / bdt)" in ni and "bdp = business days in the period" in ni
+    assert "bdt = business days total" in ni
     assert not re.search(r"\bdu[pt]\b", "\n".join(_texto_visivel(ni)))
     ndf = cliente.post("/ndf?idioma=en", data=FORMULARIOS["/ndf"]).data.decode()
     assert "<th>CD</th><th>BD</th>" in ndf
