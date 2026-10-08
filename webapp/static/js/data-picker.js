@@ -460,6 +460,10 @@
      `valorDe(el)` e `definirLimiteMaximo(el, iso)` funcionam tanto no input
      nativo quanto no substituto. */
   window.campoData = {
+    /** Monta o picker num campo criado depois do carregamento da página. */
+    montar(el) {
+      if (el && el.matches && el.matches('input[type="date"]')) trocar(el);
+    },
     escondido(el) {
       const caixa = el && el.closest ? el.closest(".campo-data") : null;
       return caixa ? caixa.querySelector('input[type="hidden"]') : el;

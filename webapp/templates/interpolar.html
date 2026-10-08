@@ -25,9 +25,9 @@
 
         <div class="flex flex-wrap items-center justify-between gap-3">
           <p class="text-[11px] font-semibold uppercase tracking-widest text-cyan-200 font-geist">{{ t("Pontos conhecidos") }}</p>
-          <div class="flex items-center gap-2">
-            <select class="campo w-auto py-1.5 text-xs" id="curva-fonte">
-              {% for cod, nome, conv, _ in curvas_disponiveis %}<option value="{{ cod }}">{{ t(nome) }}</option>{% endfor %}
+          <div class="flex min-w-0 flex-wrap items-center gap-2">
+            <select class="campo w-auto min-w-0 max-w-full py-1.5 text-xs" id="curva-fonte" name="curva">
+              {% for cod, nome, conv, _ in curvas_disponiveis %}<option value="{{ cod }}" {{ 'selected' if curva == cod }}>{{ t(nome) }}</option>{% endfor %}
             </select>
             <button type="button" id="btn-carregar"
               class="inline-flex items-center gap-1.5 rounded-full border border-white/[0.12] bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-slate-200 transition hover:bg-white/[0.08] font-geist">
@@ -64,9 +64,22 @@
               <option value="cubica" {{ 'selected' if extrapolar == 'cubica' }}>{{ t("Extrapolar o polinômio") }}</option>
             </select>
           </div>
-          <div class="sm:col-span-2">
-            <label class="rotulo" for="alvos">{{ t("Prazos a interpolar") }}</label>
-            <input class="campo font-mono text-xs" id="alvos" name="alvos" value="{{ alvos_txt }}" placeholder="126, 183, 365, 1826"/>
+          <div>
+            <label class="rotulo" for="data_base">{{ t("Data-base da curva") }}</label>
+            <input class="campo" id="data_base" name="data_base" type="date" value="{{ data_base }}" required/>
+            <p class="mt-1 text-xs text-slate-600 font-geist">{{ t("Os dias de cada data contam a partir dela; é também a data da curva carregada da B3.") }}</p>
+          </div>
+          <div>
+            <label class="rotulo">{{ t("Datas a interpolar") }}</label>
+            <div id="lista-datas" class="grid gap-2">
+              {% for d in datas %}
+              <input class="campo" name="datas" type="date" value="{{ d }}" aria-label="{{ t('Data a interpolar') }}"/>
+              {% endfor %}
+            </div>
+            <button type="button" id="btn-mais-data"
+              class="mt-2 inline-flex items-center gap-1.5 rounded-full border border-white/[0.12] bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-slate-200 transition hover:bg-white/[0.08] font-geist">
+              <iconify-icon height="14" icon="solar:add-circle-linear" width="14"></iconify-icon>{{ t("Adicionar data") }}
+            </button>
           </div>
         </div>
 
@@ -86,11 +99,13 @@
           </div>
           <div class="rolagem max-h-[26rem] px-2">
             <table class="tabela-dados">
-              <thead><tr><th>{{ t("Prazo (dc)") }}</th><th>{{ t("Taxa interpolada") }}</th><th>{{ t("Situação") }}</th></tr></thead>
+              <thead><tr><th>{{ t("Data") }}</th><th>{{ t("DC") }}</th><th>{{ t("DU") }}</th><th>{{ t("Taxa interpolada") }}</th><th>{{ t("Situação") }}</th></tr></thead>
               <tbody>
               {% for l in resultado.linhas %}
                 <tr>
+                  <td>{{ l.data | data_br }}</td>
                   <td>{{ l.x | numero(0) }}</td>
+                  <td class="text-slate-500">{{ l.du | numero(0) }}</td>
                   <td class="text-cyan-100">{{ '%.6f' | format(l.y) }}</td>
                   <td class="{{ 'text-amber-300' if l.fora else 'text-slate-600' }}">
                     {{ t('extrapolado' if l.fora else 'dentro do domínio') }}
@@ -127,7 +142,9 @@ document.getElementById("btn-carregar").addEventListener("click", async (evento)
   botao.disabled = true;
   botao.textContent = "Baixando...";
   try {
-    const resposta = await fetch(`/interpolar/carregar?curva=${curva}&data={{ data_sugerida.isoformat() }}`);
+    const base = window.campoData ? window.campoData.valor(document.getElementById("data_base"))
+                                  : document.getElementById("data_base").value;
+    const resposta = await fetch(`/interpolar/carregar?curva=${curva}&data=${base || "{{ data_base }}"}`);
     const dados = await resposta.json();
     if (!resposta.ok) throw new Error(dados.erro || "falha ao carregar");
     document.getElementById("x").value = dados.x;
@@ -139,6 +156,17 @@ document.getElementById("btn-carregar").addEventListener("click", async (evento)
   } finally {
     botao.disabled = false;
   }
+});
+
+// mais uma data: um campo novo, montado pelo mesmo date picker dos outros
+document.getElementById("btn-mais-data").addEventListener("click", () => {
+  const campo = document.createElement("input");
+  campo.className = "campo";
+  campo.type = "date";
+  campo.name = "datas";
+  campo.setAttribute("aria-label", {{ t('Data a interpolar') | tojson }});
+  document.getElementById("lista-datas").appendChild(campo);
+  if (window.campoData) window.campoData.montar(campo);
 });
 </script>
 {% endblock %}

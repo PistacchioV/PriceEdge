@@ -957,7 +957,8 @@ FORMULARIOS = {
                        passiva_indexador="cdi", passiva_taxa="2",
                        passiva_convencao="du_252", passiva_regime="composto",
                        passiva_moeda="BRL"),
-    "/interpolar": dict(x="1\n365\n1826", y="14\n13,5\n13,8", alvos="180, 900",
+    "/interpolar": dict(x="1\n365\n1826", y="14\n13,5\n13,8", curva="DOC",
+                        data_base="2026-10-07", datas=["2027-04-05", "2029-03-25"],
                         metodo="spline", extrapolar="flat"),
 }
 
@@ -3842,3 +3843,25 @@ def test_tela_de_opcoes_resolve_o_strike(monkeypatch):
     formulario = ingles[ingles.index("<form"):ingles.index("</form>")]
     assert "Price a swap" not in formulario   # o botão é da opção, não do swap
     assert "Price the option" in ingles
+
+
+def test_interpolacao_por_data_e_curva_continua_escolhida():
+    """O prazo sai da data menos a data-base, e a curva fica selecionada."""
+    from precificador import interpolar
+    from webapp import create_app
+    pagina = create_app().test_client().post(
+        "/interpolar", data=FORMULARIOS["/interpolar"]).data.decode()
+    assert re.search(r'<option value="DOC"\s+selected', pagina)
+    # 07/10/2026 → 05/04/2027 = 180 dias corridos; → 25/03/2029 = 900
+    alvo = interpolar([1, 365, 1826], [14, 13.5, 13.8], 180)
+    assert "05/04/2027" in pagina and ">180<" in pagina and ">900<" in pagina
+    assert f"{alvo:.6f}" in pagina
+    # as duas datas voltam preenchidas, em campos de data
+    assert pagina.count('name="datas" type="date"') == 2
+
+
+def test_interpolacao_recusa_data_antes_da_base():
+    from webapp import create_app
+    dados = dict(FORMULARIOS["/interpolar"], datas=["2026-10-01"])
+    pagina = create_app().test_client().post("/interpolar", data=dados).data.decode()
+    assert "não é posterior à data-base" in pagina

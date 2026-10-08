@@ -132,33 +132,48 @@ def api_interpolar(codigo: str):
 
 @bp.route("/interpolar", methods=["GET", "POST"])
 def interpolador():
+    """Interpola uma curva em datas: o prazo em dias sai da data-base."""
+    base_padrao = servicos.data_sugerida()
     contexto = {"metodos": list(METODOS), "resultado": None, "erro": None,
-                "x_txt": "", "y_txt": "", "alvos_txt": "", "metodo": "spline",
+                "x_txt": "", "y_txt": "", "metodo": "spline",
                 "extrapolar": "flat", "curvas_disponiveis": b3.CURVAS_COMPLETAS,
-                "data_sugerida": servicos.data_sugerida()}
+                "curva": "PRE", "data_base": base_padrao.isoformat(),
+                "datas": [soma_meses(base_padrao, 6).isoformat()]}
     if request.method == "POST":
         contexto.update({
             "x_txt": request.form.get("x", ""),
             "y_txt": request.form.get("y", ""),
-            "alvos_txt": request.form.get("alvos", ""),
             "metodo": request.form.get("metodo", "spline"),
             "extrapolar": request.form.get("extrapolar", "flat"),
+            # a curva escolhida fica escolhida depois do POST
+            "curva": request.form.get("curva") or "PRE",
+            "data_base": request.form.get("data_base") or base_padrao.isoformat(),
+            "datas": [d for d in request.form.getlist("datas") if d.strip()] or [""],
         })
         try:
             xs = _numeros(contexto["x_txt"], "eixo x")
             ys = _numeros(contexto["y_txt"], "eixo y")
-            alvos = _numeros(contexto["alvos_txt"], "pontos a interpolar")
             if len(xs) != len(ys):
                 raise ValueError(f"o eixo x tem {len(xs)} pontos e o y tem {len(ys)}")
             if len(xs) < 2:
                 raise ValueError("são necessários pelo menos dois pontos")
+            base = para_data(contexto["data_base"])
+            datas = [para_data(d) for d in contexto["datas"] if d]
+            if not datas:
+                raise servicos.ErroFormulario("informe pelo menos uma data a interpolar")
+            cal = calendario_anbima()
             linhas = []
-            for alvo in alvos:
+            for data in datas:
+                # o eixo x da B3 é em dias corridos a partir da data-base
+                alvo = (data - base).days
+                if alvo <= 0:
+                    raise servicos.ErroFormulario(
+                        "a data {data} não é posterior à data-base", data=data.strftime("%d/%m/%Y"))
                 valor = interpolar(xs, ys, alvo, metodo=contexto["metodo"],
                                    **({} if contexto["metodo"] == "flat_forward"
                                       else {"extrapolar": contexto["extrapolar"]}))
-                linhas.append({"x": alvo, "y": valor,
-                               "fora": alvo < min(xs) or alvo > max(xs)})
+                linhas.append({"data": data, "x": alvo, "du": cal.dias_uteis(base, data),
+                               "y": valor, "fora": alvo < min(xs) or alvo > max(xs)})
             contexto["resultado"] = {"linhas": linhas, "n": len(xs),
                                      "dominio": (min(xs), max(xs))}
         except ValueError as exc:

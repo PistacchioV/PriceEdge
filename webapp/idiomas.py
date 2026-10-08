@@ -1335,6 +1335,14 @@ TRADUCOES: Dict[str, str] = {
         "Cross-currency with a floating BRL leg. Two discount curves, multiplicative spread.",
     "Inflação implícita de (1+DI)/(1+DI×IPCA)−1, capitalizada por período.":
         "Break-even inflation from (1+DI)/(1+DI×IPCA)−1, compounded per period.",
+    # ---- interpolação por data
+    'Data-base da curva': 'Curve base date',
+    'Os dias de cada data contam a partir dela; é também a data da curva carregada da B3.': 'Days for each date count from it; it is also the date of the curve loaded from B3.',
+    'Datas a interpolar': 'Dates to interpolate',
+    'Data a interpolar': 'Date to interpolate',
+    'Adicionar data': 'Add date',
+    'informe pelo menos uma data a interpolar': 'enter at least one date to interpolate',
+    'a data {data} não é posterior à data-base': 'the date {data} is not after the base date',
     # ---- opções de câmbio (Garman-Kohlhagen)
     'Precificar a opção': 'Price the option',
     'Estruturas': 'Structures',
