@@ -887,6 +887,15 @@ FORMULARIOS = {
     "/ndf-livre": dict(data_curva="2026-09-04", moeda="LIVRE", spot="6,93",
                        taxa_estrangeira="4,25", progressao="mensal",
                        quantidade="4", calendario="ANBIMA"),
+    "/opcoes-fx": dict(modelo="collar", inicio="2026-06-12", vencimento="2027-06-14",
+                       spot="5,15", nocional="19.417.475,73",
+                       taxa_dom="14,55 %", taxa_est="5,09 %", fonte_vol="smile",
+                       vol="15 %", smile="20,40; 19,81; 19,11; 17,26; 16,06; 15,03; "
+                       "14,29; 13,98; 13,66; 13,68; 13,72",
+                       usar1="1", tipo1="call", lado1="vendida", strike1="5,80",
+                       usar2="1", tipo2="put", lado2="comprada", strike2="5,00",
+                       resolver_strike="1", premio_alvo="0,00",
+                       spread="2,5 %", fee="1 %"),
     "/ni-pro-rata": dict(ni_anterior="7.545,53", projecao="0,68",
                          data="2026-04-13", vne="1.000,00", ni_partida="7.545,53"),
     "/liquidacao": dict(data_operacao="2025-09-08", inicio="2025-09-08",
@@ -1064,7 +1073,9 @@ def test_nenhum_texto_em_portugues_sobra_na_tela_em_ingles():
     paginas = ["/", "/curvas?curva=DOC&extrair=1", "/curvas?curva=PTX&extrair=1",
                "/precificar", "/ndf", "/sofr", "/term-sofr", "/euribor",
                "/renda-fixa", "/liquidacao", "/cotacoes", "/interpolar",
-            "/ni-pro-rata", "/metodologia", "/precificar?template=ipca_cdi_string"]
+            "/ni-pro-rata", "/metodologia", "/precificar?template=ipca_cdi_string",
+               "/opcoes-fx", "/opcoes-fx?modelo=collar", "/opcoes-fx?modelo=box",
+               "/opcoes-fx?modelo=four_way"]
     def varrer(rotulo, html):
         for texto in _texto_visivel(html):
             achados = {p.lower() for p in _MARCADORES_PT.findall(texto)}
@@ -1615,7 +1626,9 @@ def test_nenhum_select_da_aplicacao_chega_vazio_a_tela():
 
     paginas = ["/", "/curvas", "/precificar", "/ndf", "/sofr", "/term-sofr",
                "/euribor", "/renda-fixa", "/liquidacao", "/interpolar",
-               "/ni-pro-rata", "/metodologia", "/precificar?template=ipca_cdi_string"]
+               "/ni-pro-rata", "/metodologia", "/precificar?template=ipca_cdi_string",
+               "/opcoes-fx", "/opcoes-fx?modelo=collar", "/opcoes-fx?modelo=box",
+               "/opcoes-fx?modelo=four_way"]
     for rota in paginas:
         varrer(rota, app.test_client().get(rota).data.decode())
     for chave, dados in FORMULARIOS.items():
@@ -3730,3 +3743,102 @@ def test_dias_uteis_em_ingles_sao_bd_e_corridos_sao_cd():
     pt = cliente.post("/ni-pro-rata?idioma=pt",
                       data=FORMULARIOS["/ni-pro-rata"]).data.decode()
     assert "(dup / dut)" in pt
+
+
+# ------------------------------------------------ opções FX: Garman-Kohlhagen
+
+def test_garman_kohlhagen_bate_com_o_exemplo_publicado():
+    """Exemplo EUR/USD da metricgate: S 1,10, K 1,12, r_d 5%, r_f 3%, σ 12%, T 0,5."""
+    from precificador.opcoes_fx import CALL, PUT, N, avaliar, paridade
+    c = avaliar(CALL, 1.10, 1.12, 0.05, 0.03, 0.12, 0.5)
+    assert c.premio == pytest.approx(0.032621, abs=5e-7)
+    assert (c.d1, c.d2) == (pytest.approx(-0.05207, abs=5e-6), pytest.approx(-0.13693, abs=5e-6))
+    assert (N(c.d1), N(c.d2)) == (pytest.approx(0.47924, abs=5e-6), pytest.approx(0.44554, abs=5e-6))
+    g = c.gregas
+    assert g.delta == pytest.approx(0.472101, abs=5e-7)
+    assert g.gamma == pytest.approx(4.2048, abs=1e-4)
+    assert g.vega == pytest.approx(0.003053, abs=5e-7)
+    assert g.theta == pytest.approx(-0.000124, abs=5e-7)
+    assert g.rho == pytest.approx(0.002433, abs=5e-7)
+    assert g.psi == pytest.approx(-0.002597, abs=5e-7)
+    assert c.forward == pytest.approx(1.111055, abs=5e-7)
+    p = avaliar(PUT, 1.10, 1.12, 0.05, 0.03, 0.12, 0.5)
+    assert c.premio - p.premio == pytest.approx(paridade(1.10, 1.12, 0.05, 0.03, 0.5), abs=1e-12)
+    assert c.premio - p.premio == pytest.approx(-0.008724, abs=5e-7)
+
+
+# Aba "Precificação" da planilha *Benefício de taxa com Collar - Garman Kohlhagen*
+COLLAR = dict(S=5.15, r_d=0.13584354808835755, r_f=0.050328634863547786,
+              T=0.98809523809523814, nocional_brl=100_000_000)
+SMILE_COLLAR = [0.204, 0.1981, 0.1911, 0.1726, 0.1606, 0.1503, 0.1429, 0.1398,
+                0.1366, 0.1368, 0.1372]
+
+
+def test_collar_bate_com_a_planilha():
+    """Vol do smile por ponto fixo, prêmios do cap e do floor e a taxa all-in."""
+    from precificador import opcoes_fx as fx
+    smile = list(zip(fx.DELTAS_B3, SMILE_COLLAR))
+    S, rd, rf, T = COLLAR["S"], COLLAR["r_d"], COLLAR["r_f"], COLLAR["T"]
+    assert fx.vol_do_smile(smile, S, 5.8, rd, rf, T) == pytest.approx(0.15651084347055999, abs=1e-12)
+    assert fx.vol_do_smile(smile, S, 5.0, rd, rf, T) == pytest.approx(0.13927533180245033, abs=1e-12)
+
+    pernas = [fx.Perna("call", "vendida", 5.8), fx.Perna("put", "comprada", 5.0)]
+    cap, floor = fx.avaliar_pernas(pernas, S, rd, rf, T, COLLAR["nocional_brl"] / S, smile)
+    assert cap.premio_total == pytest.approx(4484933.4263348393, abs=1e-6)       # recebe
+    assert floor.premio_total == pytest.approx(-1431813.1843207639, abs=1e-6)    # paga
+    liquido = cap.premio_total + floor.premio_total
+    assert liquido == pytest.approx(3053120.2420140756, abs=1e-6)
+
+    t = 249 / 252
+    assert fx.taxa_all_in(0.025, t, 0.01) == pytest.approx(0.035124050622566801, abs=1e-12)
+    # a planilha chega aqui por "Atingir Meta"; a forma fechada difere na 6ª casa
+    assert fx.taxa_all_in(0.025, t, 0.01 - liquido / 1e8) == pytest.approx(0.0042178501836804619, abs=1e-6)
+    assert fx.percentual_do_cdi(0.035124050622566801, 0.14550266349328633) == \
+        pytest.approx(1.254211159424184, abs=1e-12)
+
+
+def test_strike_do_collar_de_custo_zero():
+    from precificador import opcoes_fx as fx
+    smile = list(zip(fx.DELTAS_B3, SMILE_COLLAR))
+    S, rd, rf, T = COLLAR["S"], COLLAR["r_d"], COLLAR["r_f"], COLLAR["T"]
+    q = COLLAR["nocional_brl"] / S
+    pernas = [fx.Perna("call", "vendida", S), fx.Perna("put", "comprada", 5.0)]
+    k = fx.resolver_strike(pernas, 0, S, rd, rf, T, q, smile)
+    pernas[0] = fx.Perna("call", "vendida", k)
+    assert fx.premio_liquido(fx.avaliar_pernas(pernas, S, rd, rf, T, q, smile)) == pytest.approx(0, abs=1e-2)
+    assert k > 5.8          # o cap de 5,80 sobra prêmio, então o de custo zero fica acima
+
+    # e um alvo diferente de zero: a call comprada que custa R$ 1 milhão
+    unica = [fx.Perna("call", "comprada", S, 0.15)]
+    k = fx.resolver_strike(unica, 0, S, rd, rf, T, q, None, alvo=-1_000_000)
+    unica[0] = fx.Perna("call", "comprada", k, 0.15)
+    assert fx.premio_liquido(fx.avaliar_pernas(unica, S, rd, rf, T, q)) == pytest.approx(-1_000_000, abs=1e-2)
+
+
+def test_box_vale_o_payoff_descontado():
+    """Payoff fixo em K2 − K1: o prêmio é esse valor descontado pelo DI."""
+    import math
+    from precificador import opcoes_fx as fx
+    S, rd, rf, T = COLLAR["S"], COLLAR["r_d"], COLLAR["r_f"], COLLAR["T"]
+    box = [fx.Perna("call", "comprada", 5.0, 0.15), fx.Perna("call", "vendida", 5.5, 0.17),
+           fx.Perna("put", "comprada", 5.5, 0.17), fx.Perna("put", "vendida", 5.0, 0.15)]
+    liquido = fx.premio_liquido(fx.avaliar_pernas(box, S, rd, rf, T, 1.0))
+    # vol diferente em cada strike e nada muda: pela paridade, a box não tem vol
+    assert -liquido == pytest.approx(0.5 * math.exp(-rd * T), abs=1e-12)
+
+
+def test_tela_de_opcoes_resolve_o_strike(monkeypatch):
+    from webapp import create_app
+    cliente = create_app().test_client()
+    for modelo in ("unica", "call_spread", "put_spread", "collar", "three_way",
+                   "four_way", "straddle", "strangle", "box"):
+        assert cliente.get(f"/opcoes-fx?modelo={modelo}").status_code == 200
+    pagina = cliente.post("/opcoes-fx", data=FORMULARIOS["/opcoes-fx"]).data.decode()
+    assert "Strike calculado" in pagina
+    assert "Benefício de taxa" in pagina
+    ingles = cliente.post("/opcoes-fx?idioma=en", data=FORMULARIOS["/opcoes-fx"]).data.decode()
+    assert "Solved strike" in ingles
+    assert "Price an option" in ingles
+    formulario = ingles[ingles.index("<form"):ingles.index("</form>")]
+    assert "Price a swap" not in formulario   # o botão é da opção, não do swap
+    assert "Price the option" in ingles

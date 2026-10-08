@@ -12,7 +12,8 @@ from flask import (Blueprint, Response, jsonify, redirect, render_template,
 from precificador import (anbima, anbima_datasets, b3, cambio, cdi, contagem,
                           cotacoes, euribor,
                           fontes, glossario, inflacao_implicita, ipca, liquidacao,
-                          montador, rede, renda_fixa, sofr, term_sofr as term)
+                          montador, opcoes_fx, rede, renda_fixa, sofr,
+                          term_sofr as term)
 from precificador.calendario import (CALENDARIOS_DISPONIVEIS, CONVENCOES_DIA_UTIL,
                                      MODIFIED_FOLLOWING, calendario_anbima,
                                      obter_calendario, para_data, soma_meses)
@@ -1394,3 +1395,192 @@ def ni_pro_rata():
         except (ValueError, servicos.ErroFormulario, ErroDeFonte) as exc:
             contexto["erro"] = idiomas.mensagem(exc)
     return render_template("ni_pro_rata.html", **contexto)
+
+
+# --------------------------------------------------------- opções de câmbio --
+
+# Estruturas prontas: (tipo, posição, strike) por perna, até quatro. Os strikes
+# partem de um spot de 5,15; o resumo diz o que a estrutura faz, do ponto de
+# vista de quem a monta.
+_ESTRUTURAS_OPCAO = {
+    "unica": ("Uma opção", "solar:tag-price-linear",
+              "Uma call ou uma put, comprada ou vendida.",
+              [("call", "comprada", "5,30")]),
+    "call_spread": ("Call spread", "solar:graph-up-linear",
+                    "Compra a call de strike baixo e vende a de strike alto: proteção contra a alta do dólar até um teto, mais barata que a call sozinha.",
+                    [("call", "comprada", "5,30"), ("call", "vendida", "5,70")]),
+    "put_spread": ("Put spread", "solar:graph-down-linear",
+                   "Compra a put de strike alto e vende a de strike baixo: proteção contra a queda do dólar até um piso.",
+                   [("put", "comprada", "5,00"), ("put", "vendida", "4,70")]),
+    "collar": ("Collar", "solar:shield-linear",
+               "Vende a call (cap) e compra a put (floor): o dólar fica numa banda, e o prêmio da call paga a put. É a estrutura da planilha.",
+               [("call", "vendida", "5,80"), ("put", "comprada", "5,00")]),
+    "three_way": ("Three way", "solar:layers-minimalistic-linear",
+                  "Collar com uma put vendida abaixo do floor: a proteção vale só até o strike dela, e o prêmio extra barateia a estrutura.",
+                  [("call", "vendida", "5,80"), ("put", "comprada", "5,00"), ("put", "vendida", "4,70")]),
+    "four_way": ("Four way", "solar:widget-4-linear",
+                 "Put spread comprado contra call spread vendido: proteção numa faixa embaixo, risco limitado numa faixa em cima.",
+                 [("call", "vendida", "5,60"), ("call", "comprada", "5,90"),
+                  ("put", "comprada", "5,00"), ("put", "vendida", "4,70")]),
+    "straddle": ("Straddle", "solar:sort-vertical-linear",
+                 "Call e put compradas no mesmo strike: ganha com movimento forte para qualquer lado, paga a vol.",
+                 [("call", "comprada", "5,15"), ("put", "comprada", "5,15")]),
+    "strangle": ("Strangle", "solar:arrows-diagonal-linear",
+                 "Call e put compradas fora do dinheiro: como o straddle, mais barato e precisando de um movimento maior.",
+                 [("call", "comprada", "5,50"), ("put", "comprada", "4,80")]),
+    "box": ("Box", "solar:box-linear",
+            "Call spread comprado e put spread comprado nos mesmos strikes: o payoff é fixo (K2 − K1), então o prêmio é só esse valor descontado pelo DI — uma taxa pré sintética.",
+            [("call", "comprada", "5,00"), ("call", "vendida", "5,50"),
+             ("put", "comprada", "5,50"), ("put", "vendida", "5,00")]),
+}
+MAX_PERNAS_OPCAO = 4
+_SMILE_PADRAO = "20,40; 19,81; 19,11; 17,26; 16,06; 15,03; 14,29; 13,98; 13,66; 13,68; 13,72"
+
+
+def _form_opcao(modelo: str) -> dict:
+    hoje = servicos.data_sugerida()
+    form = {
+        "modelo": modelo, "inicio": hoje.isoformat(),
+        "vencimento": soma_meses(hoje, 12).isoformat(),
+        "spot": "5,15", "nocional": "20.000.000,00",
+        "taxa_dom": "", "taxa_est": "", "vol": "15,00", "fonte_vol": "unica",
+        "smile": _SMILE_PADRAO, "spread": "", "fee": "",
+    }
+    pernas = _ESTRUTURAS_OPCAO[modelo][3]
+    for i in range(1, MAX_PERNAS_OPCAO + 1):
+        tipo, lado, strike = pernas[i - 1] if i <= len(pernas) else ("call", "comprada", "")
+        form.update({f"tipo{i}": tipo, f"lado{i}": lado, f"strike{i}": strike,
+                     f"usar{i}": "1" if i <= len(pernas) else "", f"vol{i}": ""})
+    if modelo == "collar":
+        # o exemplo da planilha: smile da B3 e o benefício de taxa num CDI + 2,5%
+        form.update({"fonte_vol": "smile", "spread": "2,50", "fee": "1,00"})
+    form.update({"resolver_strike": "", "premio_alvo": "0,00"})
+    return form
+
+
+@bp.route("/opcoes-fx", methods=["GET", "POST"])
+def opcoes_fx_pagina():
+    """Price an option — Garman-Kohlhagen, porte da planilha do collar."""
+    modelo = request.values.get("modelo") or "unica"
+    if modelo not in _ESTRUTURAS_OPCAO:
+        modelo = "unica"
+    contexto = {"form": _form_opcao(modelo), "resultado": None, "erro": None,
+                "deltas": opcoes_fx.DELTAS_B3, "estruturas": _ESTRUTURAS_OPCAO,
+                "n_pernas": MAX_PERNAS_OPCAO}
+    if request.method == "POST":
+        contexto["form"] = {k: v for k, v in request.form.items()}
+        try:
+            contexto["resultado"] = _precificar_opcao(request.form)
+        except (servicos.ErroFormulario, ErroDeFonte, ErroDeDado, ValueError) as exc:
+            contexto["erro"] = idiomas.mensagem(exc)
+    return render_template("opcoes_fx.html", **contexto)
+
+
+def _precificar_opcao(form) -> dict:
+    inicio = para_data(form.get("inicio") or "")
+    vencimento = para_data(form.get("vencimento") or "")
+    if vencimento <= inicio:
+        raise servicos.ErroFormulario("o vencimento da opção tem que ser depois da data de início")
+    cal = obter_calendario("ANBIMA")
+    du = cal.dias_uteis(inicio, vencimento)
+    dc = (vencimento - inicio).days
+    t = du / 252.0
+    spot = servicos.numero_do_form(form, "spot", "spot")
+
+    # Taxa vazia = lida na curva da B3 da data de início, no prazo da opção:
+    # DI x Pré para o real, cupom cambial limpo (DOC) para o dólar.
+    fontes_taxa = {}
+    if (form.get("taxa_dom") or "").strip():
+        taxa_dom = servicos.taxa_do_form(form, "taxa_dom", "taxa doméstica")
+        fontes_taxa["dom"] = "informada"
+    else:
+        taxa_dom = servicos.curva("PRE", inicio.isoformat()).taxa_para(dc, du)
+        fontes_taxa["dom"] = "curva DI x Pré · B3"
+    if (form.get("taxa_est") or "").strip():
+        taxa_est = servicos.taxa_do_form(form, "taxa_est", "cupom cambial")
+        fontes_taxa["est"] = "informada"
+    else:
+        taxa_est = servicos.curva("DOC", inicio.isoformat()).taxa_para(dc, du)
+        fontes_taxa["est"] = "curva de cupom cambial · B3"
+    r_d = opcoes_fx.r_d_continua(taxa_dom)
+    r_f = opcoes_fx.r_f_continua(taxa_est, dc)
+
+    quantidade = servicos.numero_do_form(form, "nocional", "nocional")   # em dólares
+
+    smile = None
+    usar_smile = form.get("fonte_vol") == "smile"
+    if usar_smile:
+        vols = _numeros(form.get("smile") or "", "smile por delta")
+        if len(vols) != len(opcoes_fx.DELTAS_B3):
+            raise servicos.ErroFormulario(
+                "o smile precisa de {n} vols, de Δ1% a Δ99%", n=len(opcoes_fx.DELTAS_B3))
+        smile = list(zip(opcoes_fx.DELTAS_B3, [v / 100.0 for v in vols]))
+    vol_unica = None if usar_smile else servicos.taxa_do_form(form, "vol", "volatilidade")
+
+    # a perna cujo strike vai ser calculado pode vir sem strike
+    resolver = (form.get("resolver_strike") or "").strip()
+    pernas, numeros, indice_resolver = [], [], None
+    for i in range(1, MAX_PERNAS_OPCAO + 1):
+        if not form.get(f"usar{i}"):
+            continue
+        vol_perna = vol_unica
+        if (form.get(f"vol{i}") or "").strip():
+            vol_perna = servicos.taxa_do_form(form, f"vol{i}", "volatilidade")
+        if resolver == str(i):
+            indice_resolver = len(pernas)
+            strike = spot
+        else:
+            strike = servicos.numero_do_form(form, f"strike{i}", "strike")
+        pernas.append(opcoes_fx.Perna(
+            tipo=form.get(f"tipo{i}") or "call", lado=form.get(f"lado{i}") or "comprada",
+            strike=strike, vol=vol_perna))
+        numeros.append(i)
+    if not pernas:
+        raise servicos.ErroFormulario("marque pelo menos uma opção")
+    if resolver and indice_resolver is None:
+        raise servicos.ErroFormulario("a opção do strike a calcular não está marcada")
+
+    strike_resolvido = None
+    if indice_resolver is not None:
+        alvo = (servicos.numero_do_form(form, "premio_alvo", "prêmio alvo", 0.0)
+                if (form.get("premio_alvo") or "").strip() else 0.0)
+        k = opcoes_fx.resolver_strike(pernas, indice_resolver, spot, r_d, r_f, t,
+                                      quantidade, smile, alvo)
+        velha = pernas[indice_resolver]
+        pernas[indice_resolver] = opcoes_fx.Perna(velha.tipo, velha.lado, k, velha.vol)
+        strike_resolvido = {"opcao": numeros[indice_resolver], "strike": k, "alvo": alvo}
+
+    resultados = opcoes_fx.avaliar_pernas(pernas, spot, r_d, r_f, t, quantidade, smile)
+    liquido = sum(r.premio_total for r in resultados)
+    nocional_brl = quantidade * spot
+
+    # Benefício de taxa: quanto o fee e o prêmio mexem no spread de um
+    # empréstimo a CDI+ do mesmo prazo — a pergunta da planilha do collar.
+    beneficio = None
+    if (form.get("spread") or "").strip():
+        spread = servicos.taxa_do_form(form, "spread", "spread")
+        fee = servicos.taxa_do_form(form, "fee", "fee", 0.0) if (form.get("fee") or "").strip() else 0.0
+        sem = opcoes_fx.taxa_all_in(spread, t, fee)
+        com = opcoes_fx.taxa_all_in(spread, t, fee - liquido / nocional_brl)
+        beneficio = {
+            "spread": spread, "fee": fee, "sem": sem, "com": com, "diferenca": com - sem,
+            "pct_sem": opcoes_fx.percentual_do_cdi(sem, taxa_dom),
+            "pct_com": opcoes_fx.percentual_do_cdi(com, taxa_dom),
+        }
+
+    primeira = resultados[0].avaliacao
+    return {
+        "pernas": resultados, "liquido": liquido,
+        "delta": sum(r.delta_posicao for r in resultados),
+        "vega": sum(r.vega_posicao for r in resultados),
+        "du": du, "dc": dc, "t": t, "spot": spot, "quantidade": quantidade,
+        "nocional_brl": nocional_brl,
+        "taxa_dom": taxa_dom, "taxa_est": taxa_est, "r_d": r_d, "r_f": r_f,
+        "fontes_taxa": fontes_taxa, "forward": opcoes_fx.forward(spot, r_d, r_f, t),
+        "paridade": opcoes_fx.paridade(spot, primeira.strike, r_d, r_f, t),
+        "paridade_modelo": (
+            opcoes_fx.avaliar("call", spot, primeira.strike, r_d, r_f, primeira.vol, t).premio
+            - opcoes_fx.avaliar("put", spot, primeira.strike, r_d, r_f, primeira.vol, t).premio),
+        "usar_smile": usar_smile, "beneficio": beneficio,
+        "strike_resolvido": strike_resolvido, "numeros": numeros,
+    }
