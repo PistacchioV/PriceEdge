@@ -15,8 +15,9 @@ from .calendario import (FOLLOWING, Calendario, calendario_anbima, para_data,
                          soma_meses)
 from .curvas import Curva, CurvaTermSOFR
 from .erros import ErroDeDado
-from .instrumentos import (BULLET, PERCENTUAL, SPREAD, Periodo, Swap,
-                           agenda_periodica, perna_cdi, perna_ipca_capitalizado,
+from .instrumentos import (BULLET, PERCENTUAL, SPREAD, STRING, VANILLA, Periodo,
+                           Swap, agenda_periodica, perna_cdi, perna_cdi_string,
+                           perna_ipca_capitalizado,
                            perna_pre_usd, perna_prefixada_exp252,
                            perna_term_sofr, pesos_amortizacao, taxa_par)
 
@@ -139,35 +140,51 @@ def pre_usd_par(params: ParametrosSwap, taxa_brl: float, curva_di: Curva,
 def swap_ipca_x_cdi(params: ParametrosSwap, taxa_real: float, valor_cdi: float,
                     curva_di: Curva, curva_ipca: Curva,
                     calendario: Optional[Calendario] = None,
-                    modo_cdi: str = SPREAD) -> Swap:
-    """Ativo IPCA+ capitalizado, passivo CDI ± spread (vanilla).
+                    modo_cdi: str = SPREAD, estrutura: str = VANILLA,
+                    periodos: Optional[List[Periodo]] = None) -> Swap:
+    """Ativo IPCA+ capitalizado, passivo CDI ± spread.
 
     A inflação implícita sai de (1+DI)/(1+DIxIPCA)-1, com as duas curvas
     tiradas do mesmo arquivo da B3 e interpoladas do mesmo jeito.
+
+    ``estrutura`` escolhe a ponta CDI: ``vanilla`` rola o FRA de DI sobre o
+    nocional, período a período; ``string`` quebra o swap num bullet por
+    parcela (ver ``perna_cdi_string``).  A ponta IPCA é a mesma nos dois.
+    ``periodos`` permite passar uma agenda pronta — as datas de uma planilha.
     """
-    periodos = params.agenda(calendario)
+    periodos = periodos or params.agenda(calendario)
     pesos = _pesos(params, len(periodos))
     ativa = perna_ipca_capitalizado(params.nocional, taxa_real, periodos,
                                     curva_di, curva_ipca, pesos, nome="IPCA+ capitalizado")
-    passiva = perna_cdi(params.nocional, periodos, curva_di, pesos,
-                        modo=modo_cdi, valor=valor_cdi)
+    if estrutura == STRING:
+        passiva = perna_cdi_string(params.nocional, taxa_real, periodos, curva_di,
+                                   pesos, modo=modo_cdi, valor=valor_cdi)
+    else:
+        passiva = perna_cdi(params.nocional, periodos, curva_di, pesos,
+                            modo=modo_cdi, valor=valor_cdi)
     rotulo = "% do CDI" if modo_cdi == PERCENTUAL else "CDI ± spread"
-    return Swap(f"IPCA capitalizado × {rotulo}", ativa, passiva, "BRL", params.fee)
+    sufixo = " (string)" if estrutura == STRING else ""
+    return Swap(f"IPCA capitalizado × {rotulo}{sufixo}", ativa, passiva, "BRL", params.fee)
 
 
 def spread_par_ipca(params: ParametrosSwap, taxa_real: float, curva_di: Curva,
-                    curva_ipca: Curva, calendario: Optional[Calendario] = None) -> float:
+                    curva_ipca: Curva, calendario: Optional[Calendario] = None,
+                    estrutura: str = VANILLA,
+                    periodos: Optional[List[Periodo]] = None) -> float:
     return taxa_par(lambda s: swap_ipca_x_cdi(params, taxa_real, s, curva_di,
-                                              curva_ipca, calendario), chute=0.02)
+                                              curva_ipca, calendario,
+                                              estrutura=estrutura, periodos=periodos),
+                    chute=0.02)
 
 
 def percentual_par_ipca(params: ParametrosSwap, taxa_real: float, curva_di: Curva,
                         curva_ipca: Curva,
-                        calendario: Optional[Calendario] = None) -> float:
+                        calendario: Optional[Calendario] = None,
+                        estrutura: str = VANILLA) -> float:
     """Percentual do CDI que zera o MtM contra a ponta IPCA+."""
     return taxa_par(
         lambda p: swap_ipca_x_cdi(params, taxa_real, p, curva_di, curva_ipca,
-                                  calendario, modo_cdi=PERCENTUAL),
+                                  calendario, modo_cdi=PERCENTUAL, estrutura=estrutura),
         chute=1.0)
 
 

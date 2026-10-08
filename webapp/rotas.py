@@ -18,7 +18,7 @@ from precificador.calendario import (CALENDARIOS_DISPONIVEIS, CONVENCOES_DIA_UTI
                                      obter_calendario, para_data, soma_meses)
 from precificador.curvas import TENORES_TERM
 from precificador.instrumentos import (BULLET, LINEAR, PERCENTUAL,
-                                       PERSONALIZADA, SPREAD)
+                                       PERSONALIZADA, SPREAD, STRING, VANILLA)
 from precificador.interpolacao import METODOS, interpolar
 from precificador.erros import ErroDeDado, ErroDeFonte
 from precificador.produtos import (DIRECOES, MOEDAS_NDF, MODO_MANUAL, MODO_PRECO,
@@ -260,7 +260,8 @@ def _form_do_construtor(hoje: date, template=None) -> dict:
         # resolve a ativa por padrão: dado CDI flat, que taxa pré zera o MtM
         "perna_ativa": "pre_brl", "valor_ativa": "",
         "perna_passiva": "cdi", "valor_passiva": "0",
-        "modo_cdi": SPREAD, "resolver": "ativa", "spot": "5,15",
+        "modo_cdi": SPREAD, "estrutura_cdi": VANILLA, "resolver": "ativa",
+        "spot": "5,15",
         "sofr": ", ".join(str(preco) for preco in SOFR_PADRAO),
         "term_sofr": "3,64637, 3,65811, 3,67358, 3,73148",
     }
@@ -270,6 +271,8 @@ def _form_do_construtor(hoje: date, template=None) -> dict:
             "valor_ativa": template.valor_ativa,
             "valor_passiva": template.valor_passiva,
             "modo_cdi": template.modo_cdi,
+            "estrutura_cdi": template.estrutura_cdi,
+            "resolver": template.resolver,
         })
     return padrao
 
@@ -475,7 +478,10 @@ def _montar_personalizado(form) -> dict:
             params.inicio, precos,
             {meses: taxa / 100.0 for meses, taxa in zip(TENORES_TERM, term)})
 
-    extras = {"modo_cdi": modo_cdi}
+    # vanilla ou string só se pergunta num IPCA+ contra CDI
+    ipca_cdi = {id_ativa, id_passiva} == {"ipca", "cdi"}
+    estrutura = (form.get("estrutura_cdi") or VANILLA) if ipca_cdi else VANILLA
+    extras = {"modo_cdi": modo_cdi, "estrutura_cdi": estrutura}
     lado = form.get("resolver") or "ativa"
 
     def ler(campo: str, tipo) -> float:
@@ -502,7 +508,29 @@ def _montar_personalizado(form) -> dict:
 
     percentual = tipo_resolvido.id == "cdi" and modo_cdi == PERCENTUAL
     curvas = [c for c in (mercado.di, mercado.cupom, mercado.ipca) if c is not None]
+
+    # As duas estruturas lado a lado: a mesma pergunta resolvida no vanilla e
+    # no string. A diferença é o que o cliente ganha (ou paga) por quebrar o swap.
+    comparacao = None
+    if ipca_cdi:
+        outra = VANILLA if estrutura == STRING else STRING
+        outros = {"modo_cdi": modo_cdi, "estrutura_cdi": outra}
+        # o valor da ponta resolvida é ignorado pelo resolver, que varia ele
+        a_outra = montador.resolver(params, mercado, id_ativa, valor_ativa,
+                                    id_passiva, valor_passiva, lado,
+                                    outros, outros, cal)
+        valores = {estrutura: resolvido, outra: a_outra}
+        perna_cdi = swap.passiva if id_passiva == "cdi" else swap.ativa
+        comparacao = {
+            "vanilla": valores[VANILLA], "string": valores[STRING],
+            "estrutura": estrutura,
+            "soma_principais": (sum(f.amortizacao for f in perna_cdi.fluxos)
+                                if estrutura == STRING else None),
+            "nocional": params.nocional,
+        }
+
     return {
+        "comparacao": comparacao,
         "swap": swap,
         "solucao": {"rotulo": tipo_resolvido.parametro, "valor": resolvido,
                     "percentual": percentual, "lado": lado},

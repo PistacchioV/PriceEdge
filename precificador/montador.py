@@ -16,8 +16,8 @@ from typing import Callable, Dict, List, Optional
 
 from .curvas import Curva, CurvaTermSOFR
 from .erros import ErroDeDado
-from .instrumentos import (PERCENTUAL, SPREAD, Swap, perna_cdi,
-                           perna_ipca_capitalizado, perna_pre_usd,
+from .instrumentos import (PERCENTUAL, SPREAD, STRING, VANILLA, Swap, perna_cdi,
+                           perna_cdi_string, perna_ipca_capitalizado, perna_pre_usd,
                            perna_prefixada_exp252, perna_term_sofr)
 from .produtos import ParametrosSwap, _perna_pre_usd_sofr, _pesos
 from .solver import atingir_meta
@@ -64,6 +64,10 @@ def _pre_brl(params, periodos, pesos, mercado, valor, extras):
 
 def _cdi(params, periodos, pesos, mercado, valor, extras):
     modo = extras.get("modo_cdi", SPREAD)
+    if extras.get("estrutura_cdi") == STRING:
+        # o string só existe contra IPCA+: os pedaços são as parcelas dela
+        return perna_cdi_string(params.nocional, extras["taxa_real_ipca"], periodos,
+                                mercado.exigir("di"), pesos, modo=modo, valor=valor)
     return perna_cdi(params.nocional, periodos, mercado.exigir("di"), pesos,
                      modo=modo, valor=valor)
 
@@ -132,6 +136,8 @@ class Template:
     valor_passiva: str = ""
     valor_ativa: str = ""
     modo_cdi: str = SPREAD
+    estrutura_cdi: str = VANILLA
+    resolver: str = "ativa"
 
 
 TEMPLATES: List[Template] = [
@@ -152,6 +158,12 @@ TEMPLATES: List[Template] = [
              "solar:graph-up-linear",
              "Inflação implícita de (1+DI)/(1+DI×IPCA)−1, capitalizada por período.",
              valor_passiva="0"),
+    Template("ipca_cdi_string", "IPCA capitalizado × CDI ± spread (string)", "ipca", "cdi",
+             "solar:link-round-linear",
+             "Cada parcela IPCA+ vira um swap bullet próprio; o CDI capitaliza desde o "
+             "início pelo DI zero do prazo de cada uma.",
+             valor_ativa="10", valor_passiva="", estrutura_cdi="string",
+             resolver="passiva"),
     Template("usd_sofr", "Pré USD × Term SOFR ± spread", "pre_usd_sofr", "term_sofr",
              "solar:global-linear",
              "Bootstrap dos futuros SR3 em datas IMM. Spread aditivo, linear 360.",
@@ -219,14 +231,26 @@ def montar(params: ParametrosSwap, mercado: Mercado,
     periodos = params.agenda(calendario)
     pesos = _pesos(params, len(periodos))
 
+    extras_ativa = dict(extras_ativa or {})
+    extras_passiva = dict(extras_passiva or {})
+    for tipo, extras, outro, valor_outro in (
+            (ativa, extras_ativa, passiva, valor_passiva),
+            (passiva, extras_passiva, ativa, valor_ativa)):
+        if tipo.id == "cdi" and extras.get("estrutura_cdi") == STRING:
+            if outro.id != "ipca":
+                raise ValueError("a estrutura string só existe contra a ponta IPCA+")
+            extras["taxa_real_ipca"] = valor_outro
+
     perna_a = ativa.construir(params, periodos, pesos, mercado, valor_ativa,
-                              extras_ativa or {})
+                              extras_ativa)
     perna_p = passiva.construir(params, periodos, pesos, mercado, valor_passiva,
-                                extras_passiva or {})
+                                extras_passiva)
 
     # a moeda de referência é o real sempre que houver uma ponta em reais
     referencia = BRL if BRL in (ativa.moeda, passiva.moeda) else USD
     nome = f"{ativa.nome} × {passiva.nome}"
+    if STRING in (extras_ativa.get("estrutura_cdi"), extras_passiva.get("estrutura_cdi")):
+        nome += " (string)"
     return Swap(nome, perna_a, perna_p, referencia, params.fee)
 
 

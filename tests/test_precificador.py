@@ -207,6 +207,91 @@ def test_ipca_precisa_das_duas_curvas():
     assert indice == pytest.approx((1 + inflacao_implicita) ** (1249 / 252), rel=1e-3)
 
 
+# ------------------------------------------------- IPCA × CDI: string ----
+# Referência: Aula_Swap_IPCA_CDI_com_String_vF.xlsm, aba "IPCA Cap. x DI (Pronta)".
+
+STRING_REF = json.loads((REF / "ipca_string_ref.json").read_text())
+
+
+def _insumos_string():
+    from precificador.instrumentos import gerar_agenda
+    r = STRING_REF
+    di = Curva.de_listas(r["di"]["dc"], [t / 100 for t in r["di"]["taxa"]],
+                         "DI x Pré", r["data_curva"], convencao=EXP252)
+    ipca = Curva.de_listas(r["ipca"]["dc"], [t / 100 for t in r["ipca"]["taxa"]],
+                           "DI x IPCA", r["data_curva"], convencao=EXP252)
+    periodos = gerar_agenda(r["inicio"], r["pagamentos"])
+    params = ParametrosSwap(r["inicio"], r["pagamentos"][-1], r["nocional"])
+    return params, di, ipca, periodos
+
+
+def test_agenda_do_string_bate_com_a_planilha():
+    *_, periodos = _insumos_string()
+    assert [p.du_total for p in periodos] == STRING_REF["du_total"]
+    assert [p.du_periodo for p in periodos] == STRING_REF["du_periodo"]
+
+
+def test_spread_par_vanilla_e_string_batem_com_a_planilha():
+    """CDI + 2,6268% no vanilla, CDI + 2,3525% no string."""
+    from precificador.instrumentos import STRING, VANILLA
+    from precificador.produtos import spread_par_ipca
+    params, di, ipca, periodos = _insumos_string()
+    real = STRING_REF["taxa_real"]
+    assert spread_par_ipca(params, real, di, ipca, estrutura=VANILLA, periodos=periodos) \
+        == pytest.approx(STRING_REF["spread_vanilla"], abs=1e-10)
+    assert spread_par_ipca(params, real, di, ipca, estrutura=STRING, periodos=periodos) \
+        == pytest.approx(STRING_REF["spread_string"], abs=1e-10)
+
+
+def test_parcelas_do_string_batem_com_a_planilha():
+    """Principal de cada pedaço, parcela IPCA, parcela CDI e o MtM."""
+    from precificador.instrumentos import STRING
+    params, di, ipca, periodos = _insumos_string()
+    swap = swap_ipca_x_cdi(params, STRING_REF["taxa_real"], STRING_REF["spread_string"],
+                           di, ipca, estrutura=STRING, periodos=periodos)
+    cdi, ipca_leg = swap.passiva.fluxos, swap.ativa.fluxos
+    for f, alvo in zip(cdi, STRING_REF["principal_string"]):
+        assert f.amortizacao == pytest.approx(alvo, rel=1e-12)
+    for f, alvo in zip(cdi, STRING_REF["parcela_cdi_string"]):
+        assert f.valor_futuro == pytest.approx(alvo, rel=1e-12)
+    for f, alvo in zip(ipca_leg, STRING_REF["parcela_ipca"]):     # ativa string = vanilla
+        assert f.valor_futuro == pytest.approx(alvo, rel=1e-12)
+    # "tem que ser igual ao saldo devedor"
+    assert sum(f.amortizacao for f in cdi) == pytest.approx(params.nocional, rel=1e-12)
+    assert swap.mtm == pytest.approx(sum(STRING_REF["vp_string"]), abs=1e-5)
+
+
+def test_string_so_existe_contra_ipca():
+    from precificador.montador import Mercado, montar
+    params, di, ipca, _ = _insumos_string()
+    extras = {"estrutura_cdi": "string"}
+    with pytest.raises(ValueError):
+        montar(params, Mercado(di=di), "pre_brl", 0.14, "cdi", 0.0, extras, extras)
+
+
+def test_tela_de_precificar_compara_vanilla_e_string(monkeypatch):
+    from webapp import create_app, servicos
+    _, di, ipca, _ = _insumos_string()
+    monkeypatch.setattr(servicos, "curva", lambda codigo, data: di if codigo == "PRE" else ipca)
+    dados = dict(data_curva="2026-04-01", inicio="2026-04-13", vencimento="2031-04-13",
+                 nocional="100.000.000,00", meses_periodo="6", amortizacao="bullet",
+                 fee="0", calendario="ANBIMA", convencao_dia_util="following",
+                 perna_ativa="ipca", valor_ativa="10", perna_passiva="cdi",
+                 valor_passiva="", modo_cdi="spread", estrutura_cdi="string",
+                 resolver="passiva")
+    cliente = create_app().test_client()
+    pagina = cliente.post("/precificar", data=dados).data.decode()
+    assert "Vanilla × string" in pagina
+    assert "Soma dos principais do string" in pagina
+    assert "(string)" in pagina
+    ingles = cliente.post("/precificar?idioma=en", data=dados).data.decode()
+    assert "Vanilla × string — the same question in both structures" in ingles
+    assert "CDI leg structure" in ingles
+    # sem IPCA do outro lado, o seletor nem aparece
+    assert 'name="estrutura_cdi"' not in cliente.get("/precificar").data.decode()
+    assert 'name="estrutura_cdi"' in cliente.get("/precificar?template=ipca_cdi_string").data.decode()
+
+
 # --------------------------------------------------------------- Term SOFR
 
 def test_bootstrap_term_sofr():
@@ -519,9 +604,12 @@ def test_a_tela_de_precificar_resolve_a_ponta_ativa_por_padrao():
     for template in [None, *TEMPLATES]:
         nome = template.id if template else "livre"
         form = _form_do_construtor(date(2026, 9, 10), template)
-        assert form["resolver"] == "ativa", nome
-        assert form["valor_ativa"] == "", f"{nome}: valor na ponta que vai ser calculada"
-        assert form["valor_passiva"] != "", f"{nome}: a ponta dada nasceu vazia"
+        # só o string resolve a passiva: a pergunta da planilha é o spread
+        esperado = "passiva" if nome == "ipca_cdi_string" else "ativa"
+        dada = "ativa" if esperado == "passiva" else "passiva"
+        assert form["resolver"] == esperado, nome
+        assert form[f"valor_{esperado}"] == "", f"{nome}: valor na ponta que vai ser calculada"
+        assert form[f"valor_{dada}"] != "", f"{nome}: a ponta dada nasceu vazia"
 
     pagina = create_app().test_client().get("/precificar").data.decode()
     seletor = re.search(r'id="resolver"[^>]*>(.*?)</select>', pagina, re.S).group(1)
@@ -976,7 +1064,7 @@ def test_nenhum_texto_em_portugues_sobra_na_tela_em_ingles():
     paginas = ["/", "/curvas?curva=DOC&extrair=1", "/curvas?curva=PTX&extrair=1",
                "/precificar", "/ndf", "/sofr", "/term-sofr", "/euribor",
                "/renda-fixa", "/liquidacao", "/cotacoes", "/interpolar",
-            "/ni-pro-rata", "/metodologia"]
+            "/ni-pro-rata", "/metodologia", "/precificar?template=ipca_cdi_string"]
     def varrer(rotulo, html):
         for texto in _texto_visivel(html):
             achados = {p.lower() for p in _MARCADORES_PT.findall(texto)}
@@ -1527,7 +1615,7 @@ def test_nenhum_select_da_aplicacao_chega_vazio_a_tela():
 
     paginas = ["/", "/curvas", "/precificar", "/ndf", "/sofr", "/term-sofr",
                "/euribor", "/renda-fixa", "/liquidacao", "/interpolar",
-               "/ni-pro-rata", "/metodologia"]
+               "/ni-pro-rata", "/metodologia", "/precificar?template=ipca_cdi_string"]
     for rota in paginas:
         varrer(rota, app.test_client().get(rota).data.decode())
     for chave, dados in FORMULARIOS.items():

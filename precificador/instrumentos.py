@@ -282,6 +282,65 @@ def perna_cdi(nocional: float, periodos: List[Periodo], curva_di: Curva,
                             nome=nome or "CDI ± spread")
 
 
+VANILLA = "vanilla"
+STRING = "string"
+
+
+def principais_string(nocional: float, taxa_real: float, periodos: List[Periodo],
+                      pesos: List[float]) -> List[float]:
+    """O principal de cada pedaço do swap string.
+
+    Cada fluxo da ponta IPCA+ (cupom real + amortização, sem correção) vira um
+    swap bullet próprio, do início até o seu pagamento.  O principal do pedaço
+    é esse fluxo trazido a valor presente pela própria taxa real — e por isso
+    a soma dos principais dá o nocional: um título descontado pela sua taxa
+    vale par.  É a conferência "tem que ser igual ao saldo devedor" da planilha.
+    """
+    saida, saldo = [], nocional
+    for periodo, peso in zip(periodos, pesos):
+        amortizacao = nocional * peso
+        fluxo_real = ((1.0 + taxa_real) ** (periodo.du_periodo / 252.0) - 1.0) * saldo + amortizacao
+        saida.append(fluxo_real / (1.0 + taxa_real) ** (periodo.du_total / 252.0))
+        saldo -= amortizacao
+    return saida
+
+
+def perna_cdi_string(nocional: float, taxa_real: float, periodos: List[Periodo],
+                     curva_di: Curva, pesos: List[float], modo: str = "spread",
+                     valor: float = 0.0, nome: Optional[str] = None,
+                     moeda: str = "BRL") -> ResultadoPerna:
+    """Ponta CDI do swap **string** contra uma ponta IPCA+.
+
+    Em vez de um swap só, rolando o FRA de DI período a período sobre o
+    nocional cheio (o vanilla), cada parcela da ponta IPCA+ vira um swap
+    bullet que começa no início e vence no pagamento da parcela.  O principal
+    de cada pedaço sai de ``principais_string``; o CDI capitaliza desde o
+    início pela taxa DI zero do prazo:
+
+        parcela CDI = ((1 + DI_zc) · (1 + spread)) ^ (DU total / 252) · principal
+
+    Como cada pedaço só carrega o spread até o próprio vencimento, o spread
+    par sai menor que o do vanilla — na planilha, CDI + 2,3525% contra
+    CDI + 2,6268%.  A ponta IPCA não muda: "Ativa String = Ativa Vanilla".
+    """
+    fluxos = []
+    for periodo, principal in zip(periodos, principais_string(nocional, taxa_real,
+                                                                periodos, pesos)):
+        di = curva_di.taxa_para(periodo.dc_total, periodo.du_total)
+        if modo == PERCENTUAL:
+            diaria = (1.0 + di) ** (1.0 / 252.0) - 1.0
+            fator = (1.0 + diaria * valor) ** periodo.du_total
+        else:
+            fator = ((1.0 + di) * (1.0 + valor)) ** (periodo.du_total / 252.0)
+        juros = principal * (fator - 1.0)
+        fd = curva_di.fator_desconto(periodo.dc_total, periodo.du_total)
+        # saldo = principal do pedaço; a "amortização" é ele mesmo, pago no fim
+        fluxos.append(Fluxo(periodo, principal, principal, fator - 1.0, juros,
+                            principal + juros, fd, principal * fd, juros * fd))
+    rotulo = f"{valor * 100:.4g}% do CDI" if modo == PERCENTUAL else "CDI ± spread"
+    return ResultadoPerna(nome or f"{rotulo} (string)", moeda, fluxos)
+
+
 def perna_pre_usd(nocional_usd: float, taxa: float, periodos: List[Periodo],
                   curva_cupom: Curva, pesos: List[float], fx: float,
                   nome: str = "Pré USD", moeda: str = "USD") -> ResultadoPerna:

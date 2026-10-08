@@ -1335,6 +1335,19 @@ TRADUCOES: Dict[str, str] = {
         "Cross-currency with a floating BRL leg. Two discount curves, multiplicative spread.",
     "Inflação implícita de (1+DI)/(1+DI×IPCA)−1, capitalizada por período.":
         "Break-even inflation from (1+DI)/(1+DI×IPCA)−1, compounded per period.",
+    "IPCA capitalizado × CDI ± spread (string)": "Compounded IPCA × CDI ± spread (string)",
+    "Cada parcela IPCA+ vira um swap bullet próprio; o CDI capitaliza desde o início pelo DI zero do prazo de cada uma.":
+        "Each IPCA+ payment becomes its own bullet swap; CDI compounds from inception at the DI zero rate for each one's tenor.",
+    "Estrutura da ponta CDI": "CDI leg structure",
+    "Vanilla: um swap só, rolando o FRA de DI sobre o nocional. String: cada parcela IPCA+ vira um swap bullet do início até o seu pagamento, e o CDI capitaliza pelo DI zero do prazo.":
+        "Vanilla: a single swap, rolling the DI forward over the notional. String: each IPCA+ payment becomes a bullet swap from inception to its payment date, and CDI compounds at the DI zero rate for that tenor.",
+    "Vanilla × string — a mesma pergunta nas duas estruturas":
+        "Vanilla × string — the same question in both structures",
+    "esta tela": "this screen",
+    "Soma dos principais do string": "Sum of the string principals",
+    "tem que ser igual ao nocional": "must equal the notional",
+    "a estrutura string só existe contra a ponta IPCA+":
+        "the string structure only exists against an IPCA+ leg",
     "Bootstrap dos futuros SR3 em datas IMM. Spread aditivo, linear 360.":
         "Bootstrapped from SR3 futures on IMM dates. Additive spread, linear 360.",
 

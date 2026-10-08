@@ -54,6 +54,24 @@
         </label>
       </div>
     </div>
+    {% if 'ipca' in (form.perna_ativa, form.perna_passiva) %}
+    {# vanilla ou string só existe contra IPCA+: os pedaços do string são as
+       parcelas dela #}
+    <div>
+      <label class="rotulo">{{ t("Estrutura da ponta CDI") }}</label>
+      <div class="inline-flex rounded-full border border-white/[0.12] bg-white/[0.04] p-1">
+        {% for valor, nome in [('vanilla', 'Vanilla'), ('string', 'String')] %}
+        <label class="cursor-pointer">
+          <input type="radio" name="estrutura_cdi" value="{{ valor }}" class="peer sr-only" {{ 'checked' if (form.estrutura_cdi or 'vanilla') == valor }}/>
+          <span class="block rounded-full px-4 py-1.5 text-sm font-medium text-slate-300 transition peer-checked:bg-cyan-100 peer-checked:text-slate-950 font-geist">{{ nome }}</span>
+        </label>
+        {% endfor %}
+      </div>
+      <p class="mt-2 text-xs leading-5 text-slate-500 font-geist">
+        {{ t("Vanilla: um swap só, rolando o FRA de DI sobre o nocional. String: cada parcela IPCA+ vira um swap bullet do início até o seu pagamento, e o CDI capitaliza pelo DI zero do prazo.") }}
+      </p>
+    </div>
+    {% endif %}
     {% endif %}
     {% endif %}{% endfor %}
   </div>
@@ -247,6 +265,31 @@
             {{ estatistica(t('Duration'), (swap.duration | moeda(3)) ~ ' ' ~ t('anos'), t('Macaulay, sobre o VP')) }}
             {{ estatistica(t('Períodos'), swap.ativa.fluxos | length, t('pagamentos no cronograma')) }}
           </div>
+
+          {% if resultado.comparacao %}
+          {% set cmp = resultado.comparacao %}
+          <div class="mt-6 rounded-2xl border border-white/[0.08] bg-black/25 px-5 py-4">
+            <p class="text-xs text-slate-500 font-geist">{{ t("Vanilla × string — a mesma pergunta nas duas estruturas") }}</p>
+            <div class="mt-3 grid gap-3 sm:grid-cols-3">
+              {% for chave, nome in [('vanilla', 'Vanilla'), ('string', 'String')] %}
+              <div>
+                <p class="text-[11px] uppercase tracking-widest {{ 'text-cyan-200' if cmp.estrutura == chave else 'text-slate-500' }} font-geist">{{ nome }}{{ ' · ' ~ t('esta tela') if cmp.estrutura == chave }}</p>
+                <p class="mt-1 text-lg text-white font-jakarta tabular-nums">{{ cmp[chave] | percentual(4) }}</p>
+              </div>
+              {% endfor %}
+              <div>
+                <p class="text-[11px] uppercase tracking-widest text-slate-500 font-geist">{{ t("Diferença") }}</p>
+                <p class="mt-1 text-lg text-amber-200 font-jakarta tabular-nums">{{ (cmp.string - cmp.vanilla) | bps }}</p>
+              </div>
+            </div>
+            {% if cmp.soma_principais is not none %}
+            <p class="mt-3 text-xs leading-5 text-slate-500 font-geist">
+              {{ t("Soma dos principais do string") }}: <span class="text-slate-300 tabular-nums">{{ cmp.soma_principais | moeda(2) }}</span>
+              · {{ t("tem que ser igual ao nocional") }} ({{ cmp.nocional | moeda(2) }})
+            </p>
+            {% endif %}
+          </div>
+          {% endif %}
 
           {% if resultado.curvas %}
           <div class="mt-6 flex flex-wrap gap-2">
