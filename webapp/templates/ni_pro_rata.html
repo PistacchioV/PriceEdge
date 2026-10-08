@@ -57,7 +57,7 @@
         <div class="sem-reveal rounded-[2rem] border border-cyan-200/20 bg-gradient-to-b from-cyan-400/[0.1] via-white/[0.04] to-transparent p-6 backdrop-blur-xl sm:p-8">
           <p class="text-[11px] font-semibold uppercase tracking-widest text-cyan-200 font-geist">VNA</p>
           <p class="mt-3 text-5xl tracking-tight text-white font-jakarta font-medium tabular-nums">{{ resultado.vna | moeda(6) }}</p>
-          <p class="mt-2 text-sm text-slate-400 font-geist">correção acumulada de {{ resultado.correcao | moeda(8) }}</p>
+          <p class="mt-2 text-sm text-slate-400 font-geist">{{ t("correção acumulada de") }} {{ resultado.correcao | moeda(8) }}</p>
 
           <div class="mt-7 grid gap-3 sm:grid-cols-2">
             {{ estatistica(t('NI atual (pro-rata)'), resultado.ni_atual | moeda(6), t('interpolado em dias úteis'), destaque=true) }}
@@ -72,7 +72,10 @@
             <p class="text-xs text-slate-500 font-geist">{{ t("Fórmula aplicada") }}</p>
             <p class="mt-2 font-mono text-xs leading-6 text-cyan-100">
               NI = NIk−1 · (NIk / NIk−1) ^ (dup / dut)<br/>
-              VNA = VNE · NI / NI de partida
+              VNA = VNE · NI / {{ t("NI de partida") }}
+            </p>
+            <p class="mt-3 text-xs leading-5 text-slate-500 font-geist">
+              {{ t("dup = dias úteis do dia 15 de referência até a data; dut = dias úteis entre os dois dias 15. Calendário ANBIMA.") }}
             </p>
           </div>
         </div>

@@ -687,6 +687,11 @@ TRADUCOES: Dict[str, str] = {
     "Taxa interpolada": "Interpolated rate",
     "Situação": "Status",
     "extrapolado": "extrapolated",
+    "Linear": "Linear",
+    "Flat-forward (exponencial 252)": "Flat-forward (exponential 252)",
+    "correção acumulada de": "accumulated adjustment of",
+    "dup = dias úteis do dia 15 de referência até a data; dut = dias úteis entre os dois dias 15. Calendário ANBIMA.":
+        "dup = business days from the reference 15th to the date; dut = business days between the two 15ths. ANBIMA calendar.",
     "dentro do domínio": "inside the range",
     "Cole os vértices ou carregue uma curva da B3.":
         "Paste the vertices or load a curve from B3.",

@@ -53,7 +53,7 @@
             <select class="campo" id="metodo" name="metodo">
               {% set rotulos = {'spline': 'Spline cúbica natural', 'linear': 'Linear', 'flat_forward': 'Flat-forward (exponencial 252)'} %}
               {% for m in metodos %}
-              <option value="{{ m }}" {{ 'selected' if metodo == m }}>{{ rotulos.get(m, m) }}</option>
+              <option value="{{ m }}" {{ 'selected' if metodo == m }}>{{ t(rotulos.get(m, m)) }}</option>
               {% endfor %}
             </select>
           </div>
@@ -93,7 +93,7 @@
                   <td>{{ l.x | numero(0) }}</td>
                   <td class="text-cyan-100">{{ '%.6f' | format(l.y) }}</td>
                   <td class="{{ 'text-amber-300' if l.fora else 'text-slate-600' }}">
-                    {{ 'extrapolado' if l.fora else 'dentro do domínio' }}
+                    {{ t('extrapolado' if l.fora else 'dentro do domínio') }}
                   </td>
                 </tr>
               {% endfor %}

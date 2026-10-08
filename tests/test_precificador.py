@@ -941,6 +941,10 @@ _MARCADORES_PT = re.compile(
     r"guardados|vigentes|publicação|anterior|defasagem|janela|não|são|com|para|uma|"
     r"pelo|pela|dos|das|que|mas|também)\b", re.IGNORECASE)
 
+# e qualquer palavra com acento do português: "correção acumulada de" passou
+# pela lista acima, que não tem como prever todo vocabulário — o ç e o til têm
+_ACENTO_PT = re.compile(r"\b\w*[çãõâêôáéíóúà]\w*\b", re.IGNORECASE)
+
 _PERMITIDO = {
     "casado", "selic", "ibovespa", "libor", "euribor", "sofr", "anbima", "b3",
     "cetip", "ptx", "ddi", "doc", "pré", "tbf", "igp-m", "ipca", "cdi", "di",
@@ -976,6 +980,7 @@ def test_nenhum_texto_em_portugues_sobra_na_tela_em_ingles():
     def varrer(rotulo, html):
         for texto in _texto_visivel(html):
             achados = {p.lower() for p in _MARCADORES_PT.findall(texto)}
+            achados |= {p.lower() for p in _ACENTO_PT.findall(texto)}
             if achados - _PERMITIDO:
                 suspeitas.append(f"{rotulo}: {texto[:90]}")
 
