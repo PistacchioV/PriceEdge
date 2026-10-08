@@ -98,7 +98,7 @@
           <path d="{{ grafico.caminho }}" fill="none" stroke="#a5f3fc" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
           {% for p in grafico.pontos_vertices %}
           <circle cx="{{ p.x }}" cy="{{ p.y }}" r="2.4" fill="#0b1220" stroke="#67e8f9" stroke-width="1.4">
-            <title>{{ p.dc }} dc · {{ p.du }} du · {{ (p.taxa | moeda(4)) if curva.eh_preco else ((p.taxa * 100) | round(3) ~ '%') }}</title>
+            <title>{{ p.dc }} {{ t('dc') }} · {{ p.du }} {{ t('du') }} · {{ (p.taxa | moeda(4)) if curva.eh_preco else ((p.taxa * 100) | round(3) ~ '%') }}</title>
           </circle>
           {% endfor %}
         </svg>

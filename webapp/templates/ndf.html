@@ -228,7 +228,7 @@
             <table class="tabela-dados">
               <thead>
                 <tr>
-                  <th>{{ t("Data") }}</th><th>DC</th><th>DU</th>
+                  <th>{{ t("Data") }}</th><th>{{ t("DC") }}</th><th>{{ t("DU") }}</th>
                   <th>{{ t("Juro da moeda") }}</th>
                   {% if not resultado.sem_di %}<th>DI</th><th>{{ t("Carry") }}</th>{% endif %}
                   <th>NDF</th><th>{{ t("Pontos") }}</th>
@@ -261,7 +261,7 @@
             NDF = {{ resultado.moeda.par }} a termo = {{ t("euro a termo") }} ÷ {{ t("dólar a termo") }}<br/>
             pontos = (NDF − spot) × {{ resultado.moeda.fator_pontos | numero }}
             {% else %}
-            NDF = spot · (1 + DI)<sup>DU/252</sup> / (1 + {{ t("juro da moeda") }} · DC/360)<br/>
+            NDF = spot · (1 + DI)<sup>{{ t("DU") }}/252</sup> / (1 + {{ t("juro da moeda") }} · {{ t("DC") }}/360)<br/>
             pontos = (NDF − spot) × {{ resultado.moeda.fator_pontos | numero }}
             &nbsp;·&nbsp; carry = (1 + DI)/(1 + {{ t("juro da moeda") }}) − 1
             {% endif %}

@@ -80,7 +80,7 @@
             {{ estatistica(t('Dias úteis observados'), r.dias | length, t('fixings usados')) }}
             {% set molde, valores = resultado.convencao %}
             {{ estatistica(t('Defasagem'),
-                           ((r.lookback ~ ' / ' ~ r.shift ~ ' du') if (r.lookback or r.shift) else t('nenhuma')),
+                           ((r.lookback ~ ' / ' ~ r.shift ~ ' ' ~ t('du')) if (r.lookback or r.shift) else t('nenhuma')),
                            t(molde).format(**valores)) }}
           </div>
 

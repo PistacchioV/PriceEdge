@@ -3625,3 +3625,19 @@ def test_a_data_digitada_no_fixing_volta_da_liquidacao():
     # e o padrão devolvido é o D-2 do início, que é diferente: o script vê que
     # a data foi digitada justamente porque os dois não batem
     assert 'data-padrao="2024-12-20"' not in campo
+
+
+def test_dias_uteis_em_ingles_sao_bd_e_corridos_sao_cd():
+    """DU, DC, dup e dut são siglas do português: em inglês, BD, CD, bde e bdt."""
+    from webapp import create_app
+    cliente = create_app().test_client()
+    ni = cliente.post("/ni-pro-rata?idioma=en",
+                      data=FORMULARIOS["/ni-pro-rata"]).data.decode()
+    assert "(bde / bdt)" in ni and "bde = business days elapsed" in ni
+    assert not re.search(r"\bdu[pt]\b", "\n".join(_texto_visivel(ni)))
+    ndf = cliente.post("/ndf?idioma=en", data=FORMULARIOS["/ndf"]).data.decode()
+    assert "<th>CD</th><th>BD</th>" in ndf
+    assert "<th>DC</th>" not in ndf and "DU/252" not in ndf
+    pt = cliente.post("/ni-pro-rata?idioma=pt",
+                      data=FORMULARIOS["/ni-pro-rata"]).data.decode()
+    assert "(dup / dut)" in pt
