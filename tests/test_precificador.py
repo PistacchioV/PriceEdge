@@ -3175,6 +3175,27 @@ def test_arquivo_com_varios_dias_vira_uma_data_salva_por_dia(monkeypatch, tmp_pa
         A.importar("cris-cras-precificacao-anbima", None, "x.csv", b"Codigo;Taxa\nA;1\n")
 
 
+def test_datas_dos_datasets_saem_em_dd_mm_aaaa():
+    """Coluna de data em dd/mm/aaaa, venha a data no formato que vier.
+
+    O boletim de títulos públicos escreve 20261007; o cadastro de fundos,
+    2023-01-24; o .xlsx guarda número de série (45418). A regra só age em
+    coluna cujo nome é de data e em valor que é data válida — o código SELIC
+    100000, numa coluna que não é de data, não pode virar data nenhuma.
+    """
+    from precificador import anbima_datasets as A
+
+    colunas = ["Titulo", "Data Referencia", "Codigo SELIC", "Data Base/Emissao",
+               "Repac./ Venc.", "Data de Início de Atividade", "Emissão"]
+    linhas = [["LTN", "20261007", "100000", "2023-01-24", "02/10/2030", "45418", "20261007"]]
+    [linha] = A.datas_em_formato_br(colunas, linhas)
+    assert linha == ["LTN", "07/10/2026", "100000", "24/01/2023", "02/10/2030",
+                     "06/05/2024", "20261007"]
+    # data impossível e texto ficam como vieram
+    assert A._data_br("20261399") == "20261399"
+    assert A._data_br("N/D") == "N/D"
+
+
 def test_a_base_local_de_datasets_nao_entra_no_git():
     """O repositório é público, e dado de terceiro — às vezes restrito — não sai daqui."""
     import subprocess

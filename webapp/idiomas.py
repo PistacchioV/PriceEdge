@@ -58,6 +58,10 @@ TRADUCOES: Dict[str, str] = {
         "Drop the file below, with the date it refers to.",
     "Arquivo (.xlsx, .csv, .tsv)": "File (.xlsx, .csv, .tsv)",
     "Importar e salvar": "Import and save",
+    "Valores como a ANBIMA os publica, com as datas em dd/mm/aaaa. A tela desenha até "
+    "2.000 linhas — filtre, ou baixe o CSV, que leva todas.":
+        "Values as ANBIMA publishes them, with dates as dd/mm/yyyy. The screen draws up "
+        "to 2,000 rows — filter, or download the CSV, which carries them all.",
     "Solte o arquivo abaixo. Se ele trouxer a coluna \"Data de referência\", cada dia "
     "vira uma data salva; a data ao lado só vale para arquivo sem essa coluna.":
         "Drop the file below. If it has a \"Data de referência\" column, each day "

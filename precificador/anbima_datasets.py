@@ -194,6 +194,54 @@ def ler_arquivo(nome: str, dados: bytes) -> tuple:
     return cabecalho, corpo
 
 
+# coluna de data: o nome diz. "Data Referencia", "Data Base/Emissao", "Data
+# Vencimento", "Repac./ Venc.", "Data de Início de Atividade"…
+_NOME_DE_DATA = re.compile(r"\bdata\b|venc|repac", re.IGNORECASE)
+_AAAAMMDD = re.compile(r"^(\d{4})(\d{2})(\d{2})$")
+_ISO = re.compile(r"^(\d{4})-(\d{2})-(\d{2})(?:[T ].*)?$")
+
+
+def _data_br(valor: str) -> str:
+    """``20261007`` / ``2026-10-07`` → ``07/10/2026``. O que não é data volta igual."""
+    texto = (valor or "").strip()
+    achado = _AAAAMMDD.match(texto) or _ISO.match(texto)
+    if not achado:
+        # o .xlsx guarda data como número de série (45418 = 07/05/2024); só
+        # vale aqui porque a coluna já é de data — noutra seria um número
+        if re.fullmatch(r"\d{5}(?:\.0+)?", texto):
+            dia = planilha.como_data(texto)
+            return dia.strftime("%d/%m/%Y") if dia else valor
+        return valor
+    ano, mes, dia = (int(x) for x in achado.groups())
+    if not 1900 <= ano <= 2200:
+        return valor
+    try:
+        return date(ano, mes, dia).strftime("%d/%m/%Y")
+    except ValueError:
+        return valor                       # 20261399 não é data: fica como veio
+
+
+def datas_em_formato_br(colunas: List[str], linhas: List[List[str]]) -> List[List[str]]:
+    """Datas em dd/mm/aaaa nas colunas de data — na tela e no CSV.
+
+    O boletim de títulos públicos escreve ``20261007``; o cadastro de fundos,
+    ``2023-01-24``. Os dois viram o formato da mesa. A regra só age em coluna
+    cujo **nome** é de data e em valor que **é** uma data válida: um número de
+    oito dígitos noutra coluna fica como está.
+    """
+    alvos = [i for i, c in enumerate(colunas) if _NOME_DE_DATA.search(c or "")]
+    if not alvos:
+        return linhas
+    saida = []
+    for linha in linhas:
+        nova = list(linha)
+        for i in alvos:
+            if i < len(nova):
+                nova[i] = _data_br(nova[i])
+        saida.append(nova)
+    return saida
+
+
 # -------------------------------------------------------- base local ---
 
 def _pasta(slug: str) -> Path:
@@ -271,7 +319,7 @@ def abrir(slug: str, referencia) -> Tabela:
     for s in salvos(slug):
         if s.referencia == dia:
             colunas, linhas = ler_arquivo(s.arquivo.name, s.arquivo.read_bytes())
-            return Tabela(s.dataset, dia, colunas, linhas)
+            return Tabela(s.dataset, dia, colunas, datas_em_formato_br(colunas, linhas))
     raise ErroDataset("não há {nome} salvo para {data}", nome=dataset(slug).nome,
                       data=f"{dia:%d/%m/%Y}")
 
@@ -304,7 +352,7 @@ def baixar(slug: str, referencia, timeout: int = 40) -> Tabela:
         raise ErroDataset("{nome} de {data} veio sem linhas", nome=ds.nome,
                           data=f"{dia:%d/%m/%Y}")
     salvar(ds.slug, dia, f"{ds.slug}_{dia:%y%m%d}.txt", bruto, DIARIO)
-    return Tabela(ds, dia, colunas, linhas)
+    return Tabela(ds, dia, colunas, datas_em_formato_br(colunas, linhas))
 
 
 def versao_publicada(slug: str) -> dict:
