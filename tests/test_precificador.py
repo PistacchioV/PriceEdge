@@ -3106,7 +3106,8 @@ def test_o_que_entra_fica_salvo_e_reabre_sem_rede(monkeypatch, tmp_path):
 
     # importação: o arquivo que a pessoa baixou no ANBIMA Data
     csv_bytes = "Código;Emissor;Taxa\nCRA01;Fulano S.A.;6,5\nCRI02;Beltrano;7,1\n".encode()
-    salvo = A.importar("cris-cras-precificacao-anbima", date(2026, 10, 6), "cri.csv", csv_bytes)
+    [salvo] = A.importar("cris-cras-precificacao-anbima", date(2026, 10, 6), "cri.csv",
+                         csv_bytes)
     assert salvo.origem == A.IMPORTACAO and salvo.arquivo.exists()
     tabela = A.abrir("cris-cras-precificacao-anbima", date(2026, 10, 6))
     assert tabela.colunas == ["Código", "Emissor", "Taxa"]
@@ -3116,6 +3117,62 @@ def test_o_que_entra_fica_salvo_e_reabre_sem_rede(monkeypatch, tmp_path):
     with pytest.raises(A.ErroDataset):
         A.importar("cris-cras-precificacao-anbima", date(2026, 10, 5), "x.xls", b"\xd0\xcf")
     assert [s.referencia for s in A.salvos("cris-cras-precificacao-anbima")] == [date(2026, 10, 6)]
+
+
+def test_o_xls_do_anbima_data_e_xlsx_por_dentro(monkeypatch, tmp_path):
+    """O formato é decidido pelo conteúdo, não pela extensão.
+
+    O ANBIMA Data entrega ``certificados-recebiveis-precos-….xls`` que por
+    dentro é um ``.xlsx`` (zip, ``PK``). O leitor decidia pelo nome e recusava
+    o arquivo; o .xls binário de verdade (OLE2) continua recusado, com frase.
+    """
+    import zipfile, io
+    from precificador import planilha
+
+    # um .xlsx mínimo, com o nome que o ANBIMA Data usa
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as z:
+        z.writestr("xl/worksheets/sheet1.xml",
+                   '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+                   '<sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>Código</t></is></c></row>'
+                   '<row r="2"><c r="A2" t="inlineStr"><is><t>CRA01</t></is></c></row>'
+                   '</sheetData></worksheet>')
+    xlsx = buffer.getvalue()
+    assert planilha.formato(xlsx) == planilha.XLSX
+    assert planilha.ler("precos.xls", xlsx) == [["Código"], ["CRA01"]]
+
+    binario = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1" + b"\x00" * 64
+    with pytest.raises(planilha.ErroPlanilha) as erro:
+        planilha.ler("antigo.xls", binario)
+    assert "97-2003" in str(erro.value)
+
+
+def test_arquivo_com_varios_dias_vira_uma_data_salva_por_dia(monkeypatch, tmp_path):
+    """O de CRIs e CRAs traz cinco dias úteis num arquivo só.
+
+    Salvo inteiro sob a data do formulário, quatro dos cinco dias ficavam com
+    a data errada. Com a coluna "Data de referência", cada dia é um salvo, e o
+    original fica guardado uma vez, inteiro.
+    """
+    from datetime import date
+    from precificador import anbima_datasets as A
+
+    monkeypatch.setattr(A, "PASTA", tmp_path)
+    conteudo = ("Data de referência;Tipo;Código;Taxa indicativa\n"
+                "01/10/2026;CRA;CRA01;6,5\n01/10/2026;CRI;CRI02;7,1\n"
+                "02/10/2026;CRA;CRA01;6,4\n").encode()
+    # a data do formulário é ignorada quando o arquivo traz a sua
+    salvos = A.importar("cris-cras-precificacao-anbima", date(2026, 10, 7),
+                        "precos.csv", conteudo)
+    assert [s.referencia for s in salvos] == [date(2026, 10, 1), date(2026, 10, 2)]
+    assert len(A.abrir("cris-cras-precificacao-anbima", date(2026, 10, 1)).linhas) == 2
+    assert len(A.abrir("cris-cras-precificacao-anbima", date(2026, 10, 2)).linhas) == 1
+    originais = list((tmp_path / "cris-cras-precificacao-anbima" / "originais").iterdir())
+    assert len(originais) == 1 and originais[0].read_bytes() == conteudo
+
+    # sem a coluna e sem a data do formulário não há como saber o dia
+    with pytest.raises(A.ErroDataset):
+        A.importar("cris-cras-precificacao-anbima", None, "x.csv", b"Codigo;Taxa\nA;1\n")
 
 
 def test_a_base_local_de_datasets_nao_entra_no_git():

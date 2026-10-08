@@ -1106,12 +1106,18 @@ def anbima_datasets_importar():
     if not arquivo or not arquivo.filename:
         return _voltar(slug, erro=idiomas.mensagem(
             servicos.ErroFormulario("escolha o arquivo baixado do ANBIMA Data")))
+    data_txt = (request.form.get("data") or "").strip()
     try:
-        salvo = anbima_datasets.importar(slug, para_data(request.form.get("data") or ""),
-                                         arquivo.filename, arquivo.read())
+        salvos = anbima_datasets.importar(slug, para_data(data_txt) if data_txt else None,
+                                          arquivo.filename, arquivo.read())
     except (ErroDeFonte, ValueError) as exc:
         return _voltar(slug, erro=idiomas.mensagem(exc))
-    return _voltar(slug, ver=salvo.referencia.isoformat())
+    # abre na data mais recente e diz quantas entraram: um arquivo de cinco dias
+    # que mostrasse só um faria parecer que os outros quatro se perderam
+    datas = ", ".join(f"{s.referencia:%d/%m/%Y}" for s in salvos)
+    aviso = idiomas.mensagem(anbima_datasets.ErroDataset(
+        "{n} data(s) importada(s) e salva(s): {datas}", n=len(salvos), datas=datas))
+    return _voltar(slug, ver=salvos[-1].referencia.isoformat(), aviso=aviso)
 
 
 @bp.route("/anbima-datasets/csv")

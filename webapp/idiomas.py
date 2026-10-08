@@ -58,6 +58,23 @@ TRADUCOES: Dict[str, str] = {
         "Drop the file below, with the date it refers to.",
     "Arquivo (.xlsx, .csv, .tsv)": "File (.xlsx, .csv, .tsv)",
     "Importar e salvar": "Import and save",
+    "Solte o arquivo abaixo. Se ele trouxer a coluna \"Data de referência\", cada dia "
+    "vira uma data salva; a data ao lado só vale para arquivo sem essa coluna.":
+        "Drop the file below. If it has a \"Data de referência\" column, each day "
+        "becomes its own saved date; the date alongside only applies to files without it.",
+    "Arquivo (.xls, .xlsx, .csv, .tsv)": "File (.xls, .xlsx, .csv, .tsv)",
+    "Data (se o arquivo não tiver)": "Date (if the file has none)",
+    "{n} data(s) importada(s) e salva(s): {datas}": "{n} date(s) imported and saved: {datas}",
+    "{arquivo} não tem coluna de data de referência: informe a data a que ele se refere":
+        "{arquivo} has no reference date column: enter the date it refers to",
+    "a coluna de data de {arquivo} não tem nenhuma data legível":
+        "the date column of {arquivo} has no readable date",
+    "{arquivo} é um .xls antigo, no formato binário do Excel 97-2003, que este leitor não "
+    "abre. Abra no Excel e salve como .xlsx ou .csv.":
+        "{arquivo} is an old .xls, in the Excel 97-2003 binary format, which this reader "
+        "cannot open. Open it in Excel and save it as .xlsx or .csv.",
+    "{arquivo} diz ser .xlsx mas não é: o conteúdo não é uma planilha do Excel.":
+        "{arquivo} says it is .xlsx but is not: the content is not an Excel spreadsheet.",
     "O ANBIMA Data não se lê por fora: os números vêm com um token que a própria página "
     "gera, protegido por reCAPTCHA. Por isso este passo é seu, no navegador — o "
     "PriceEdge lê, salva e mostra o arquivo.":

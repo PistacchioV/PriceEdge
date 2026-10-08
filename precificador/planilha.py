@@ -161,15 +161,39 @@ def ler_separado(dados: bytes) -> List[List[str]]:
 ler_csv = ler_separado
 
 
+XLSX = "xlsx"
+XLS_BINARIO = "xls"
+TEXTO = "texto"
+
+
+def formato(dados: bytes) -> str:
+    """O que o arquivo **é**, pelos primeiros bytes — não pelo nome.
+
+    A extensão mente com frequência: o ANBIMA Data entrega
+    ``certificados-recebiveis-precos-….xls`` que por dentro é um ``.xlsx``
+    (zip, ``PK``). Decidir pelo nome recusava um arquivo que este leitor lê.
+    """
+    if dados[:4] == b"PK\x03\x04":
+        return XLSX
+    if dados[:8] == b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1":     # OLE2: o .xls de verdade
+        return XLS_BINARIO
+    return TEXTO
+
+
 def ler(nome: str, dados: bytes) -> List[List[str]]:
-    """Lê pela extensão do nome: ``.xlsx`` ou ``.csv``."""
-    if (nome or "").lower().endswith(".xlsx"):
+    """Lê pelo conteúdo: ``.xlsx`` (qualquer que seja o nome) ou texto separado."""
+    tipo = formato(dados)
+    if tipo == XLSX:
         return ler_xlsx(dados)
-    if (nome or "").lower().endswith((".csv", ".tsv", ".txt", ".tab")):
-        return ler_separado(dados)
-    raise ErroPlanilha(
-        "não sei ler {arquivo}. Use .xlsx, .csv ou .tsv — o .xls antigo precisa "
-        "ser salvo de novo num desses.", arquivo=repr(nome))
+    if tipo == XLS_BINARIO:
+        raise ErroPlanilha(
+            "{arquivo} é um .xls antigo, no formato binário do Excel 97-2003, que este "
+            "leitor não abre. Abra no Excel e salve como .xlsx ou .csv.",
+            arquivo=repr(nome))
+    if (nome or "").lower().endswith(".xlsx"):
+        raise ErroPlanilha("{arquivo} diz ser .xlsx mas não é: o conteúdo não é uma "
+                           "planilha do Excel.", arquivo=repr(nome))
+    return ler_separado(dados)
 
 
 def celula(linha: Sequence[str], indice: int) -> str:

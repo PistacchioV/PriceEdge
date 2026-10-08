@@ -59,6 +59,9 @@ PUBLICO = "publico"
 RESTRITO = "restrito"
 
 EXTENSOES_ACEITAS = (".xlsx", ".csv", ".tsv", ".txt")
+# o que a pessoa pode soltar: o ANBIMA Data entrega ".xls" que por dentro é .xlsx
+EXTENSOES_DE_ENTRADA = EXTENSOES_ACEITAS + (".xls",)
+_COLUNAS_DE_DATA = ("data de referencia", "data referencia")
 
 
 class ErroDataset(ErroDeFonte):
@@ -176,7 +179,7 @@ def ler(conteudo: str) -> tuple:
 
 def ler_arquivo(nome: str, dados: bytes) -> tuple:
     """``(colunas, linhas)`` de qualquer formato que entra aqui."""
-    if nome.lower().endswith(".txt"):
+    if nome.lower().endswith(".txt") and planilha.formato(dados) == planilha.TEXTO:
         return ler(dados.decode("latin-1"))
     try:
         linhas = planilha.ler(nome, dados)
@@ -220,10 +223,13 @@ def salvar(slug: str, referencia, nome_original: str, dados: bytes, origem: str)
     ds = dataset(slug)
     dia = para_data(referencia)
     extensao = Path(nome_original).suffix.lower()
-    if extensao not in EXTENSOES_ACEITAS:
+    if extensao not in EXTENSOES_DE_ENTRADA:
         raise ErroDataset("{arquivo}: use .xlsx, .csv, .tsv ou o .txt da ANBIMA — o .xls "
                           "antigo precisa ser salvo de novo como .xlsx.",
                           arquivo=nome_original)
+    # gravado com a extensão do que o arquivo É: o ".xls" do ANBIMA Data é .xlsx
+    if planilha.formato(dados) == planilha.XLSX:
+        extensao = ".xlsx"
     pasta = _pasta(ds.slug)
     pasta.mkdir(parents=True, exist_ok=True)
     for antigo in pasta.glob(f"{dia.isoformat()}.*"):
@@ -343,8 +349,33 @@ def baixar_publicado(slug: str) -> Salvo:
                   bruto, CMS_PUBLICO)
 
 
-def importar(slug: str, referencia, nome: str, dados: bytes) -> Salvo:
+def _coluna_de_data(colunas: List[str]) -> Optional[int]:
+    import unicodedata
+    for i, c in enumerate(colunas):
+        sem_acento = "".join(ch for ch in unicodedata.normalize("NFKD", c or "")
+                             if not unicodedata.combining(ch))
+        if " ".join(sem_acento.lower().split()) in _COLUNAS_DE_DATA:
+            return i
+    return None
+
+
+def _csv_de(colunas: List[str], linhas: List[List[str]]) -> bytes:
+    saida = io.StringIO()
+    escritor = csv.writer(saida, delimiter=";")
+    escritor.writerow(colunas)
+    escritor.writerows(linhas)
+    return saida.getvalue().encode("utf-8")
+
+
+def importar(slug: str, referencia, nome: str, dados: bytes) -> List[Salvo]:
     """Porta IMPORTACAO: o arquivo que a pessoa baixou no ANBIMA Data.
+
+    O arquivo do ANBIMA Data traz **vários dias** de uma vez — o de CRIs e CRAs
+    vem com os cinco últimos dias úteis, ~350 papéis cada, numa coluna "Data de
+    referência". Salvá-lo inteiro sob a data do formulário punha quatro dias
+    com a data errada. Havendo essa coluna, cada dia vira um salvo próprio, e a
+    data do formulário só vale para arquivo sem ela. O original fica guardado
+    inteiro, uma vez, em ``originais/``.
 
     Lê antes de salvar: um arquivo que não abre não pode virar "salvo" e
     falhar só na hora de alguém consultar.
@@ -352,7 +383,29 @@ def importar(slug: str, referencia, nome: str, dados: bytes) -> Salvo:
     colunas, linhas = ler_arquivo(nome, dados)
     if not linhas:
         raise ErroDataset("{arquivo} não tem linhas de dados", arquivo=nome)
-    return salvar(slug, referencia, nome, dados, IMPORTACAO)
+
+    indice = _coluna_de_data(colunas)
+    if indice is None:
+        if referencia is None:
+            raise ErroDataset("{arquivo} não tem coluna de data de referência: informe a "
+                              "data a que ele se refere", arquivo=nome)
+        return [salvar(slug, referencia, nome, dados, IMPORTACAO)]
+
+    por_dia = {}
+    for linha in linhas:
+        dia = planilha.como_data(linha[indice] if indice < len(linha) else "")
+        if dia is not None:
+            por_dia.setdefault(dia, []).append(linha)
+    if not por_dia:
+        raise ErroDataset("a coluna de data de {arquivo} não tem nenhuma data legível",
+                          arquivo=nome)
+
+    originais = _pasta(dataset(slug).slug) / "originais"
+    originais.mkdir(parents=True, exist_ok=True)
+    (originais / f"{datetime.now():%Y%m%d-%H%M%S}_{Path(nome).name}").write_bytes(dados)
+    return [salvar(slug, dia, f"{Path(nome).stem}_{dia:%Y%m%d}.csv",
+                   _csv_de(colunas, grupo), IMPORTACAO)
+            for dia, grupo in sorted(por_dia.items())]
 
 
 def para_csv(tabela: Tabela) -> str:

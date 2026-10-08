@@ -95,16 +95,16 @@
         <li>1. <a class="text-cyan-200 hover:text-cyan-100" href="{{ dataset.endereco }}" target="_blank" rel="noopener">{{ t("Abra o dataset no ANBIMA Data") }} ↗</a>
           {{ t("e baixe o arquivo pelo botão de download da própria página.") }}
           {% if dataset.acesso == 'restrito' %}<span class="text-amber-200">{{ t("Restrito: entre com o seu login de associado.") }}</span>{% endif %}</li>
-        <li>2. {{ t("Solte o arquivo abaixo, com a data a que ele se refere.") }}</li>
+        <li>2. {{ t("Solte o arquivo abaixo. Se ele trouxer a coluna \"Data de referência\", cada dia vira uma data salva; a data ao lado só vale para arquivo sem essa coluna.") }}</li>
       </ol>
       <div class="mt-4 grid gap-4 lg:grid-cols-[1fr_minmax(0,14rem)_auto] lg:items-end">
         <div>
-          <label class="rotulo" for="arquivo">{{ t("Arquivo (.xlsx, .csv, .tsv)") }}</label>
-          <input class="campo" id="arquivo" name="arquivo" type="file" accept=".xlsx,.csv,.tsv,.txt" required/>
+          <label class="rotulo" for="arquivo">{{ t("Arquivo (.xls, .xlsx, .csv, .tsv)") }}</label>
+          <input class="campo" id="arquivo" name="arquivo" type="file" accept=".xls,.xlsx,.csv,.tsv,.txt" required/>
         </div>
         <div>
-          <label class="rotulo" for="data_importacao">{{ t("Data de referência") }}</label>
-          <input class="campo" id="data_importacao" name="data" type="date" value="{{ form.data }}" max="{{ hoje }}" required/>
+          <label class="rotulo" for="data_importacao">{{ t("Data (se o arquivo não tiver)") }}</label>
+          <input class="campo" id="data_importacao" name="data" type="date" value="" max="{{ hoje }}"/>
         </div>
         <div>{{ botao(t('Importar e salvar'), 'solar:upload-minimalistic-linear') }}</div>
       </div>
