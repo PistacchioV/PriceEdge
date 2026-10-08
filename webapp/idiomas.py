@@ -7,7 +7,7 @@ mostrar uma chave crua na tela.
 
 Fórmulas, siglas e rótulos que já são iguais nos dois idiomas (DI, NDF,
 SOFR, VNA) ficam de fora de propósito. DU e DC não: em inglês são BD
-(business days) e CD (calendar days), e dup/dut do NI pro-rata viram bde/bdt.
+(business days) e CD (calendar days), e dup/dut do NI pro-rata viram bde/bdp.
 """
 
 from __future__ import annotations
@@ -692,7 +692,7 @@ TRADUCOES: Dict[str, str] = {
     "Flat-forward (exponencial 252)": "Flat-forward (exponential 252)",
     "correção acumulada de": "accumulated adjustment of",
     "dup = dias úteis do dia 15 de referência até a data; dut = dias úteis entre os dois dias 15. Calendário ANBIMA.":
-        "bde = business days elapsed, from the reference 15th to the date; bdt = business days in the period, between the two 15ths. ANBIMA calendar.",
+        "bde = business days elapsed, from the reference 15th to the date; bdp = business days in the period, between the two 15ths. ANBIMA calendar.",
     "dentro do domínio": "inside the range",
     "Cole os vértices ou carregue uma curva da B3.":
         "Paste the vertices or load a curve from B3.",
@@ -1451,7 +1451,7 @@ TRADUCOES: Dict[str, str] = {
     "dia 15 de referência": "reference 15th",
     "dia 15 do mês seguinte": "15th of the next month",
     "dup": "bde",
-    "dut": "bdt",
+    "dut": "bdp",
     "DU": "BD",
     "DC": "CD",
     "du": "bd",
