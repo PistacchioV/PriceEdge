@@ -4,7 +4,9 @@
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1" name="viewport"/>
 <title>{% block titulo %}{{ t("Precificação de swaps") }}{% endblock %} — PriceEdge</title>
-<link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}"/>
+{# `v=` força o navegador a trocar o ícone: favicon fica em cache por dias e a
+   aba continuaria com o desenho antigo mesmo depois do arquivo novo #}
+<link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg', v='2') }}"/>
 
 <!-- fonts: Geist (corpo) e Plus Jakarta Sans (títulos) — do design system Pulsedesk -->
 <link href="{{ url_for('static', filename='vendor/4bcb63d746dc1754_css2.css') }}" rel="stylesheet"/>
