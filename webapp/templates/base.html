@@ -54,7 +54,7 @@
   </a>
   <div class="hidden min-w-0 items-center gap-5 xl:flex">
     {% set principais = [
-      ('principal.painel', 'Painel'),
+      ('principal.painel', 'Início'),
       ('principal.curvas', 'Curvas B3'),
       ('principal.precificar', 'Precificar'),
       ('principal.ndf', 'NDF'),
@@ -65,6 +65,7 @@
     ] %}
     {% set ferramentas = [
       ('principal.cotacoes_pagina', 'Cotações'),
+      ('principal.inflacao_implicita_pagina', 'Inflação implícita'),
       ('principal.liquidacao_swap', 'Liquidação'),
       ('principal.calculadora_renda_fixa', 'Renda fixa'),
       ('principal.interpolador', 'Interpolação'),
@@ -120,6 +121,7 @@
           <a class="text-sm text-slate-300 transition hover:text-cyan-100 font-geist" href="{{ url_for('principal.sofr_indice') }}">SOFR Index</a>
           <a class="text-sm text-slate-300 transition hover:text-cyan-100 font-geist" href="{{ url_for('principal.euribor_diario') }}">EURIBOR</a>
           <a class="text-sm text-slate-300 transition hover:text-cyan-100 font-geist" href="{{ url_for('principal.cotacoes_pagina') }}">{{ t("Cotações") }}</a>
+          <a class="text-sm text-slate-300 transition hover:text-cyan-100 font-geist" href="{{ url_for('principal.inflacao_implicita_pagina') }}">{{ t("Inflação implícita") }}</a>
           <a class="text-sm text-slate-300 transition hover:text-cyan-100 font-geist" href="{{ url_for('principal.liquidacao_swap') }}">{{ t("Liquidação de swap") }}</a>
           <a class="text-sm text-slate-300 transition hover:text-cyan-100 font-geist" href="{{ url_for('principal.calculadora_renda_fixa') }}">{{ t("Renda fixa") }}</a>
           <a class="text-sm text-slate-300 transition hover:text-cyan-100 font-geist" href="{{ url_for('principal.interpolador') }}">{{ t("Interpolação") }}</a>

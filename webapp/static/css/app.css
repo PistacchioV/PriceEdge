@@ -246,3 +246,7 @@ select.campo option { background: #0b1220; color: #e2e8f0; }
   color: #a7f3d0;
 }
 .combo-aviso { padding: 0.55rem 0.7rem; font-size: 0.75rem; line-height: 1.4; color: #94a3b8; }
+
+/* abas do boletim de títulos públicos */
+.aba-titulo.aba-ativa { border-color: rgba(165, 243, 252, 0.3); background: #cffafe; color: #0f172a; }
+.aba-titulo.aba-ativa span { color: #334155; }

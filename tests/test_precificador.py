@@ -877,9 +877,11 @@ def _exercitar_aplicacao(app):
     """Passa por todas as telas e pelos formulários, para o audit ver tudo."""
     gets = ["/", "/curvas", "/precificar", "/ndf", "/sofr", "/term-sofr", "/euribor",
             "/renda-fixa", "/liquidacao", "/cotacoes", "/interpolar",
-            "/ni-pro-rata", "/metodologia"]
+            "/ni-pro-rata", "/metodologia", "/inflacao-implicita"]
     for rota in gets:
         app.test_client().get(rota + "?idioma=en")
+    # o caminho de erro também tem frase: domingo não tem boletim da ANBIMA
+    app.test_client().get("/inflacao-implicita?idioma=en&data=2026-10-04")
 
     from precificador import b3
     from webapp.servicos import DERIVADAS
@@ -1564,7 +1566,7 @@ def test_toda_tela_abre_na_mesma_data_de_referencia():
     fora, vistos = [], set()
     paginas = ["/", "/curvas", "/precificar", "/ndf", "/sofr", "/term-sofr",
                "/euribor", "/renda-fixa", "/liquidacao", "/interpolar",
-               "/cotacoes", "/ni-pro-rata"]
+               "/cotacoes", "/ni-pro-rata", "/inflacao-implicita"]
     for rota in paginas:
         html = app.test_client().get(rota).data.decode()
         for campo in re.findall(r"<input[^>]*type=\"date\"[^>]*>", html):
@@ -2905,6 +2907,137 @@ def test_o_script_da_liquidacao_encontra_os_campos_que_procura():
     # os ids literais — `inicio`, `calendario` — pelo mesmo motivo
     for campo in re.findall(r'getElementById\("(\w+)"\)', script):
         assert f'id="{campo}"' in pagina, f"{campo} não está na tela"
+
+
+# ------------------------------------------------ inflação implícita ---
+
+def _boletim_anbima_de_referencia():
+    """O boletim real da ANBIMA de 07/10/2026, guardado — o teste roda sem rede."""
+    from pathlib import Path
+    from precificador import anbima
+    bruto = (Path(__file__).resolve().parent / "anbima_ms261007.txt").read_bytes()
+    return anbima.ler(bruto.decode("latin-1"))
+
+
+# Duration publicada pela ANBIMA no ANBIMA Data para 07/10/2026, em dias úteis.
+# É o gabarito do fluxo da NTN-B: cupom, datas e contagem de dias.
+DURATION_ANBIMA_071026 = {
+    "2027-05-15": 145.48, "2028-08-15": 442.61, "2029-05-15": 595.90,
+    "2030-08-15": 865.71, "2031-05-15": 995.90, "2032-08-15": 1244.53,
+    "2033-05-15": 1352.69, "2035-05-15": 1663.02, "2037-05-15": 1936.35,
+    "2040-08-15": 2356.07, "2045-05-15": 2746.36, "2050-08-15": 3133.46,
+    "2055-05-15": 3317.74, "2060-08-15": 3547.18,
+}
+VNA_NTNB_ANBIMA_071026 = 4753.482510
+
+
+def test_o_boletim_da_anbima_e_lido_como_a_pagina_mostra():
+    """Os números do arquivo são os da página "Taxas de Títulos Públicos".
+
+    A LTN 01/04/2027 de 07/10/2026 aparece na página com 13,1120 · 13,0721 ·
+    13,0910 · 944,021979. Taxa sai em decimal, como em todo o pacote.
+    """
+    from datetime import date
+    from precificador import anbima
+
+    titulos = _boletim_anbima_de_referencia()
+    grupos = anbima.por_tipo(titulos)
+    assert {k: len(v) for k, v in grupos.items()} == {
+        "LTN": 11, "NTN-F": 6, "NTN-B": 14, "NTN-C": 1, "LFT": 18}
+    # e na ordem da página da ANBIMA
+    assert list(grupos) == ["LTN", "NTN-F", "NTN-B", "NTN-C", "LFT"]
+
+    ltn = grupos["LTN"][0]
+    assert ltn.referencia == date(2026, 10, 7) and ltn.vencimento == date(2027, 4, 1)
+    assert ltn.taxa_compra == pytest.approx(0.131120)
+    assert ltn.taxa_venda == pytest.approx(0.130721)
+    assert ltn.taxa_indicativa == pytest.approx(0.130910)
+    assert ltn.pu == pytest.approx(944.021979)
+
+
+def test_a_duration_da_ntnb_bate_com_a_da_anbima():
+    """O fluxo da NTN-B, conferido contra a duration que a ANBIMA publica.
+
+    O prazo de cada cupom é até o PAGAMENTO, no dia útil seguinte quando o 15
+    não é útil. Contando até o 15, a NTN-B 2027 saía com 144,48 dias contra os
+    145,48 da ANBIMA: os dois pagamentos dela — 15/11/2026, domingo e feriado,
+    e 15/05/2027, sábado — perdiam um dia cada.
+    """
+    from precificador import inflacao_implicita as I
+
+    linhas = I.calcular(_boletim_anbima_de_referencia())
+    assert len(linhas) == len(DURATION_ANBIMA_071026)
+    for l in linhas:
+        oficial = DURATION_ANBIMA_071026[l.vencimento.isoformat()]
+        # a ANBIMA publica com duas casas: meio centésimo é arredondamento
+        assert l.duration_du == pytest.approx(oficial, abs=0.006), l.vencimento
+
+
+def test_o_vna_implicito_e_um_so_e_e_o_da_anbima():
+    """PU ÷ cotação dá o VNA, e ele é o mesmo em todas as NTN-B do dia.
+
+    É o termômetro do fluxo sem precisar de outra fonte: cupom ou prazo
+    errado, e cada título dá um VNA diferente. A cotação é a truncada na 4ª
+    casa do percentual, que é a que a ANBIMA multiplica pelo VNA.
+    """
+    from precificador import inflacao_implicita as I
+
+    vna, dispersao = I.vna_do_dia(I.calcular(_boletim_anbima_de_referencia()))
+    assert vna == pytest.approx(VNA_NTNB_ANBIMA_071026, abs=0.000002)
+    assert dispersao < 1e-8
+
+
+def test_a_inflacao_implicita_usa_a_pre_do_mesmo_prazo():
+    """Fisher no ponto da duration — e não contra um CDI só para todos.
+
+    A planilha da mesa divide todos os vencimentos pelo CDI do dia. Isso
+    compara o juro real de 35 anos com a taxa de um dia, e em 07/10/2026 a
+    diferença passava de um ponto percentual. A conta daqui lê a pré na curva
+    DI no prazo da duration; a do CDI continua disponível, ao lado.
+    """
+    from precificador import inflacao_implicita as I
+
+    pedidos = []
+
+    def curva(dc, du):
+        pedidos.append((dc, du))
+        return 0.125 + du / 252.0 * 0.001        # uma curva inclinada qualquer
+
+    linhas = I.calcular(_boletim_anbima_de_referencia(), taxa_pre=curva, cdi=0.1365)
+    longa = linhas[-1]
+    # a pré foi pedida no prazo da duration, não no vencimento
+    assert pedidos[-1][1] == pytest.approx(longa.duration_du)
+    assert longa.pre == pytest.approx(0.125 + longa.duration_du / 252.0 * 0.001)
+    assert longa.implicita == pytest.approx((1 + longa.pre) / (1 + longa.juro_real) - 1)
+    assert longa.implicita_cdi == pytest.approx(1.1365 / (1 + longa.juro_real) - 1)
+    # sem curva, a coluna principal fica vazia e a do CDI continua
+    sem_curva = I.calcular(_boletim_anbima_de_referencia(), cdi=0.1365)
+    assert sem_curva[0].implicita is None and sem_curva[0].implicita_cdi is not None
+
+
+def test_nenhuma_chave_de_traducao_tem_dois_sentidos():
+    """Uma chave repetida no dicionário com tradução diferente é um bug calado.
+
+    Num dict literal, a última vence. Foi assim que "Início" virou "Start date"
+    no menu em inglês: a palavra já estava no dicionário com o sentido de data
+    de início, mais abaixo, e o novo "Home" perdia sem aviso nenhum.
+    """
+    import ast
+    from pathlib import Path
+
+    fonte = (Path(__file__).resolve().parent.parent / "webapp" / "idiomas.py").read_text(
+        encoding="utf-8")
+    conflitos = []
+    for no in ast.walk(ast.parse(fonte)):
+        if isinstance(no, ast.Dict) and len(no.keys) > 100:
+            vistos = {}
+            for chave, valor in zip(no.keys, no.values):
+                if not (isinstance(chave, ast.Constant) and isinstance(valor, ast.Constant)):
+                    continue
+                anterior = vistos.setdefault(chave.value, valor.value)
+                if anterior != valor.value:
+                    conflitos.append(f"{chave.value!r}: {anterior!r} × {valor.value!r}")
+    assert not conflitos, "chaves com duas traduções: " + "; ".join(conflitos)
 
 
 def test_a_busca_de_cotacoes_oferece_o_cadastro_inteiro():

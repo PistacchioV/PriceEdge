@@ -1,0 +1,194 @@
+{% extends "base.html" %}
+{% from "_componentes.html" import alerta, estatistica, botao %}
+{% block titulo %}{{ t("Inflação implícita") }}{% endblock %}
+
+{% block conteudo %}
+<section class="sm:px-6 lg:px-8 pt-16 pr-5 pb-10 pl-5">
+  <div class="w-full max-w-[1600px] mr-auto ml-auto">
+    <div class="reveal grid gap-8 lg:grid-cols-[1fr_0.72fr] lg:items-end">
+      <div class="max-w-3xl">
+        <p class="text-sm font-medium text-cyan-100 font-geist">{{ t("Títulos públicos · ANBIMA") }}</p>
+        <h1 class="mt-4 text-4xl text-white sm:text-5xl tracking-tighter leading-[1.05] font-jakarta font-medium">{{ t("O IPCA que o mercado precifica.") }}</h1>
+      </div>
+      <div class="lg:ml-auto lg:max-w-md">
+        <p class="text-base leading-7 text-slate-400 font-geist">
+          {{ t("Juro real das NTN-B no boletim da ANBIMA contra a taxa pré da curva DI no mesmo prazo: (1 + pré) ÷ (1 + juro real) − 1, no ponto da duration de cada título.") }}
+        </p>
+      </div>
+    </div>
+
+    <form method="get" class="mt-10 rounded-[2rem] border border-white/[0.09] bg-gradient-to-b from-white/[0.05] to-transparent p-6 backdrop-blur-xl sm:p-8">
+      <div class="grid gap-5 sm:grid-cols-[minmax(0,18rem)_auto] sm:items-end">
+        <div>
+          <label class="rotulo" for="data">{{ t("Data de referência") }}</label>
+          <input class="campo" id="data" name="data" type="date" value="{{ form.data }}"
+                 max="{{ hoje }}" required/>
+        </div>
+        <div>{{ botao(t('Consultar'), 'solar:magnifer-linear') }}</div>
+      </div>
+      <p class="mt-4 text-xs leading-5 text-slate-600 font-geist">
+        {{ t("O boletim é o da página Taxas de Títulos Públicos da ANBIMA, lido pelo arquivo que ela publica por data. A ANBIMA mantém algumas semanas de boletins.") }}
+        <a class="text-cyan-200/80 hover:text-cyan-100" href="{{ pagina_anbima }}" target="_blank" rel="noopener">{{ t("Abrir na ANBIMA") }}</a>
+      </p>
+    </form>
+
+    {% if erro %}{{ alerta(erro) }}{% endif %}
+    {% for aviso in avisos %}{{ alerta(aviso, 'aviso') }}{% endfor %}
+
+    {% if linhas %}
+    <div class="sem-reveal mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      {{ estatistica(t('Boletim ANBIMA'), referencia | data_br, (grupos.values() | map('length') | sum) ~ ' ' ~ t('títulos'), destaque=true) }}
+      {{ estatistica(t('VNA da NTN-B'), vna | numero(6) if vna else '—', t('PU ÷ cotação, igual em todos os títulos')) }}
+      {{ estatistica(t('CDI do dia'), cdi | percentual(2) if cdi is not none else '—', t('a conta da planilha usa este')) }}
+      {{ estatistica(t('Curva pré'), t('DI x Pré · B3') if curva_data else '—', (curva_data | data_br) if curva_data else t('indisponível nesta data')) }}
+    </div>
+
+    {% if series %}
+    <div class="sem-reveal mt-6 rounded-[2rem] border border-white/[0.09] bg-slate-950/40 p-6 backdrop-blur-xl">
+      <p class="text-sm font-medium text-white font-geist">{{ t("Estrutura a termo por duration") }}</p>
+      <p class="mt-0.5 text-xs text-slate-500 font-geist">{{ t("Eixo horizontal: duration de cada NTN-B, em anos.") }}</p>
+      <div class="rolagem mt-4">
+        <svg viewBox="0 0 900 320" width="100%" height="320" preserveAspectRatio="xMidYMid meet"
+             role="img" aria-label="{{ t('Estrutura a termo por duration') }}">
+          {% for r in escala_y %}
+          <line x1="52" x2="852" y1="{{ r.y }}" y2="{{ r.y }}" stroke="rgba(255,255,255,0.06)" stroke-width="1"/>
+          <text x="6" y="{{ r.y + 4 }}" fill="#64748b" font-size="10" font-family="Geist, sans-serif">{{ r.rotulo }}</text>
+          {% endfor %}
+          {% for r in escala_x %}
+          <text x="{{ r.x }}" y="308" fill="#64748b" font-size="10" text-anchor="middle" font-family="Geist, sans-serif">{{ r.rotulo }}</text>
+          {% endfor %}
+          {% for s in series %}
+          <path d="{{ s.caminho }}" fill="none" stroke="{{ s.cor }}" stroke-width="1.8"
+                stroke-linejoin="round" stroke-linecap="round"/>
+          {% for m in s.marcas %}<circle cx="{{ m.x }}" cy="{{ m.y }}" r="2.6" fill="{{ s.cor }}"/>{% endfor %}
+          {% endfor %}
+        </svg>
+      </div>
+      <div class="mt-4 flex flex-wrap gap-4">
+        {% for s in series %}
+        <span class="inline-flex items-center gap-2 text-xs text-slate-400 font-geist">
+          <span class="h-0.5 w-5 rounded-full" style="background: {{ s.cor }}"></span>{{ t(s.tenor) }}
+        </span>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+    <div class="sem-reveal mt-6 rounded-[2rem] border border-white/[0.09] bg-slate-950/40 backdrop-blur-xl">
+      <div class="border-b border-white/[0.07] px-6 py-4">
+        <p class="text-sm font-medium text-white font-geist">{{ t("Inflação implícita — NTN-B") }}</p>
+        <p class="mt-0.5 text-xs text-slate-500 font-geist">{{ t("Juro real = taxa indicativa ANBIMA. Pré = curva DI x Pré da B3 no prazo da duration.") }}</p>
+      </div>
+      <div class="rolagem px-2">
+        <table class="tabela-dados">
+          <thead>
+            <tr>
+              <th>{{ t("Vencimento") }}</th><th>{{ t("Juro real") }}</th>
+              <th>{{ t("Duration (anos)") }}</th><th>{{ t("Duration (dias úteis)") }}</th>
+              <th>{{ t("Pré DI no prazo") }}</th><th>{{ t("Inflação implícita") }}</th>
+              <th>{{ t("Contra o CDI do dia") }}</th>
+            </tr>
+          </thead>
+          <tbody>
+          {% for l in linhas %}
+            <tr>
+              <td class="text-white">{{ l.vencimento | data_br }}</td>
+              <td class="text-cyan-100">{{ l.juro_real | percentual(4) }}</td>
+              <td class="text-slate-300">{{ l.duration_anos | numero(2) }}</td>
+              <td class="text-slate-300">{{ l.duration_du | numero(2) }}</td>
+              <td class="text-slate-300">{{ l.pre | percentual(4) }}</td>
+              <td class="font-medium text-amber-200">{{ l.implicita | percentual(4) }}</td>
+              <td class="text-slate-500">{{ l.implicita_cdi | percentual(4) }}</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="border-t border-white/[0.07] px-6 py-4">
+        <p class="text-xs leading-6 text-slate-400 font-geist">
+          {{ t("A última coluna repete a conta da planilha: um CDI só para todos os vencimentos. Ela compara o juro real de décadas com a taxa de um dia e fica na tela para conferir, não para decidir — a coluna em destaque usa a taxa pré do mesmo prazo.") }}
+        </p>
+      </div>
+    </div>
+
+    <div class="sem-reveal mt-6 rounded-[2rem] border border-white/[0.09] bg-slate-950/40 backdrop-blur-xl">
+      <div class="flex flex-wrap items-center justify-between gap-3 border-b border-white/[0.07] px-6 py-4">
+        <div>
+          <p class="text-sm font-medium text-white font-geist">{{ t("Mercado secundário de títulos públicos") }}</p>
+          <p class="mt-0.5 text-xs text-slate-500 font-geist">{{ t("Boletim ANBIMA") }} · {{ referencia | data_br }}</p>
+        </div>
+        <div class="flex flex-wrap gap-2" role="tablist">
+          {% for codigo in grupos %}
+          <button type="button" role="tab" data-aba="{{ codigo }}"
+                  class="aba-titulo rounded-full border border-white/[0.1] bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-slate-300 transition hover:bg-white/[0.08] font-geist">
+            {{ codigo }} <span class="text-slate-500">{{ grupos[codigo] | length }}</span>
+          </button>
+          {% endfor %}
+        </div>
+      </div>
+      {% set nomes = dict(tipos) %}
+      {% for codigo, lista in grupos.items() %}
+      <div class="painel-titulo" data-painel="{{ codigo }}">
+        <p class="px-6 pt-4 text-xs text-slate-500 font-geist">{{ t(nomes.get(codigo, codigo)) }}</p>
+        <div class="rolagem px-2">
+          <table class="tabela-dados">
+            <thead>
+              <tr>
+                <th>{{ t("Vencimento") }}</th><th>{{ t("Data base") }}</th>
+                <th>{{ t("Tx. compra") }}</th><th>{{ t("Tx. venda") }}</th><th>{{ t("Tx. indicativa") }}</th>
+                <th>PU</th>
+                <th>{{ t("Mín. (D0)") }}</th><th>{{ t("Máx. (D0)") }}</th>
+                <th>{{ t("Mín. (D+1)") }}</th><th>{{ t("Máx. (D+1)") }}</th>
+              </tr>
+            </thead>
+            <tbody>
+            {% for x in lista %}
+              <tr>
+                <td class="text-white">{{ x.vencimento | data_br }}</td>
+                <td class="text-slate-500">{{ x.data_base | data_br }}</td>
+                <td class="text-slate-300">{{ x.taxa_compra | percentual(4) }}</td>
+                <td class="text-slate-300">{{ x.taxa_venda | percentual(4) }}</td>
+                <td class="text-cyan-100">{{ x.taxa_indicativa | percentual(4) }}</td>
+                <td class="text-slate-300">{{ x.pu | numero(6) }}</td>
+                <td class="text-slate-500">{{ x.intervalo_min_d0 | percentual(4) }}</td>
+                <td class="text-slate-500">{{ x.intervalo_max_d0 | percentual(4) }}</td>
+                <td class="text-slate-500">{{ x.intervalo_min_d1 | percentual(4) }}</td>
+                <td class="text-slate-500">{{ x.intervalo_max_d1 | percentual(4) }}</td>
+              </tr>
+            {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Abas do boletim: sem o script, as cinco tabelas aparecem empilhadas — a
+// tela continua completa, só mais longa.
+(function () {
+  var botoes = document.querySelectorAll(".aba-titulo");
+  if (!botoes.length) return;
+  function mostrar(codigo) {
+    document.querySelectorAll(".painel-titulo").forEach(function (p) {
+      p.hidden = p.getAttribute("data-painel") !== codigo;
+    });
+    botoes.forEach(function (b) {
+      var ativo = b.getAttribute("data-aba") === codigo;
+      b.setAttribute("aria-selected", ativo ? "true" : "false");
+      b.classList.toggle("aba-ativa", ativo);
+    });
+  }
+  botoes.forEach(function (b) {
+    b.addEventListener("click", function () { mostrar(b.getAttribute("data-aba")); });
+  });
+  // abre na NTN-B, que é o papel desta tela
+  mostrar(document.querySelector('[data-aba="NTN-B"]') ? "NTN-B" : botoes[0].getAttribute("data-aba"));
+})();
+</script>
+{% endblock %}

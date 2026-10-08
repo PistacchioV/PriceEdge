@@ -19,6 +19,76 @@ PADRAO = "pt"
 TRADUCOES: Dict[str, str] = {
     # ------------------------------------------------------------ navegação
     "Painel": "Dashboard",
+    "Início": "Home",
+
+    # inflação implícita e boletim de títulos públicos
+    "Inflação implícita": "Implied inflation",
+    "Títulos públicos · ANBIMA": "Government bonds · ANBIMA",
+    "O IPCA que o mercado precifica.": "The IPCA the market is pricing.",
+    "Juro real das NTN-B no boletim da ANBIMA contra a taxa pré da curva DI no "
+    "mesmo prazo: (1 + pré) ÷ (1 + juro real) − 1, no ponto da duration de cada "
+    "título.":
+        "NTN-B real yields from the ANBIMA bulletin against the fixed rate on the DI "
+        "curve at the same tenor: (1 + fixed) ÷ (1 + real) − 1, at each bond's "
+        "duration.",
+    "Consultar": "Look up",
+    "O boletim é o da página Taxas de Títulos Públicos da ANBIMA, lido pelo arquivo "
+    "que ela publica por data. A ANBIMA mantém algumas semanas de boletins.":
+        "The bulletin is the one on ANBIMA's Government Bond Rates page, read from "
+        "the file it publishes for each date. ANBIMA keeps a few weeks of bulletins.",
+    "Abrir na ANBIMA": "Open on ANBIMA",
+    "Boletim ANBIMA": "ANBIMA bulletin",
+    "títulos": "bonds",
+    "VNA da NTN-B": "NTN-B VNA",
+    "PU ÷ cotação, igual em todos os títulos": "price ÷ quote, the same across bonds",
+    "CDI do dia": "CDI of the day",
+    "a conta da planilha usa este": "the spreadsheet uses this one",
+    "Curva pré": "Fixed-rate curve",
+    "DI x Pré · B3": "DI x Pré · B3",
+    "Estrutura a termo por duration": "Term structure by duration",
+    "Eixo horizontal: duration de cada NTN-B, em anos.":
+        "Horizontal axis: each NTN-B's duration, in years.",
+    "Pré DI no prazo": "DI fixed rate at tenor",
+    "Juro real NTN-B": "NTN-B real yield",
+    "Inflação implícita — NTN-B": "Implied inflation — NTN-B",
+    "Juro real = taxa indicativa ANBIMA. Pré = curva DI x Pré da B3 no prazo da "
+    "duration.":
+        "Real yield = ANBIMA indicative rate. Fixed = B3 DI x Pré curve at the "
+        "duration tenor.",
+    "Juro real": "Real yield",
+    "Duration (anos)": "Duration (years)",
+    "Duration (dias úteis)": "Duration (business days)",
+    "Contra o CDI do dia": "Against the day's CDI",
+    "A última coluna repete a conta da planilha: um CDI só para todos os "
+    "vencimentos. Ela compara o juro real de décadas com a taxa de um dia e fica "
+    "na tela para conferir, não para decidir — a coluna em destaque usa a taxa "
+    "pré do mesmo prazo.":
+        "The last column repeats the spreadsheet's calculation: one CDI for every "
+        "maturity. It compares a decades-long real yield with a one-day rate and "
+        "stays on screen to cross-check, not to decide — the highlighted column "
+        "uses the fixed rate at the same tenor.",
+    "Mercado secundário de títulos públicos": "Government bond secondary market",
+    "Data base": "Base date",
+    "Tx. compra": "Bid rate",
+    "Tx. venda": "Ask rate",
+    "Tx. indicativa": "Indicative rate",
+    "Mín. (D0)": "Min. (D0)",
+    "Máx. (D0)": "Max. (D0)",
+    "Mín. (D+1)": "Min. (D+1)",
+    "Máx. (D+1)": "Max. (D+1)",
+    "LTN — prefixado, sem cupom": "LTN — fixed rate, zero coupon",
+    "NTN-F — prefixado, cupom de 10% a.a.": "NTN-F — fixed rate, 10% p.a. coupon",
+    "NTN-B — IPCA + juro real, cupom de 6% a.a.": "NTN-B — IPCA + real yield, 6% p.a. coupon",
+    "NTN-C — IGP-M + juro real": "NTN-C — IGP-M + real yield",
+    "LFT — pós-fixado na Selic": "LFT — floating on Selic",
+    "a ANBIMA não tem boletim de títulos públicos para {data}. Ou não foi dia útil, "
+    "ou a data é antiga demais — ela mantém só algumas semanas de arquivos.":
+        "ANBIMA has no government bond bulletin for {data}. Either it was not a "
+        "business day, or the date is too old — it keeps only a few weeks of files.",
+    "não foi possível obter o boletim da ANBIMA: {motivo}":
+        "could not fetch the ANBIMA bulletin: {motivo}",
+    "o boletim da ANBIMA de {data} veio sem títulos":
+        "the ANBIMA bulletin for {data} came with no bonds",
     "Interpolação": "Interpolation",
     "NI pro-rata": "Pro-rata index",
     "Metodologia": "Methodology",
@@ -349,7 +419,6 @@ TRADUCOES: Dict[str, str] = {
         "Daily fixings from the New York Fed, compounded day by day. Term SOFR is "
         "quoted upfront; this one only settles at the end of the period.",
     "Período de juros": "Accrual period",
-    "Início": "Start date",
     "Fim": "End date",
     "Convenção de observação": "Observation method",
     "Defasagem (dias úteis)": "Lookback (business days)",
@@ -1367,7 +1436,6 @@ TRADUCOES: Dict[str, str] = {
     "SOFR do Fed de Nova York": "SOFR from the New York Fed",
     "SOFR (% a.a.)": "SOFR (% p.a.)",
     "janela de observação": "observation window",
-    "Observação": "Observation",
     "variação de {variacao}%, sem cupom": "a {variacao}% currency move, no coupon",
     "Só a variação da moeda entre as duas datas, sem cupom e sem índice. Não há taxa "
     "para capitalizar, então contagem de dias e regime não se aplicam.":
@@ -1932,7 +2000,6 @@ TRADUCOES: Dict[str, str] = {
     "CDI projetado": "forecast CDI",
     "IPCA projetado": "forecast IPCA",
     "projeção mensal": "monthly forecast",
-    "NI de partida": "starting index number",
     "amortização": "amortisation",
     "quantidade": "quantity",
     "taxa da ponta ativa": "receiving-leg rate",

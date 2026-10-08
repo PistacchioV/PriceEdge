@@ -9,9 +9,9 @@ from datetime import date, timedelta
 from flask import (Blueprint, Response, jsonify, redirect, render_template,
                    request, url_for)
 
-from precificador import (b3, cambio, cdi, contagem, cotacoes, euribor, fontes,
-                          glossario, ipca, liquidacao, montador, rede, renda_fixa,
-                          sofr, term_sofr as term)
+from precificador import (anbima, b3, cambio, cdi, contagem, cotacoes, euribor,
+                          fontes, glossario, inflacao_implicita, ipca, liquidacao,
+                          montador, rede, renda_fixa, sofr, term_sofr as term)
 from precificador.calendario import (CALENDARIOS_DISPONIVEIS, CONVENCOES_DIA_UTIL,
                                      MODIFIED_FOLLOWING, calendario_anbima,
                                      obter_calendario, para_data, soma_meses)
@@ -968,6 +968,66 @@ def api_instrumentos(tipo: str):
     if tipo not in dict((t, n) for t, n, _ in cotacoes.TIPOS):
         return jsonify({"erro": f"tipo desconhecido: {tipo}"}), 404
     return jsonify({"instrumentos": cotacoes.instrumentos(tipo)})
+
+
+# --------------------------------------------------- inflação implícita ---
+
+@bp.route("/inflacao-implicita")
+def inflacao_implicita_pagina():
+    """Boletim de títulos públicos da ANBIMA e a inflação implícita das NTN-B.
+
+    A data é a do boletim — o mesmo "Consultar" da página da ANBIMA. Cada fonte
+    falha sozinha: sem a curva DI da B3, a tela continua com o boletim e com a
+    coluna contra o CDI; sem o CDI, continua com a curva. Só a falta do
+    boletim derruba a página, porque sem ele não há juro real para comparar.
+    """
+    referencia_txt = request.args.get("data") or servicos.data_sugerida().isoformat()
+    contexto = {
+        "form": {"data": referencia_txt}, "hoje": date.today().isoformat(),
+        "tipos": anbima.TIPOS, "grupos": {}, "linhas": [], "avisos": [],
+        "erro": None, "referencia": None, "vna": None, "cdi": None,
+        "curva_data": None, "pagina_anbima": anbima.PAGINA,
+        "series": [], "escala_x": [], "escala_y": [],
+    }
+    try:
+        referencia = para_data(referencia_txt)
+        titulos = anbima.baixar(referencia)
+    except (ErroDeFonte, ValueError) as exc:
+        contexto["erro"] = idiomas.mensagem(exc)
+        return render_template("inflacao_implicita.html", **contexto)
+
+    taxa_pre = None
+    try:
+        curva = servicos.curva("PRE", referencia.isoformat())
+        taxa_pre, contexto["curva_data"] = curva.taxa_para, referencia
+    except (ErroDeFonte, ValueError) as exc:
+        contexto["avisos"].append(idiomas.mensagem(exc))
+
+    cdi_do_dia = None
+    try:
+        fixings = [f for f in cdi.serie(referencia - timedelta(days=10), referencia)
+                   if f.data <= referencia]
+        if fixings:
+            cdi_do_dia = fixings[-1].taxa
+    except (ErroDeFonte, ValueError) as exc:
+        contexto["avisos"].append(idiomas.mensagem(exc))
+
+    linhas = inflacao_implicita.calcular(titulos, taxa_pre=taxa_pre, cdi=cdi_do_dia)
+    vna, _ = inflacao_implicita.vna_do_dia(linhas)
+    cores = servicos.CORES_IMPLICITA
+    contexto.update({
+        "referencia": referencia, "grupos": anbima.por_tipo(titulos),
+        "linhas": linhas, "vna": vna, "cdi": cdi_do_dia})
+    contexto.update(servicos.series_xy([
+        {"rotulo": "Pré DI no prazo", "cor": cores["pre"],
+         "pontos": [(l.duration_anos, l.pre) for l in linhas if l.pre is not None]},
+        {"rotulo": "Juro real NTN-B", "cor": cores["real"],
+         "pontos": [(l.duration_anos, l.juro_real) for l in linhas]},
+        {"rotulo": "Inflação implícita", "cor": cores["implicita"],
+         "pontos": [(l.duration_anos, l.implicita) for l in linhas
+                    if l.implicita is not None]},
+    ]))
+    return render_template("inflacao_implicita.html", **contexto)
 
 
 # --------------------------------------------------------------- liquidação

@@ -503,3 +503,48 @@ def contagens_lado_a_lado(inicio, fim, calendario: str = "ANBIMA") -> list:
             "fracao": contagem.fracao(codigo, inicio, fim, cal),
         })
     return linhas
+
+
+CORES_IMPLICITA = {"real": "#06b6d4", "pre": "#94a3b8", "implicita": "#f59e0b"}
+
+
+def series_xy(series, largura: int = 900, altura: int = 320,
+              margem_x: int = 52, margem_y: int = 34) -> dict:
+    """Várias séries num par de eixos numérico — x em anos, y em taxa decimal.
+
+    ``series`` é ``[{"rotulo", "cor", "pontos": [(x, y), ...]}]``. É o mesmo
+    formato de saída de ``series_sofr`` (caminho SVG por série, mais as duas
+    escalas), para o template do gráfico servir às duas telas; a diferença é
+    o eixo x, que aqui é numérico e não uma sequência de datas.
+    """
+    validas = [s for s in series if len(s["pontos"]) >= 2]
+    if not validas:
+        return {"series": [], "escala_x": [], "escala_y": []}
+    xs = [x for s in validas for x, _ in s["pontos"]]
+    ys = [y for s in validas for _, y in s["pontos"]]
+    x0, x1 = 0.0, max(xs) * 1.04
+    y0, y1 = min(ys), max(ys)
+    if y1 == y0:
+        y0, y1 = y0 - 0.001, y1 + 0.001
+    folga = (y1 - y0) * 0.12
+    y0, y1 = max(0.0, y0 - folga), y1 + folga
+
+    def px(x):
+        return margem_x + (x - x0) / (x1 - x0) * (largura - 2 * margem_x)
+
+    def py(y):
+        return altura - margem_y - (y - y0) / (y1 - y0) * (altura - 2 * margem_y)
+
+    saida = []
+    for s in validas:
+        pontos = sorted(s["pontos"])
+        saida.append({
+            "tenor": s["rotulo"], "cor": s["cor"],
+            "caminho": "M " + " L ".join(f"{px(x):.2f},{py(y):.2f}" for x, y in pontos),
+            "marcas": [{"x": round(px(x), 2), "y": round(py(y), 2)} for x, y in pontos]})
+    passo = max(1, round(x1 / 6))
+    escala_x = [{"x": px(a), "rotulo": f"{a:g}a"} for a in range(0, int(x1) + 1, passo)]
+    escala_y = [{"y": py(y0 + (y1 - y0) * i / 4),
+                 "rotulo": f"{(y0 + (y1 - y0) * i / 4) * 100:.2f}%".replace(".", ",")}
+                for i in range(5)]
+    return {"series": saida, "escala_x": escala_x, "escala_y": escala_y}
