@@ -3882,3 +3882,13 @@ def test_nocional_da_opcao_em_usd_por_padrao_ou_em_reais():
     em_usd = premio(dict(base, nocional="19.417.475,73", moeda_nocional="USD"))
     em_brl = premio(dict(base, nocional="100.000.000,00", moeda_nocional="BRL"))
     assert em_usd == em_brl
+
+
+def test_menu_superior_tem_swap_e_option_lado_a_lado():
+    from webapp import create_app
+    html = create_app().test_client().get("/?idioma=en").data.decode()
+    menu = re.findall(r'href="/(precificar|opcoes-fx)">(\w+)', html)
+    assert menu[:2] == [("precificar", "Swap"), ("opcoes-fx", "Option")]
+    pt = create_app().test_client().get("/?idioma=pt").data.decode()
+    assert re.findall(r'href="/(precificar|opcoes-fx)">(\w+)', pt)[:2] == \
+        [("precificar", "Swap"), ("opcoes-fx", "Opção")]
