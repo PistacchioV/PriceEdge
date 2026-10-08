@@ -1722,10 +1722,13 @@ TRADUCOES: Dict[str, str] = {
     "{instrumento} não tem símbolo de mercado no cadastro de {cadastro}":
         "{instrumento} has no market symbol registered under {cadastro}",
     "{fonte}: {motivo}": "{fonte}: {motivo}",
-    "{fonte} recusou por excesso de consultas (HTTP 429). O limite é por endereço "
-    "de rede e passa sozinho — tente de novo em alguns minutos.":
-        "{fonte} refused for too many requests (HTTP 429). The limit is per network "
-        "address and lifts on its own — try again in a few minutes.",
+    "{fonte} recusou o pedido (HTTP 429). Às vezes é limite de consultas e passa "
+    "em alguns minutos; quando persiste, é o endereço desta rede bloqueado pela "
+    "fonte — aí esperar não resolve, e o caminho é outra rede ou outra fonte.":
+        "{fonte} refused the request (HTTP 429). Sometimes it is a request limit "
+        "that lifts in a few minutes; when it persists, this network's address is "
+        "blocked by the source — waiting will not help then, and the way out is "
+        "another network or another source.",
     "curva {curva} sem vértices": "curve {curva} has no vertices",
     "{curva} é uma curva de preço a termo, não de taxa — não há fator de "
     "capitalização. Use taxa_para() para o preço.":

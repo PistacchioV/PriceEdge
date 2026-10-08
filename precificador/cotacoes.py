@@ -149,19 +149,22 @@ def _chave_de_data(linha: Sequence) -> datetime:
 def _buscar(url: str, parametros: dict, fonte: str) -> dict:
     """GET com JSON de volta, pela camada de rede do pacote.
 
-    O 429 ganha frase própria porque ele não é defeito nem bloqueio: é a fonte
-    limitando por IP, e a ação é esperar — diferente de um timeout, que manda
-    olhar a saída da rede. O Yahoo faz isso com endereço de datacenter e com
-    rede que sai por NAT compartilhado.
+    O 429 ganha frase própria porque ele não é defeito do pacote. Ele tem
+    duas leituras, e uma resposta só não diz qual é: limite de consultas, que
+    passa em minutos, ou o endereço da rede **bloqueado** pela fonte, que não
+    passa. A mensagem antiga só contava a primeira e mandava esperar — e nesta
+    estação o Yahoo respondeu 429 de setembro a outubro, até o `getcrumb`, com
+    qualquer User-Agent e com cookie de sessão. Ali esperar não resolvia.
     """
     try:
         return rede.obter_json(f"{url}?{urlencode(parametros)}", timeout=30)
     except rede.ErroRede as exc:
         if getattr(exc, "status", None) == 429:
             raise ErroCotacao(
-                "{fonte} recusou por excesso de consultas (HTTP 429). O limite é "
-                "por endereço de rede e passa sozinho — tente de novo em alguns "
-                "minutos.", fonte=fonte) from exc
+                "{fonte} recusou o pedido (HTTP 429). Às vezes é limite de consultas e passa "
+                "em alguns minutos; quando persiste, é o endereço desta rede bloqueado "
+                "pela fonte — aí esperar não resolve, e o caminho é outra rede ou outra "
+                "fonte.", fonte=fonte) from exc
         raise ErroCotacao("{fonte}: {motivo}", fonte=fonte, motivo=str(exc)) from exc
 
 
