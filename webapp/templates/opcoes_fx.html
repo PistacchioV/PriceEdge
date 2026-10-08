@@ -55,8 +55,13 @@
             <input class="campo" id="spot" name="spot" value="{{ form.spot }}" inputmode="decimal" data-formato="preco"/>
           </div>
           <div>
-            <label class="rotulo" for="nocional">{{ t("Nocional (US$)") }}</label>
-            <input class="campo" id="nocional" name="nocional" value="{{ form.nocional }}" inputmode="decimal" data-formato="moeda"/>
+            <label class="rotulo" for="nocional">{{ t("Nocional") }}</label>
+            <div class="flex gap-2">
+              <input class="campo min-w-0" id="nocional" name="nocional" value="{{ form.nocional }}" inputmode="decimal" data-formato="moeda"/>
+              <select class="campo w-24 shrink-0" name="moeda_nocional" aria-label="{{ t('Moeda do nocional') }}">
+                {% for m in ['USD', 'BRL'] %}<option value="{{ m }}" {{ 'selected' if (form.moeda_nocional or 'USD') == m }}>{{ m }}</option>{% endfor %}
+              </select>
+            </div>
           </div>
           <div>
             <label class="rotulo" for="taxa_dom">{{ t("CDI / pré (% a.a. 252)") }}</label>

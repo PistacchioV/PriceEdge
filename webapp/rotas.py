@@ -1457,7 +1457,7 @@ def _form_opcao(modelo: str) -> dict:
     form = {
         "modelo": modelo, "inicio": hoje.isoformat(),
         "vencimento": soma_meses(hoje, 12).isoformat(),
-        "spot": "5,15", "nocional": "20.000.000,00",
+        "spot": "5,15", "nocional": "20.000.000,00", "moeda_nocional": "USD",
         "taxa_dom": "", "taxa_est": "", "vol": "15,00", "fonte_vol": "unica",
         "smile": _SMILE_PADRAO, "spread": "", "fee": "",
     }
@@ -1520,7 +1520,10 @@ def _precificar_opcao(form) -> dict:
     r_d = opcoes_fx.r_d_continua(taxa_dom)
     r_f = opcoes_fx.r_f_continua(taxa_est, dc)
 
-    quantidade = servicos.numero_do_form(form, "nocional", "nocional")   # em dólares
+    # o nocional vem em dólar por padrão; em reais, vira dólar pelo spot
+    nocional = servicos.numero_do_form(form, "nocional", "nocional")
+    em_reais = (form.get("moeda_nocional") or "USD") == "BRL"
+    quantidade = nocional / spot if em_reais else nocional              # em dólares
 
     smile = None
     usar_smile = form.get("fonte_vol") == "smile"

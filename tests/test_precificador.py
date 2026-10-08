@@ -3865,3 +3865,20 @@ def test_interpolacao_recusa_data_antes_da_base():
     dados = dict(FORMULARIOS["/interpolar"], datas=["2026-10-01"])
     pagina = create_app().test_client().post("/interpolar", data=dados).data.decode()
     assert "não é posterior à data-base" in pagina
+
+
+def test_nocional_da_opcao_em_usd_por_padrao_ou_em_reais():
+    """USD é o padrão; em BRL o nocional vira dólar pelo spot e o prêmio é o mesmo."""
+    from webapp import create_app
+    cliente = create_app().test_client()
+    pagina = cliente.get("/opcoes-fx").data.decode()
+    assert re.search(r'<option value="USD"\s+selected', pagina)
+
+    def premio(dados):
+        html = cliente.post("/opcoes-fx", data=dados).data.decode()
+        return re.search(r"Prêmio líquido</p>\s*<p[^>]*>R\$ ([\d.,]+)", html).group(1)
+
+    base = dict(FORMULARIOS["/opcoes-fx"], resolver_strike="", strike1="5,80")
+    em_usd = premio(dict(base, nocional="19.417.475,73", moeda_nocional="USD"))
+    em_brl = premio(dict(base, nocional="100.000.000,00", moeda_nocional="BRL"))
+    assert em_usd == em_brl

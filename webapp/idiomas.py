@@ -1344,6 +1344,7 @@ TRADUCOES: Dict[str, str] = {
     'informe pelo menos uma data a interpolar': 'enter at least one date to interpolate',
     'a data {data} não é posterior à data-base': 'the date {data} is not after the base date',
     # ---- opções de câmbio (Garman-Kohlhagen)
+    'Moeda do nocional': 'Notional currency',
     'Precificar a opção': 'Price the option',
     'Estruturas': 'Structures',
     'Collar': 'Collar',
