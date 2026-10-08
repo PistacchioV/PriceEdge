@@ -1568,6 +1568,14 @@ TRADUCOES: Dict[str, str] = {
     "De": "From",
     "Até": "To",
     "Buscar": "Search",
+    "Busque pelo código, pelo símbolo ou pelo nome — \"soja\", \"ZL\", \"BO\". Em "
+    "commodities, as famílias aceitam o vencimento: BO + mês + ano, como BOF6 para "
+    "janeiro de 2026 (F jan · G fev · H mar · J abr · K mai · M jun · N jul · Q ago "
+    "· U set · V out · X nov · Z dez).":
+        "Search by code, symbol or name — \"soja\", \"ZL\", \"BO\". In commodities, "
+        "the families take a contract month: BO + month + year, as in BOF6 for "
+        "January 2026 (F Jan · G Feb · H Mar · J Apr · K May · M Jun · N Jul · Q Aug "
+        "· U Sep · V Oct · X Nov · Z Dec).",
     "O símbolo cadastrado aparece ao lado do código. Em commodities, o código do "
     "vencimento é resolvido pelo padrão mesmo fora da lista.":
         "The registered symbol shows next to the code. In commodities, a contract "

@@ -22,7 +22,7 @@
         <div>
           <label class="rotulo" for="tipo">{{ t("Tipo") }}</label>
           <select class="campo" id="tipo" name="tipo"
-                  data-instrumentos="{{ instrumentos | tojson | forceescape }}">
+                  data-catalogos="{{ catalogos | tojson | forceescape }}">
             {% for codigo, nome, _ in tipos %}
             <option value="{{ codigo }}" {{ 'selected' if form.tipo == codigo }}>{{ t(nome) }}</option>
             {% endfor %}
@@ -30,15 +30,14 @@
         </div>
         <div>
           <label class="rotulo" for="instrumento">{{ t("Instrumento") }}</label>
-          {# lista + campo livre: o cadastro cobre o que é literal, e o código de
-             vencimento (BOK6) é resolvido pelo padrão sem estar na lista #}
-          <input class="campo" id="instrumento" name="instrumento" list="lista-instrumentos"
-                 value="{{ form.instrumento }}" autocomplete="off" required/>
-          <datalist id="lista-instrumentos">
-            {% for codigo, simbolo in instrumentos.get(form.tipo, []) %}
-            <option value="{{ codigo }}">{{ simbolo }}</option>
-            {% endfor %}
-          </datalist>
+          {# Busca própria em vez de <datalist>: o nativo mostrava só os
+             códigos literais (7 dos 17 de commodities), não buscava por nome e
+             abria um popup branco fora do design system. O campo continua
+             livre — sem o script, digitar BOF6 e buscar funciona igual. #}
+          <input class="campo" id="instrumento" name="instrumento"
+                 value="{{ form.instrumento }}" autocomplete="off" spellcheck="false"
+                 role="combobox" aria-autocomplete="list" aria-expanded="false"
+                 aria-controls="lista-instrumentos" required/>
         </div>
         <div>
           <label class="rotulo" for="inicio">{{ t("De") }}</label>
@@ -52,7 +51,7 @@
         <div>{{ botao(t('Buscar'), 'solar:magnifer-linear') }}</div>
       </div>
       <p class="mt-4 text-xs leading-5 text-slate-600 font-geist">
-        {{ t("O símbolo cadastrado aparece ao lado do código. Em commodities, o código do vencimento é resolvido pelo padrão mesmo fora da lista.") }}
+        {{ t("Busque pelo código, pelo símbolo ou pelo nome — \"soja\", \"ZL\", \"BO\". Em commodities, as famílias aceitam o vencimento: BO + mês + ano, como BOF6 para janeiro de 2026 (F jan · G fev · H mar · J abr · K mai · M jun · N jul · Q ago · U set · V out · X nov · Z dez).") }}
       </p>
     </form>
 

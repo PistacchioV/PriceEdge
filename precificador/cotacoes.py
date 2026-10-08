@@ -408,6 +408,66 @@ def instrumentos(tipo: str) -> List[List[str]]:
     return [[codigo, simbolo(codigo)] for _, codigo in sorted(vistos.items())]
 
 
+def _nome_e_detalhe(notas) -> Tuple[str, str]:
+    """``'OLEO DE SOJA — Soybean Oil (CBOT)'`` → ``('OLEO DE SOJA', 'Soybean Oil (CBOT)')``."""
+    texto = " ".join(str(notas or "").split())
+    nome, _, detalhe = texto.partition(" — ")
+    # só a primeira frase: o resto das notas é comentário de quem mantém o
+    # cadastro ("Linha LITERAL: vence o padrão…"), não descrição do ativo
+    detalhe = detalhe.split(". ")[0].rstrip(".")
+    return nome.strip(), detalhe.strip()
+
+
+def _proximo_vencimento(hoje: Optional[date] = None) -> str:
+    """Letra do mês seguinte + último dígito do ano: em outubro de 2026, ``X6``."""
+    d = hoje or date.today()
+    mes = d.month % 12                     # índice 0-based do mês seguinte
+    ano = d.year + (1 if d.month == 12 else 0)
+    return _LETRAS_DE_MES[mes] + str(ano % 10)
+
+
+def catalogo(tipo: str, hoje: Optional[date] = None) -> List[dict]:
+    """Tudo o que a busca da tela pode oferecer, literais **e** famílias.
+
+    ``instrumentos`` deixa de fora as linhas de padrão, e com razão para o que
+    ela é — uma lista de códigos que a busca literal resolve. Mas a tela que só
+    lia dela não mostrava nenhuma família de vencimento: dos 17 itens do
+    cadastro de commodities, mostrava 7, e o algodão, o açúcar e o DF, que não
+    têm linha literal nenhuma, nem apareciam. Quem não sabia que ``BOF6`` existia
+    não tinha como descobrir.
+
+    A família vai como **família**: o código é o prefixo (``BO``), e um exemplo
+    já resolvido (``BOX6 → ZLX26.CBT``) mostra a forma do código que ela aceita.
+    """
+    if tipo == PTAX:
+        return [{"codigo": m, "simbolo": m, "nome": m, "detalhe": "",
+                 "familia": False} for m in MOEDAS_PTAX]
+
+    linhas = carregar_cadastro(tipo)
+    simbolo = busca_de_simbolo(linhas)
+    vencimento = _proximo_vencimento(hoje)
+    itens: Dict[str, dict] = {}
+    for linha in linhas or []:
+        rotulo = " ".join(str(linha.get("LABEL") or "").split())
+        if not rotulo or not str(linha.get("SYMBOL") or "").strip():
+            continue
+        nome, detalhe = _nome_e_detalhe(linha.get("NOTES"))
+        if tem_padrao(rotulo):
+            cabeca, _ = partir_padrao(rotulo)
+            prefixo = cabeca.strip()
+            exemplo = f"{prefixo}{vencimento}" if len(prefixo) > 1 else f"{prefixo} {vencimento}"
+            itens.setdefault("~" + prefixo.upper(), {
+                "codigo": prefixo, "exemplo": exemplo, "simbolo": simbolo(exemplo),
+                "nome": nome, "detalhe": detalhe, "familia": True})
+        else:
+            itens.setdefault(rotulo.upper(), {
+                "codigo": rotulo, "simbolo": simbolo(rotulo), "nome": nome,
+                "detalhe": detalhe, "familia": False})
+    # literais em ordem alfabética, cada família logo depois dos seus literais
+    return sorted(itens.values(),
+                  key=lambda i: (_sem_espaco(i["codigo"]).upper(), i["familia"]))
+
+
 def historico(tipo: str, instrumento: str, inicio, fim) -> dict:
     """A busca de qualquer um dos três tipos, pela mesma porta.
 

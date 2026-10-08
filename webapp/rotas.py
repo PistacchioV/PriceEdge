@@ -896,7 +896,10 @@ def cotacoes_pagina():
             "fim": hoje.isoformat(),
         },
         "tipos": cotacoes.TIPOS,
-        "instrumentos": {t: cotacoes.instrumentos(t) for t, *_ in cotacoes.TIPOS},
+        # o catálogo inteiro — famílias de vencimento inclusive — viaja para a
+        # busca da tela: são ~500 itens, e uma ida ao servidor a cada tecla
+        # deixaria a lista piscando enquanto ela não volta
+        "catalogos": {t: cotacoes.catalogo(t) for t, *_ in cotacoes.TIPOS},
         "hoje": hoje.isoformat(),
         "resultado": None, "erro": None,
     }
@@ -940,6 +943,23 @@ def cotacoes_csv():
     nome = f"cotacoes_{dados['simbolo'].replace('=', '').replace('.', '_')}.csv"
     return Response(buffer.getvalue(), content_type="text/csv; charset=utf-8",
                     headers={"Content-Disposition": f'attachment; filename="{nome}"'})
+
+
+@bp.route("/api/cotacoes/simbolo")
+def api_simbolo():
+    """O símbolo de um código digitado — ``BOF6`` → ``ZLF26.CBT``.
+
+    A busca da tela pergunta aqui em vez de resolver sozinha: a regra das
+    famílias (miolo tem de ser mês+ano, prefixo mais longo vence, ano de dois
+    dígitos) mora no pacote, e uma cópia em JavaScript seria uma segunda verdade
+    para a mesma pergunta. Código sem correspondência volta com símbolo vazio.
+    """
+    tipo = request.args.get("tipo") or ""
+    if tipo not in dict((t, n) for t, n, _ in cotacoes.TIPOS):
+        return jsonify({"erro": f"tipo desconhecido: {tipo}"}), 404
+    codigo = request.args.get("codigo") or ""
+    simbolo = codigo.strip().upper() if tipo == cotacoes.PTAX else cotacoes.simbolo_de(tipo, codigo)
+    return jsonify({"codigo": codigo, "simbolo": simbolo or ""})
 
 
 @bp.route("/api/cotacoes/instrumentos/<tipo>")

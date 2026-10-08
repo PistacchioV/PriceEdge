@@ -212,3 +212,26 @@ html[data-tema="claro"] *::selection {
     background: rgba(14, 116, 144, 0.20) !important;
     color: #0f172a !important;
 }
+
+/* ------------------------------------------------ busca de instrumento */
+html[data-tema="claro"] .combo-lista {
+  border-color: rgba(15, 23, 42, 0.12);
+  background: #ffffff;
+  box-shadow: 0 22px 60px rgba(15, 23, 42, 0.14);
+}
+html[data-tema="claro"] .combo-item:hover,
+html[data-tema="claro"] .combo-item.ativo { background: rgba(14, 116, 144, 0.07); }
+html[data-tema="claro"] .combo-codigo { color: #0f172a; }
+html[data-tema="claro"] .combo-simbolo { color: #0e7490; }
+html[data-tema="claro"] .combo-nome { color: #64748b; }
+html[data-tema="claro"] .combo-selo {
+  border-color: rgba(14, 116, 144, 0.25);
+  background: rgba(14, 116, 144, 0.07);
+  color: #0e7490;
+}
+html[data-tema="claro"] .combo-selo-ok {
+  border-color: rgba(5, 150, 105, 0.3);
+  background: rgba(5, 150, 105, 0.08);
+  color: #047857;
+}
+html[data-tema="claro"] .combo-aviso { color: #475569; }

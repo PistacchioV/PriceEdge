@@ -197,3 +197,52 @@ select.campo option { background: #0b1220; color: #e2e8f0; }
   transition: color 150ms ease;
 }
 .campo-data-rodape button:hover { color: #a5f3fc; }
+
+/* ------------------------------------------------ busca de instrumento
+   A lista mora no <body>, fixa — mesma razão do calendário: dentro do cartão
+   do formulário, o backdrop-blur prende o z-index e o rodapé passa por cima. */
+.combo-lista {
+  position: fixed;
+  z-index: 70;
+  margin: 0;
+  padding: 0.35rem;
+  list-style: none;
+  overflow-y: auto;
+  border-radius: 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(11, 18, 32, 0.98);
+  box-shadow: 0 22px 60px rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(18px);
+}
+.combo-item {
+  cursor: pointer;
+  border-radius: 0.65rem;
+  padding: 0.5rem 0.7rem;
+  transition: background 120ms ease;
+}
+.combo-item:hover, .combo-item.ativo { background: rgba(255, 255, 255, 0.07); }
+.combo-linha { display: flex; align-items: center; gap: 0.6rem; }
+.combo-codigo { font-size: 0.875rem; font-weight: 600; color: #f1f5f9; white-space: pre; }
+.combo-simbolo {
+  margin-left: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.75rem;
+  color: #a5f3fc;
+  white-space: nowrap;
+}
+.combo-nome { margin-top: 0.1rem; font-size: 0.72rem; color: #64748b; }
+.combo-selo {
+  border-radius: 999px;
+  border: 1px solid rgba(165, 243, 252, 0.2);
+  background: rgba(103, 232, 249, 0.08);
+  padding: 0.05rem 0.45rem;
+  font-size: 0.65rem;
+  color: #a5f3fc;
+  white-space: nowrap;
+}
+.combo-selo-ok {
+  border-color: rgba(110, 231, 183, 0.25);
+  background: rgba(52, 211, 153, 0.1);
+  color: #a7f3d0;
+}
+.combo-aviso { padding: 0.55rem 0.7rem; font-size: 0.75rem; line-height: 1.4; color: #94a3b8; }

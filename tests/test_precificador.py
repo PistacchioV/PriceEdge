@@ -2907,6 +2907,75 @@ def test_o_script_da_liquidacao_encontra_os_campos_que_procura():
         assert f'id="{campo}"' in pagina, f"{campo} não está na tela"
 
 
+def test_a_busca_de_cotacoes_oferece_o_cadastro_inteiro():
+    """Famílias de vencimento entram na busca — antes, 7 dos 17 itens apareciam.
+
+    O <datalist> lia ``instrumentos``, que deixa as linhas de padrão de fora.
+    Resultado: nenhuma família de vencimento aparecia, e algodão, açúcar e DF,
+    que só existem como família, sumiam por completo. Quem não sabia que BOF6
+    existia não tinha como descobrir.
+    """
+    import json
+    from datetime import date
+    from pathlib import Path
+    from precificador import cotacoes as c
+
+    bruto = json.loads((Path(c.PASTA) / "cotacoes_commodities.json").read_text(encoding="utf-8"))
+    itens = c.catalogo(c.COMMODITIES, date(2026, 10, 8))
+    assert len(itens) == len(bruto)
+
+    familias = {i["codigo"]: i for i in itens if i["familia"]}
+    for so_familia in ("CT", "SB", "DF"):
+        assert so_familia in familias, f"{so_familia} sumiu da busca"
+
+    # a família mostra a forma do código que aceita, já resolvida — em outubro,
+    # o próximo vencimento é novembro (X)
+    assert familias["BO"]["exemplo"] == "BOX6"
+    assert familias["BO"]["simbolo"] == "ZLX26.CBT"
+    # e o nome vem sem a nota de quem mantém o cadastro
+    literal = next(i for i in itens if i["codigo"] == "BO1")
+    assert "LITERAL" not in literal["detalhe"]
+
+
+def test_o_endereco_de_simbolo_resolve_o_vencimento_digitado():
+    """BOF6 → ZLF26.CBT pelo servidor, que é quem tem a regra das famílias."""
+    from webapp import create_app
+    cliente = create_app().test_client()
+
+    def simbolo(codigo, tipo="commodities"):
+        r = cliente.get("/api/cotacoes/simbolo", query_string={"tipo": tipo, "codigo": codigo})
+        assert r.status_code == 200
+        return r.get_json()["simbolo"]
+
+    assert simbolo("BOF6") == "ZLF26.CBT"
+    assert simbolo("C K6") == "ZCK26.CBT" and simbolo("CK6") == "ZCK26.CBT"
+    # o miolo tem de ser mês + ano: sem isso o prefixo C do milho pegaria o
+    # cacau (CCZ6) e devolveria o símbolo da mercadoria errada
+    assert simbolo("CCZ6") == "CCZ26.NYB"
+    assert simbolo("BO9") == ""
+    assert simbolo("usd", tipo="ptax") == "USD"
+    assert cliente.get("/api/cotacoes/simbolo",
+                       query_string={"tipo": "xyz", "codigo": "a"}).status_code == 404
+
+
+def test_o_script_de_cotacoes_encontra_o_que_procura():
+    """Id errado num getElementById falha calado — a busca simplesmente não abre."""
+    from pathlib import Path
+    from webapp import create_app
+
+    script = (Path(__file__).resolve().parent.parent / "webapp" / "static" / "js"
+              / "cotacoes.js").read_text(encoding="utf-8")
+    pagina = create_app().test_client().get("/cotacoes").data.decode()
+    for campo in re.findall(r'getElementById\("(\w+)"\)', script):
+        assert f'id="{campo}"' in pagina, f"{campo} não está na tela"
+    for atributo in re.findall(r'getAttribute\("(data-[\w-]+)"\)', script):
+        if f'{atributo}="' in script:
+            continue                  # o script escreve esse nos itens que ele cria
+        assert atributo in pagina, f"{atributo} não está na tela"
+    # a lista é do script, no <body> — e não um <datalist> nativo na página
+    assert "<datalist" not in pagina
+
+
 def test_o_calendario_nao_fecha_ao_trocar_de_mes():
     """A seta de mês redesenha o painel, e o botão clicado sai do DOM.
 
