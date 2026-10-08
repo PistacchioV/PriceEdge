@@ -26,6 +26,82 @@ TRADUCOES: Dict[str, str] = {
 
     # ANBIMA Datasets
     "ANBIMA Datasets": "ANBIMA Datasets",
+    "ANBIMA Data": "ANBIMA Data",
+    "Datasets da ANBIMA, salvos aqui.": "ANBIMA datasets, saved here.",
+    "Cada dataset entra pela porta que tem: arquivo aberto por data, arquivo publicado "
+    "no ANBIMA Data, ou o arquivo que você baixa lá e solta aqui. Tudo o que entra fica "
+    "salvo nesta máquina, e o histórico passa da janela curta que a ANBIMA mantém.":
+        "Each dataset comes in through the door it has: an open file per date, a file "
+        "published on ANBIMA Data, or the file you download there and drop here. "
+        "Everything that comes in is saved on this machine, and the history outlives "
+        "the short window ANBIMA keeps.",
+    "Puxados direto": "Pulled directly",
+    "Importar do ANBIMA Data": "Import from ANBIMA Data",
+    "importar do ANBIMA Data": "import from ANBIMA Data",
+    "restrito — importar como associado": "restricted — import as a member",
+    "Consultar e salvar": "Look up and save",
+    "Arquivo aberto da ANBIMA, um por data. Ela mantém algumas semanas; o que você "
+    "consulta fica salvo aqui e não some.":
+        "ANBIMA open file, one per date. It keeps a few weeks; whatever you look up is "
+        "saved here and does not go away.",
+    "Versão publicada no ANBIMA Data": "Version published on ANBIMA Data",
+    "Baixar e salvar": "Download and save",
+    "É uma fotografia da base, não uma série diária: a data é a da publicação, e ela "
+    "pode ter meses. O arquivo tem vários megabytes.":
+        "It is a snapshot of the database, not a daily series: the date is the "
+        "publication date, and it may be months old. The file is several megabytes.",
+    "Abra o dataset no ANBIMA Data": "Open the dataset on ANBIMA Data",
+    "e baixe o arquivo pelo botão de download da própria página.":
+        "and download the file with the page's own download button.",
+    "Restrito: entre com o seu login de associado.": "Restricted: sign in with your member login.",
+    "Solte o arquivo abaixo, com a data a que ele se refere.":
+        "Drop the file below, with the date it refers to.",
+    "Arquivo (.xlsx, .csv, .tsv)": "File (.xlsx, .csv, .tsv)",
+    "Importar e salvar": "Import and save",
+    "O ANBIMA Data não se lê por fora: os números vêm com um token que a própria página "
+    "gera, protegido por reCAPTCHA. Por isso este passo é seu, no navegador — o "
+    "PriceEdge lê, salva e mostra o arquivo.":
+        "ANBIMA Data cannot be read from outside: the numbers come with a token the page "
+        "itself generates, protected by reCAPTCHA. That is why this step is yours, in "
+        "the browser — PriceEdge reads, saves and shows the file.",
+    "Salvos nesta máquina": "Saved on this machine",
+    "Abrir não usa rede: a cópia é a que foi baixada.":
+        "Opening does not use the network: the copy is the one that was downloaded.",
+    "Origem": "Source",
+    "Arquivo": "File",
+    "Tamanho": "Size",
+    "Salvo em": "Saved at",
+    "Abrir": "Open",
+    "arquivo diário": "daily file",
+    "importado": "imported",
+    "salvo nesta máquina": "saved on this machine",
+    "mostrando": "showing",
+    "Filtrar por qualquer coluna — código, emissor, CNPJ… e Enter":
+        "Filter by any column — code, issuer, CNPJ… and Enter",
+    "Valores como a ANBIMA os publica. A tela desenha até 2.000 linhas — filtre, ou "
+    "baixe o CSV, que leva todas.":
+        "Values as ANBIMA publishes them. The screen draws up to 2,000 rows — filter, "
+        "or download the CSV, which carries them all.",
+    "Composição da Carteira Diária - IHFA (público)": "Daily Portfolio Composition - IHFA (public)",
+    "Composição diária do IHFA nos últimos cinco dias úteis.":
+        "IHFA daily composition over the last five business days.",
+    "Resumo do IHFA (público)": "IHFA Summary (public)",
+    "Histórico de resultados diários do IHFA.": "History of IHFA daily results.",
+    "não há {nome} salvo para {data}": "there is no {nome} saved for {data}",
+    "escolha o arquivo baixado do ANBIMA Data": "choose the file downloaded from ANBIMA Data",
+    "{arquivo}: use .xlsx, .csv, .tsv ou o .txt da ANBIMA — o .xls antigo precisa ser "
+    "salvo de novo como .xlsx.":
+        "{arquivo}: use .xlsx, .csv, .tsv or ANBIMA's .txt — an old .xls needs to be "
+        "saved again as .xlsx.",
+    "{arquivo} não tem linhas de dados": "{arquivo} has no data rows",
+    "{nome} não tem arquivo público publicado no ANBIMA Data.":
+        "{nome} has no public file published on ANBIMA Data.",
+    "o ANBIMA Data não tem arquivo publicado para {nome}":
+        "ANBIMA Data has no file published for {nome}",
+    "{nome} não tem arquivo aberto por data na ANBIMA — ele só se consulta no ANBIMA "
+    "Data.":
+        "{nome} has no open per-date file at ANBIMA — it can only be looked up on "
+        "ANBIMA Data.",
     "Datasets da ANBIMA, por data.": "ANBIMA datasets, by date.",
     "Os datasets que a ANBIMA publica como arquivo aberto, com os mesmos números do "
     "ANBIMA Data. Os demais aparecem no catálogo abaixo, com o motivo de não virem "

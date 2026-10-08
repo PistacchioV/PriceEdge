@@ -3039,15 +3039,19 @@ def test_o_leitor_de_datasets_le_o_boletim_como_ele_veio():
 
 
 def test_o_catalogo_de_datasets_so_promete_o_que_tem_arquivo():
-    """Um dataset "puxado aqui" precisa saber baixar; os outros, dizer por que não."""
+    """"Puxado aqui" precisa saber baixar; o resto entra por importação."""
     from datetime import date
     from precificador import anbima_datasets as A
 
-    assert [d.slug for d in A.DISPONIVEIS] == [
-        "titulos-publicos-precificacao-anbima", "data-debentures-precificacao-anbima"]
+    assert [(d.slug, d.fonte) for d in A.DISPONIVEIS] == [
+        ("titulos-publicos-precificacao-anbima", A.DIARIO),
+        ("data-debentures-precificacao-anbima", A.DIARIO),
+        ("fundos-175-caracteristicas-publico", A.CMS_PUBLICO),
+        ("fundos-175-dados-periodicos-publico", A.CMS_PUBLICO)]
     for d in A.DISPONIVEIS:
-        assert "{data:%y%m%d}" in d.arquivo
-    # o endereço de cada um é o do ANBIMA Data
+        assert d.acesso == A.PUBLICO
+        if d.fonte == A.DIARIO:
+            assert "{data:%y%m%d}" in d.arquivo
     assert all(d.endereco.startswith(A.PAGINA_DATASETS + "/") for d in A.CATALOGO)
 
     sem_arquivo = next(d for d in A.CATALOGO if not d.disponivel)
@@ -3056,13 +3060,84 @@ def test_o_catalogo_de_datasets_so_promete_o_que_tem_arquivo():
     assert "ANBIMA Data" in str(erro.value)
 
 
-def test_o_csv_do_dataset_abre_no_excel_em_portugues(monkeypatch):
+def test_o_cms_nunca_baixa_dataset_restrito(monkeypatch):
+    """O CMS guarda os restritos com endereço acessível — e isso não é permissão.
+
+    As versões restritas dos Fundos 175 estão no mesmo CMS público que as
+    abertas. A porta CMS só serve a dataset público, e mesmo que o CMS devolva
+    um registro marcado ``isRestricted`` ele é ignorado.
+    """
+    from precificador import anbima_datasets as A, rede
+
+    resposta = {"data": [
+        {"attributes": {"slug": "fundos-175-caracteristicas-publico", "isRestricted": True,
+                        "attachment": {"file": {"data": [{"attributes": {
+                            "url": "/uploads/restrito.xlsx", "name": "restrito.xlsx"}}]}}}},
+        {"attributes": {"slug": "fundos-175-caracteristicas-publico", "isRestricted": False,
+                        "updatedAt": "2025-12-29T12:44:16Z",
+                        "attachment": {"display_date": "2024-12-18T03:00:00Z",
+                                       "file": {"data": [{"attributes": {
+                            "url": "/uploads/publico.xlsx", "name": "publico.xlsx"}}]}}}},
+    ]}
+    monkeypatch.setattr(rede, "obter_json", lambda url, **k: resposta)
+    versao = A.versao_publicada("fundos-175-caracteristicas-publico")
+    assert versao["url"].endswith("/uploads/publico.xlsx")
+    # a data é a mais recente das duas: a de exibição ficou para trás
+    assert versao["data"].isoformat() == "2025-12-29"
+
+    # e não há dataset restrito com porta CMS no catálogo
+    assert not [d for d in A.CATALOGO if d.fonte == A.CMS_PUBLICO and d.acesso != A.PUBLICO]
+
+
+def test_o_que_entra_fica_salvo_e_reabre_sem_rede(monkeypatch, tmp_path):
+    """Consulta diária e importação gravam o arquivo; abrir não chama a rede."""
+    from datetime import date
+    from pathlib import Path
+    from precificador import anbima_datasets as A, rede
+
+    monkeypatch.setattr(A, "PASTA", tmp_path)
+    bruto = (Path(__file__).resolve().parent / "anbima_ms261007.txt").read_bytes()
+    monkeypatch.setattr(rede, "obter", lambda url, **k: bruto)
+
+    A.baixar("titulos-publicos-precificacao-anbima", date(2026, 10, 7))
+    monkeypatch.setattr(rede, "obter", lambda *a, **k: pytest.fail("abrir não usa rede"))
+    tabela = A.abrir("titulos-publicos-precificacao-anbima", date(2026, 10, 7))
+    assert len(tabela.linhas) == 50
+
+    # importação: o arquivo que a pessoa baixou no ANBIMA Data
+    csv_bytes = "Código;Emissor;Taxa\nCRA01;Fulano S.A.;6,5\nCRI02;Beltrano;7,1\n".encode()
+    salvo = A.importar("cris-cras-precificacao-anbima", date(2026, 10, 6), "cri.csv", csv_bytes)
+    assert salvo.origem == A.IMPORTACAO and salvo.arquivo.exists()
+    tabela = A.abrir("cris-cras-precificacao-anbima", date(2026, 10, 6))
+    assert tabela.colunas == ["Código", "Emissor", "Taxa"]
+    assert tabela.linhas[1] == ["CRI02", "Beltrano", "7,1"]
+
+    # arquivo que não abre não vira "salvo"
+    with pytest.raises(A.ErroDataset):
+        A.importar("cris-cras-precificacao-anbima", date(2026, 10, 5), "x.xls", b"\xd0\xcf")
+    assert [s.referencia for s in A.salvos("cris-cras-precificacao-anbima")] == [date(2026, 10, 6)]
+
+
+def test_a_base_local_de_datasets_nao_entra_no_git():
+    """O repositório é público, e dado de terceiro — às vezes restrito — não sai daqui."""
+    import subprocess
+    from pathlib import Path
+    from precificador import anbima_datasets as A
+
+    raiz = Path(__file__).resolve().parent.parent
+    alvo = (A.PASTA / "qualquer-dataset" / "2026-10-07.xlsx").relative_to(raiz)
+    r = subprocess.run(["git", "check-ignore", str(alvo)], cwd=raiz, capture_output=True)
+    assert r.returncode == 0, f"{alvo} não está no .gitignore"
+
+
+def test_o_csv_do_dataset_abre_no_excel_em_portugues(monkeypatch, tmp_path):
     """Separador ``;`` e BOM: sem o BOM o Excel lê UTF-8 como latin-1."""
     from datetime import date
     from pathlib import Path
     from precificador import anbima_datasets as A
     from webapp import create_app
 
+    monkeypatch.setattr(A, "PASTA", tmp_path)
     bruto = (Path(__file__).resolve().parent / "anbima_ms261007.txt").read_bytes()
     colunas, linhas = A.ler(bruto.decode("latin-1"))
     monkeypatch.setattr(A, "baixar", lambda slug, ref, **k: A.Tabela(
@@ -3074,6 +3149,28 @@ def test_o_csv_do_dataset_abre_no_excel_em_portugues(monkeypatch):
     texto = r.data.decode("utf-8")
     assert texto.startswith("\ufeffTitulo;Data Referencia;")
     assert "20261007.csv" in r.headers["Content-Disposition"]
+
+
+def test_o_titulo_da_aba_passa_pela_traducao():
+    """O título da aba é texto de tela como qualquer outro.
+
+    Cinco telas o tinham fixo em português ("Curvas B3", "Metodologia"…), e a
+    aba do navegador continuava em português com a tela inteira em inglês. Só
+    nome próprio — igual nos dois idiomas — fica sem ``t()``.
+    """
+    from pathlib import Path
+    nomes_proprios = {"ANBIMA Datasets", "EURIBOR", "NDF", "SOFR Index", "Term SOFR"}
+    pasta = Path(__file__).resolve().parent.parent / "webapp" / "templates"
+    soltos = []
+    for arquivo in sorted(pasta.glob("*.html")):
+        achado = re.search(r"{% block titulo %}(.*?){% endblock %}", arquivo.read_text(
+            encoding="utf-8"))
+        if not achado:
+            continue
+        titulo = achado.group(1).strip()
+        if "t(" not in titulo and titulo not in nomes_proprios:
+            soltos.append(f"{arquivo.name}: {titulo}")
+    assert not soltos, f"título de aba sem tradução: {soltos}"
 
 
 def test_nenhuma_chave_de_traducao_tem_dois_sentidos():

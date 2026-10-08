@@ -1033,40 +1033,97 @@ def inflacao_implicita_pagina():
 
 # ------------------------------------------------------ ANBIMA datasets ---
 
-def _dataset_do_pedido():
-    slug = request.args.get("dataset") or anbima_datasets.DISPONIVEIS[0].slug
-    referencia = request.args.get("data") or servicos.data_sugerida().isoformat()
-    return slug, referencia
+LIMITE_DE_LINHAS = 2000        # o que a tela desenha; o CSV leva tudo
+
+
+def _filtrar(tabela, termo: str):
+    termo = (termo or "").strip().upper()
+    if not termo:
+        return tabela.linhas
+    return [l for l in tabela.linhas if termo in " ".join(l).upper()]
 
 
 @bp.route("/anbima-datasets")
 def anbima_datasets_pagina():
-    """Os datasets do ANBIMA Data que têm arquivo aberto, por data.
+    """Os datasets do ANBIMA Data, cada um pela porta que tem, salvos localmente.
 
-    Abre com o formulário preenchido mas sem buscar: o arquivo de debêntures
-    tem mais de mil linhas, e baixá-lo a cada visita à tela seria pagar por
-    uma consulta que ninguém pediu.
+    ``data`` consulta um dataset diário (e salva); ``ver`` abre uma data já
+    salva, sem rede. Sem nenhum dos dois, a tela abre sem buscar: o arquivo de
+    fundos tem 8 MB, e baixá-lo a cada visita seria pagar por uma consulta que
+    ninguém pediu.
     """
-    slug, referencia = _dataset_do_pedido()
+    slug = request.args.get("dataset") or anbima_datasets.DISPONIVEIS[0].slug
     contexto = {
-        "form": {"dataset": slug, "data": referencia}, "hoje": date.today().isoformat(),
-        "disponiveis": anbima_datasets.DISPONIVEIS, "catalogo": anbima_datasets.CATALOGO,
+        "form": {"dataset": slug, "data": request.args.get("data")
+                 or servicos.data_sugerida().isoformat(),
+                 "filtro": request.args.get("filtro") or ""},
+        "hoje": date.today().isoformat(), "catalogo": anbima_datasets.CATALOGO,
         "pagina_datasets": anbima_datasets.PAGINA_DATASETS,
-        "tabela": None, "erro": None,
+        "dataset": None, "salvos": [], "publicado": None, "tabela": None,
+        "linhas": [], "total_filtrado": 0, "limite": LIMITE_DE_LINHAS,
+        "erro": request.args.get("erro"), "aviso": request.args.get("aviso"),
     }
-    if request.args.get("dataset"):
-        try:
-            contexto["tabela"] = anbima_datasets.baixar(slug, para_data(referencia))
-        except (ErroDeFonte, ValueError) as exc:
-            contexto["erro"] = idiomas.mensagem(exc)
+    try:
+        ds = anbima_datasets.dataset(slug)
+        contexto["dataset"] = ds
+        if request.args.get("ver"):
+            contexto["tabela"] = anbima_datasets.abrir(slug, para_data(request.args["ver"]))
+        elif request.args.get("data") and ds.fonte == anbima_datasets.DIARIO:
+            contexto["tabela"] = anbima_datasets.baixar(slug, para_data(request.args["data"]))
+        if ds.fonte == anbima_datasets.CMS_PUBLICO:
+            contexto["publicado"] = anbima_datasets.versao_publicada(slug)
+    except (ErroDeFonte, ValueError) as exc:
+        contexto["erro"] = idiomas.mensagem(exc)
+    if contexto["dataset"]:
+        contexto["salvos"] = anbima_datasets.salvos(slug)
+    if contexto["tabela"]:
+        filtradas = _filtrar(contexto["tabela"], contexto["form"]["filtro"])
+        contexto["total_filtrado"] = len(filtradas)
+        contexto["linhas"] = filtradas[:LIMITE_DE_LINHAS]
     return render_template("anbima_datasets.html", **contexto)
+
+
+def _voltar(slug: str, **extra):
+    return redirect(url_for("principal.anbima_datasets_pagina", dataset=slug, **extra))
+
+
+@bp.route("/anbima-datasets/publicado", methods=["POST"])
+def anbima_datasets_publicado():
+    """Baixa a versão que o ANBIMA Data publicou e salva — porta CMS."""
+    slug = request.form.get("dataset") or ""
+    try:
+        salvo = anbima_datasets.baixar_publicado(slug)
+    except (ErroDeFonte, ValueError) as exc:
+        return _voltar(slug, erro=idiomas.mensagem(exc))
+    return _voltar(slug, ver=salvo.referencia.isoformat())
+
+
+@bp.route("/anbima-datasets/importar", methods=["POST"])
+def anbima_datasets_importar():
+    """O arquivo que a pessoa baixou no ANBIMA Data — porta IMPORTACAO."""
+    slug = request.form.get("dataset") or ""
+    arquivo = request.files.get("arquivo")
+    if not arquivo or not arquivo.filename:
+        return _voltar(slug, erro=idiomas.mensagem(
+            servicos.ErroFormulario("escolha o arquivo baixado do ANBIMA Data")))
+    try:
+        salvo = anbima_datasets.importar(slug, para_data(request.form.get("data") or ""),
+                                         arquivo.filename, arquivo.read())
+    except (ErroDeFonte, ValueError) as exc:
+        return _voltar(slug, erro=idiomas.mensagem(exc))
+    return _voltar(slug, ver=salvo.referencia.isoformat())
 
 
 @bp.route("/anbima-datasets/csv")
 def anbima_datasets_csv():
-    slug, referencia = _dataset_do_pedido()
+    """CSV da data — da base local quando já salva, da ANBIMA quando diário."""
+    slug = request.args.get("dataset") or ""
+    referencia = request.args.get("data") or servicos.data_sugerida().isoformat()
     try:
-        tabela = anbima_datasets.baixar(slug, para_data(referencia))
+        try:
+            tabela = anbima_datasets.abrir(slug, para_data(referencia))
+        except anbima_datasets.ErroDataset:
+            tabela = anbima_datasets.baixar(slug, para_data(referencia))
     except (ErroDeFonte, ValueError) as exc:
         return Response(idiomas.mensagem(exc), status=404, mimetype="text/plain")
     nome = f"{slug}_{tabela.referencia:%Y%m%d}.csv"

@@ -1,83 +1,108 @@
-"""Datasets do ANBIMA Data — os que têm arquivo aberto, puxados por data.
+"""Datasets do ANBIMA Data — puxados pela porta que cada um tem, e salvos localmente.
 
-A página ``data.anbima.com.br/datasets`` lista uns 25 datasets. Ela **não** é
-uma fonte que se possa ler por fora: a grade de cada dataset vem de
-``data-api.prd.anbima.com.br/web-bff``, que responde ``401 — token cannot be
-blank`` a quem não traz o token de sessão que a própria página gera — e o
-``env-config`` dela carrega uma chave de reCAPTCHA. Reproduzir esse token seria
-contornar a proteção deles; não é o caminho.
+A página ``data.anbima.com.br/datasets`` lista os datasets da ANBIMA, mas a grade
+de cada um vem de ``data-api.prd.anbima.com.br/web-bff``, que responde ``401 —
+token cannot be blank`` sem o token de sessão que a própria página gera, com
+reCAPTCHA. Reproduzir esse token seria contornar a proteção deles; não é o
+caminho. Cada dataset entra por uma de três portas legítimas:
 
-O caminho é o mesmo do boletim de títulos públicos (``anbima.py``): a ANBIMA
-publica parte desses dados como **arquivo de texto por data**, aberto, com os
-mesmos números do dataset. Para cada dataset do catálogo, este módulo diz se há
-arquivo aberto e, havendo, sabe baixá-lo e lê-lo.
+``DIARIO``      A ANBIMA publica o dataset como arquivo de texto aberto, um por
+                data (títulos públicos, debêntures). Consulta-se por data.
 
-Os arquivos têm o mesmo formato — latin-1, separados por ``@``, uma linha de
-cabeçalho — e por isso um leitor só serve a todos. Os valores ficam como a
-ANBIMA os publica (``0,8587``, ``N/D``, ``--``): é um visualizador de dataset,
-e a tela mostra o que a fonte disse, não uma interpretação dele.
+``CMS``         O dataset público inteiro é um ``.xlsx`` publicado no CMS do
+                ANBIMA Data (``data-strapi.prd.anbima.com.br``), cuja API de
+                conteúdo é aberta. É uma fotografia, não uma série: a data é a
+                da publicação, e ela pode ter meses.
 
-Quem precisar dos restritos tem a rota oficial: a API ANBIMA Feed
-(``developers.anbima.com.br``), com credencial de associado. Ela não entra
-aqui sem a credencial, e a credencial não entra digitada em lugar nenhum.
+``IMPORTACAO``  Sem arquivo aberto. A pessoa baixa o arquivo no ANBIMA Data, no
+                próprio navegador — passando pelo que a página pedir, como
+                usuária —, e solta aqui. É a mesma ideia da importação do Term
+                SOFR: quem tem acesso traz o arquivo.
+
+**O CMS também guarda os restritos.** As versões restritas dos Fundos 175 estão
+lá com endereço acessível. Isso é configuração, não permissão: o dado é para
+associados, e por isso a porta ``CMS`` só existe para dataset **público**. Um
+associado que baixe o restrito no ANBIMA Data, logado, importa o arquivo dele.
+
+**Tudo o que entra é salvo localmente**, em ``dados/anbima/<slug>/``, um
+arquivo por data, no formato original. É o que faz o histórico passar da janela
+curta que a ANBIMA mantém aberta. A pasta é ignorada pelo git — o repositório é
+público, e dado de terceiro (às vezes restrito) não sai da máquina de quem o
+baixou.
 """
 
 from __future__ import annotations
 
 import csv
 import io
+import json
+import re
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, datetime
+from pathlib import Path
 from typing import List, Optional
+from urllib.parse import quote
 
-from . import rede
+from . import planilha, rede
 from .calendario import para_data
 from .erros import ErroDeFonte
 
 PAGINA_DATASETS = "https://data.anbima.com.br/datasets"
+CMS = "https://data-strapi.prd.anbima.com.br"
+PASTA = Path(__file__).resolve().parent / "dados" / "anbima"
+
+DIARIO = "diario"
+CMS_PUBLICO = "cms"
+IMPORTACAO = "importacao"
 
 PUBLICO = "publico"
 RESTRITO = "restrito"
 
+EXTENSOES_ACEITAS = (".xlsx", ".csv", ".tsv", ".txt")
+
 
 class ErroDataset(ErroDeFonte):
-    """O arquivo do dataset não veio — data sem publicação, ou falha de rede."""
+    """O dataset não veio — data sem publicação, arquivo ilegível ou falha de rede."""
 
 
 @dataclass(frozen=True)
 class Dataset:
-    slug: str                        # o mesmo do endereço no ANBIMA Data
+    slug: str                        # o do endereço no ANBIMA Data
     nome: str
     grupo: str
     descricao: str
     acesso: str = PUBLICO
-    arquivo: Optional[str] = None    # molde da URL por data; None = sem arquivo aberto
-    busca: int = 0                   # coluna pela qual a tela filtra primeiro
+    fonte: str = IMPORTACAO
+    arquivo: Optional[str] = None    # DIARIO: molde da URL por data
+    slug_cms: Optional[str] = None   # CMS: o slug no CMS, quando difere
 
     @property
     def disponivel(self) -> bool:
-        return self.arquivo is not None
+        """Puxado sem a pessoa trazer o arquivo."""
+        return self.fonte in (DIARIO, CMS_PUBLICO)
 
     @property
     def endereco(self) -> str:
         return f"{PAGINA_DATASETS}/{self.slug}/detalhes"
 
 
-# O catálogo do ANBIMA Data, na ordem da página. Os dois com ``arquivo`` são os
-# que a ANBIMA publica abertos por data; o resto aponta para a página dela.
 CATALOGO: List[Dataset] = [
     Dataset("titulos-publicos-precificacao-anbima", "Títulos Públicos - Precificação ANBIMA",
             "Mercado Secundário",
             "Taxas indicativas, PU e intervalos de LTN, NTN-F, NTN-B, NTN-C e LFT.",
-            arquivo="https://www.anbima.com.br/informacoes/merc-sec/arqs/ms{data:%y%m%d}.txt",
-            busca=0),
+            fonte=DIARIO,
+            arquivo="https://www.anbima.com.br/informacoes/merc-sec/arqs/ms{data:%y%m%d}.txt"),
     Dataset("data-debentures-precificacao-anbima", "Debêntures - Precificação ANBIMA",
             "Mercado Secundário",
             "Taxas de compra, venda e indicativa, PU, % do PU par, duration e NTN-B de "
             "referência das debêntures.",
+            fonte=DIARIO,
             arquivo="https://www.anbima.com.br/informacoes/merc-sec-debentures/arqs/"
-                    "db{data:%y%m%d}.txt",
-            busca=1),
+                    "db{data:%y%m%d}.txt"),
+    Dataset("fundos-175-caracteristicas-publico", "Fundos 175 - Características (público)",
+            "Fundos de Investimento", "Cadastro da base de Fundos 175.", fonte=CMS_PUBLICO),
+    Dataset("fundos-175-dados-periodicos-publico", "Fundos 175 - Dados periódicos (público)",
+            "Fundos de Investimento", "Dados periódicos dos Fundos 175.", fonte=CMS_PUBLICO),
     Dataset("cris-cras-precificacao-anbima", "CRIs e CRAs - Precificação ANBIMA",
             "Mercado Secundário", "Taxas indicativas de CRIs e CRAs."),
     Dataset("data-titulos-publicos-dados-negociacao-publico",
@@ -87,12 +112,13 @@ CATALOGO: List[Dataset] = [
             "Mercado Secundário", "Negociações de debêntures, CRIs, CRAs e CFFs por ticker."),
     Dataset("ofertas-publicas-boletim-consolidado", "Ofertas públicas - Boletim consolidado",
             "Mercado Primário", "Estatísticas de operações de mercado de capitais."),
-    Dataset("fundos-175-caracteristicas-publico", "Fundos 175 - Características (público)",
-            "Fundos de Investimento", "Cadastro da base de Fundos 175."),
-    Dataset("fundos-175-dados-periodicos-publico", "Fundos 175 - Dados periódicos (público)",
-            "Fundos de Investimento", "Dados periódicos dos Fundos 175."),
     Dataset("data-carteira-teorica-ihfa-publico", "Carteira Teórica - IHFA (público)",
             "Índices", "Composição teórica do IHFA nos dois últimos trimestres."),
+    Dataset("data-composicao-carteira-diaria-ihfa-publico",
+            "Composição da Carteira Diária - IHFA (público)", "Índices",
+            "Composição diária do IHFA nos últimos cinco dias úteis."),
+    Dataset("data-resumo-indice-ihfa-publico", "Resumo do IHFA (público)", "Índices",
+            "Histórico de resultados diários do IHFA."),
     Dataset("titulos-privados-caracteristicas", "Títulos Privados - Características (restrito)",
             "Mercado Secundário", "Cadastro de debêntures, CRIs e CRAs.", acesso=RESTRITO),
     Dataset("titulos-privados-agenda-de-eventos", "Títulos Privados - Agenda de Eventos (restrito)",
@@ -110,6 +136,15 @@ CATALOGO: List[Dataset] = [
 POR_SLUG = {d.slug: d for d in CATALOGO}
 DISPONIVEIS = [d for d in CATALOGO if d.disponivel]
 
+
+def dataset(slug: str) -> Dataset:
+    achado = POR_SLUG.get(slug or "")
+    if achado is None:
+        raise ErroDataset("dataset desconhecido: {slug}", slug=slug)
+    return achado
+
+
+# ---------------------------------------------------------------- leitura
 
 @dataclass
 class Tabela:
@@ -133,36 +168,191 @@ def ler(conteudo: str) -> tuple:
     candidatas = [p for p in partidas if len(p) == largura]
     cabecalho = [" ".join(c.split()) for c in candidatas[0]]
     linhas = [[c.strip() for c in p] for p in candidatas[1:] if any(c.strip() for c in p)]
-    # coluna vazia no fim do cabeçalho (o "@" final) não é coluna
-    while cabecalho and not cabecalho[-1]:
+    while cabecalho and not cabecalho[-1]:           # o "@" final não é coluna
         cabecalho.pop()
         linhas = [l[:len(cabecalho)] for l in linhas]
     return cabecalho, linhas
 
 
-def baixar(slug: str, referencia, timeout: int = 40) -> Tabela:
-    dataset = POR_SLUG.get(slug)
-    if dataset is None:
-        raise ErroDataset("dataset desconhecido: {slug}", slug=slug)
-    if not dataset.disponivel:
-        raise ErroDataset("{nome} não tem arquivo aberto na ANBIMA — ele só se consulta "
-                          "no ANBIMA Data.", nome=dataset.nome)
-    dia = para_data(referencia)
+def ler_arquivo(nome: str, dados: bytes) -> tuple:
+    """``(colunas, linhas)`` de qualquer formato que entra aqui."""
+    if nome.lower().endswith(".txt"):
+        return ler(dados.decode("latin-1"))
     try:
-        bruto = rede.obter(dataset.arquivo.format(data=dia), timeout=timeout)
+        linhas = planilha.ler(nome, dados)
+    except planilha.ErroPlanilha as exc:
+        raise ErroDataset.de(exc) from exc
+    linhas = [l for l in linhas if any((c or "").strip() for c in l)]
+    if not linhas:
+        return [], []
+    largura = max(len(l) for l in linhas)
+    cabecalho = [(c or "").strip() for c in linhas[0]] + [""] * (largura - len(linhas[0]))
+    corpo = [[(c or "").strip() for c in l] + [""] * (largura - len(l)) for l in linhas[1:]]
+    return cabecalho, corpo
+
+
+# -------------------------------------------------------- base local ---
+
+def _pasta(slug: str) -> Path:
+    if not re.fullmatch(r"[a-z0-9-]+", slug or ""):        # o slug vira caminho
+        raise ErroDataset("dataset desconhecido: {slug}", slug=slug)
+    return PASTA / slug
+
+
+@dataclass
+class Salvo:
+    dataset: Dataset
+    referencia: date
+    arquivo: Path
+    origem: str                      # DIARIO / CMS / IMPORTACAO
+    nome_original: str
+    salvo_em: str
+    tamanho: int
+
+
+def salvar(slug: str, referencia, nome_original: str, dados: bytes, origem: str) -> Salvo:
+    """Grava o arquivo como veio, mais uma ficha de onde ele veio.
+
+    Formato original e não convertido: é a cópia fiel do que a ANBIMA
+    publicou, e o leitor daqui pode melhorar sem ser preciso baixar de novo.
+    Mesma data, mesmo dataset: a nova substitui a antiga.
+    """
+    ds = dataset(slug)
+    dia = para_data(referencia)
+    extensao = Path(nome_original).suffix.lower()
+    if extensao not in EXTENSOES_ACEITAS:
+        raise ErroDataset("{arquivo}: use .xlsx, .csv, .tsv ou o .txt da ANBIMA — o .xls "
+                          "antigo precisa ser salvo de novo como .xlsx.",
+                          arquivo=nome_original)
+    pasta = _pasta(ds.slug)
+    pasta.mkdir(parents=True, exist_ok=True)
+    for antigo in pasta.glob(f"{dia.isoformat()}.*"):
+        antigo.unlink()
+    destino = pasta / f"{dia.isoformat()}{extensao}"
+    destino.write_bytes(dados)
+    ficha = {"origem": origem, "nome_original": nome_original,
+             "salvo_em": datetime.now().isoformat(timespec="seconds")}
+    (pasta / f"{dia.isoformat()}.ficha.json").write_text(
+        json.dumps(ficha, ensure_ascii=False, indent=1), encoding="utf-8")
+    return Salvo(ds, dia, destino, origem, nome_original, ficha["salvo_em"], len(dados))
+
+
+def salvos(slug: str) -> List[Salvo]:
+    """O que está guardado de um dataset, do mais recente ao mais antigo."""
+    ds = dataset(slug)
+    pasta = _pasta(ds.slug)
+    if not pasta.exists():
+        return []
+    saida = []
+    for arquivo in pasta.iterdir():
+        if arquivo.name.endswith(".ficha.json") or arquivo.suffix.lower() not in EXTENSOES_ACEITAS:
+            continue
+        try:
+            dia = date.fromisoformat(arquivo.stem)
+        except ValueError:
+            continue
+        ficha_arq = pasta / f"{arquivo.stem}.ficha.json"
+        ficha = json.loads(ficha_arq.read_text(encoding="utf-8")) if ficha_arq.exists() else {}
+        saida.append(Salvo(ds, dia, arquivo, ficha.get("origem", ""),
+                           ficha.get("nome_original", arquivo.name),
+                           ficha.get("salvo_em", ""), arquivo.stat().st_size))
+    return sorted(saida, key=lambda s: s.referencia, reverse=True)
+
+
+def abrir(slug: str, referencia) -> Tabela:
+    """A tabela de uma data já salva — sem rede."""
+    dia = para_data(referencia)
+    for s in salvos(slug):
+        if s.referencia == dia:
+            colunas, linhas = ler_arquivo(s.arquivo.name, s.arquivo.read_bytes())
+            return Tabela(s.dataset, dia, colunas, linhas)
+    raise ErroDataset("não há {nome} salvo para {data}", nome=dataset(slug).nome,
+                      data=f"{dia:%d/%m/%Y}")
+
+
+# ------------------------------------------------------------- portas ---
+
+def _obter(url: str, nome: str, dia: Optional[date] = None, timeout: int = 60) -> bytes:
+    try:
+        return rede.obter(url, timeout=timeout)
     except rede.ErroRede as exc:
-        if getattr(exc, "status", None) == 404:
+        if getattr(exc, "status", None) == 404 and dia is not None:
             raise ErroDataset(
                 "a ANBIMA não publicou {nome} para {data}. Ou não foi dia útil, ou a "
                 "data é antiga demais — ela mantém só algumas semanas de arquivos.",
-                nome=dataset.nome, data=f"{dia:%d/%m/%Y}") from exc
+                nome=nome, data=f"{dia:%d/%m/%Y}") from exc
         raise ErroDataset("não foi possível obter {nome}: {motivo}",
-                          nome=dataset.nome, motivo=str(exc)) from exc
+                          nome=nome, motivo=str(exc)) from exc
+
+
+def baixar(slug: str, referencia, timeout: int = 40) -> Tabela:
+    """Porta DIARIO: baixa a data, salva localmente e devolve a tabela."""
+    ds = dataset(slug)
+    if ds.fonte != DIARIO:
+        raise ErroDataset("{nome} não tem arquivo aberto por data na ANBIMA — ele só se "
+                          "consulta no ANBIMA Data.", nome=ds.nome)
+    dia = para_data(referencia)
+    bruto = _obter(ds.arquivo.format(data=dia), ds.nome, dia, timeout)
     colunas, linhas = ler(bruto.decode("latin-1"))
     if not linhas:
-        raise ErroDataset("{nome} de {data} veio sem linhas", nome=dataset.nome,
+        raise ErroDataset("{nome} de {data} veio sem linhas", nome=ds.nome,
                           data=f"{dia:%d/%m/%Y}")
-    return Tabela(dataset=dataset, referencia=dia, colunas=colunas, linhas=linhas)
+    salvar(ds.slug, dia, f"{ds.slug}_{dia:%y%m%d}.txt", bruto, DIARIO)
+    return Tabela(ds, dia, colunas, linhas)
+
+
+def versao_publicada(slug: str) -> dict:
+    """O arquivo que o CMS tem para um dataset público: ``{url, nome, data}``."""
+    ds = dataset(slug)
+    if ds.fonte != CMS_PUBLICO or ds.acesso != PUBLICO:
+        raise ErroDataset("{nome} não tem arquivo público publicado no ANBIMA Data.",
+                          nome=ds.nome)
+    alvo = quote(ds.slug_cms or ds.slug)
+    url = (f"{CMS}/api/datasets?filters%5Bslug%5D%5B%24eq%5D={alvo}"
+           "&populate%5Battachment%5D%5Bpopulate%5D=*")
+    try:
+        resposta = rede.obter_json(url, timeout=40)
+    except rede.ErroRede as exc:
+        raise ErroDataset("não foi possível obter {nome}: {motivo}",
+                          nome=ds.nome, motivo=str(exc)) from exc
+    for item in resposta.get("data") or []:
+        atributos = item.get("attributes") or {}
+        if atributos.get("isRestricted"):
+            continue                              # nunca: ver o cabeçalho do módulo
+        anexo = atributos.get("attachment") or {}
+        midia = (anexo.get("file") or {}).get("data") or []
+        # o CMS devolve um objeto ou uma lista, conforme o campo aceite um ou vários
+        for registro in (midia if isinstance(midia, list) else [midia]):
+            arquivo = (registro or {}).get("attributes") or {}
+            if arquivo.get("url", "").lower().endswith(EXTENSOES_ACEITAS):
+                # a mais recente das duas: em Características a data de exibição
+                # ficou em 18/12/2024 enquanto o arquivo trocado é de 29/12/2025
+                datas = [d[:10] for d in (anexo.get("display_date"),
+                                          atributos.get("updatedAt")) if d]
+                return {"url": CMS + arquivo["url"], "nome": arquivo.get("name") or "",
+                        "data": para_data(max(datas)) if datas else date.today()}
+    raise ErroDataset("o ANBIMA Data não tem arquivo publicado para {nome}", nome=ds.nome)
+
+
+def baixar_publicado(slug: str) -> Salvo:
+    """Porta CMS: baixa a versão publicada e salva com a data dela."""
+    versao = versao_publicada(slug)
+    ds = dataset(slug)
+    bruto = _obter(versao["url"], ds.nome, timeout=120)
+    return salvar(ds.slug, versao["data"], versao["nome"] or Path(versao["url"]).name,
+                  bruto, CMS_PUBLICO)
+
+
+def importar(slug: str, referencia, nome: str, dados: bytes) -> Salvo:
+    """Porta IMPORTACAO: o arquivo que a pessoa baixou no ANBIMA Data.
+
+    Lê antes de salvar: um arquivo que não abre não pode virar "salvo" e
+    falhar só na hora de alguém consultar.
+    """
+    colunas, linhas = ler_arquivo(nome, dados)
+    if not linhas:
+        raise ErroDataset("{arquivo} não tem linhas de dados", arquivo=nome)
+    return salvar(slug, referencia, nome, dados, IMPORTACAO)
 
 
 def para_csv(tabela: Tabela) -> str:

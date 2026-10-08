@@ -15,3 +15,9 @@ instance/
 # CME: quem tem a licenca importa o proprio arquivo, e ele nao acompanha o
 # repositorio. As outras bases (SOFR do NY Fed, EURIBOR) sao publicas e ficam.
 precificador/dados/term_sofr_b3.json
+
+# Datasets da ANBIMA salvos localmente (ANBIMA Datasets). Sao copias dos
+# arquivos da ANBIMA -- os de Fundos 175 passam de 8 MB, e os importados podem
+# ser restritos a associados. Ficam na maquina de quem baixou: o repositorio e
+# publico e nao e lugar de dado de terceiros.
+precificador/dados/anbima/

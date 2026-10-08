@@ -2,73 +2,182 @@
 {% from "_componentes.html" import alerta, estatistica, botao, link_secundario %}
 {% block titulo %}ANBIMA Datasets{% endblock %}
 
+{% macro selo(d) %}
+{% if d.disponivel %}
+<span class="shrink-0 rounded-full border border-emerald-300/20 bg-emerald-400/10 px-2 py-0.5 text-[10px] font-medium text-emerald-200 font-geist">{{ t("puxado aqui") }}</span>
+{% elif d.acesso == 'restrito' %}
+<span class="shrink-0 rounded-full border border-amber-300/20 bg-amber-400/10 px-2 py-0.5 text-[10px] font-medium text-amber-200 font-geist">{{ t("restrito — importar como associado") }}</span>
+{% else %}
+<span class="shrink-0 rounded-full border border-cyan-200/20 bg-cyan-400/[0.08] px-2 py-0.5 text-[10px] font-medium text-cyan-100 font-geist">{{ t("importar do ANBIMA Data") }}</span>
+{% endif %}
+{% endmacro %}
+
 {% block conteudo %}
 <section class="sm:px-6 lg:px-8 pt-16 pr-5 pb-10 pl-5">
   <div class="w-full max-w-[1600px] mr-auto ml-auto">
     <div class="reveal grid gap-8 lg:grid-cols-[1fr_0.72fr] lg:items-end">
       <div class="max-w-3xl">
         <p class="text-sm font-medium text-cyan-100 font-geist">ANBIMA Data</p>
-        <h1 class="mt-4 text-4xl text-white sm:text-5xl tracking-tighter leading-[1.05] font-jakarta font-medium">{{ t("Datasets da ANBIMA, por data.") }}</h1>
+        <h1 class="mt-4 text-4xl text-white sm:text-5xl tracking-tighter leading-[1.05] font-jakarta font-medium">{{ t("Datasets da ANBIMA, salvos aqui.") }}</h1>
       </div>
       <div class="lg:ml-auto lg:max-w-md">
         <p class="text-base leading-7 text-slate-400 font-geist">
-          {{ t("Os datasets que a ANBIMA publica como arquivo aberto, com os mesmos números do ANBIMA Data. Os demais aparecem no catálogo abaixo, com o motivo de não virem para cá.") }}
+          {{ t("Cada dataset entra pela porta que tem: arquivo aberto por data, arquivo publicado no ANBIMA Data, ou o arquivo que você baixa lá e solta aqui. Tudo o que entra fica salvo nesta máquina, e o histórico passa da janela curta que a ANBIMA mantém.") }}
         </p>
       </div>
     </div>
 
     <form method="get" class="mt-10 rounded-[2rem] border border-white/[0.09] bg-gradient-to-b from-white/[0.05] to-transparent p-6 backdrop-blur-xl sm:p-8">
-      <div class="grid gap-5 lg:grid-cols-[1.4fr_0.8fr_auto] lg:items-end">
-        <div>
-          <label class="rotulo" for="dataset">{{ t("Dataset") }}</label>
-          <select class="campo" id="dataset" name="dataset">
-            {% for d in disponiveis %}
-            <option value="{{ d.slug }}" {{ 'selected' if form.dataset == d.slug }}>{{ t(d.nome) }}</option>
-            {% endfor %}
-          </select>
+      <label class="rotulo" for="dataset">{{ t("Dataset") }}</label>
+      <select class="campo" id="dataset" name="dataset" onchange="this.form.submit()">
+        <optgroup label="{{ t('Puxados direto') }}">
+          {% for d in catalogo if d.disponivel %}
+          <option value="{{ d.slug }}" {{ 'selected' if form.dataset == d.slug }}>{{ t(d.nome) }}</option>
+          {% endfor %}
+        </optgroup>
+        <optgroup label="{{ t('Importar do ANBIMA Data') }}">
+          {% for d in catalogo if not d.disponivel %}
+          <option value="{{ d.slug }}" {{ 'selected' if form.dataset == d.slug }}>{{ t(d.nome) }}</option>
+          {% endfor %}
+        </optgroup>
+      </select>
+
+      {% if dataset %}
+      <div class="mt-6 rounded-2xl border border-white/[0.08] bg-black/20 p-5">
+        <div class="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p class="text-sm font-medium text-white font-geist">{{ t(dataset.nome) }}</p>
+            <p class="mt-1 text-xs leading-5 text-slate-400 font-geist">{{ t(dataset.descricao) }}</p>
+          </div>
+          {{ selo(dataset) }}
         </div>
-        <div>
-          <label class="rotulo" for="data">{{ t("Data de referência") }}</label>
-          <input class="campo" id="data" name="data" type="date" value="{{ form.data }}" max="{{ hoje }}" required/>
+
+        {% if dataset.fonte == 'diario' %}
+        <div class="mt-5 grid gap-5 sm:grid-cols-[minmax(0,18rem)_auto] sm:items-end">
+          <div>
+            <label class="rotulo" for="data">{{ t("Data de referência") }}</label>
+            <input class="campo" id="data" name="data" type="date" value="{{ form.data }}" max="{{ hoje }}"/>
+          </div>
+          <div>{{ botao(t('Consultar e salvar'), 'solar:download-minimalistic-linear') }}</div>
         </div>
-        <div>{{ botao(t('Consultar'), 'solar:magnifer-linear') }}</div>
+        <p class="mt-3 text-xs leading-5 text-slate-600 font-geist">
+          {{ t("Arquivo aberto da ANBIMA, um por data. Ela mantém algumas semanas; o que você consulta fica salvo aqui e não some.") }}
+        </p>
+        {% endif %}
       </div>
-      <p class="mt-4 text-xs leading-5 text-slate-600 font-geist">
-        {{ t("A ANBIMA mantém algumas semanas de arquivos; fim de semana e feriado não têm publicação.") }}
-      </p>
+      {% endif %}
     </form>
 
+    {% if dataset and dataset.fonte == 'cms' %}
+    <form method="post" action="{{ url_for('principal.anbima_datasets_publicado') }}"
+          class="mt-4 rounded-2xl border border-white/[0.08] bg-white/[0.02] p-5">
+      <input type="hidden" name="dataset" value="{{ dataset.slug }}"/>
+      <div class="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <p class="text-sm text-slate-200 font-geist">{{ t("Versão publicada no ANBIMA Data") }}</p>
+          <p class="mt-1 text-xs text-slate-500 font-geist">
+            {% if publicado %}{{ publicado.nome }} · {{ publicado.data | data_br }}{% else %}—{% endif %}
+          </p>
+        </div>
+        {{ botao(t('Baixar e salvar'), 'solar:download-minimalistic-linear') }}
+      </div>
+      <p class="mt-3 text-xs leading-5 text-slate-600 font-geist">
+        {{ t("É uma fotografia da base, não uma série diária: a data é a da publicação, e ela pode ter meses. O arquivo tem vários megabytes.") }}
+      </p>
+    </form>
+    {% endif %}
+
+    {% if dataset and dataset.fonte == 'importacao' %}
+    <form method="post" enctype="multipart/form-data" action="{{ url_for('principal.anbima_datasets_importar') }}"
+          class="mt-4 rounded-2xl border border-white/[0.08] bg-white/[0.02] p-5">
+      <input type="hidden" name="dataset" value="{{ dataset.slug }}"/>
+      <ol class="space-y-2 text-sm leading-6 text-slate-300 font-geist">
+        <li>1. <a class="text-cyan-200 hover:text-cyan-100" href="{{ dataset.endereco }}" target="_blank" rel="noopener">{{ t("Abra o dataset no ANBIMA Data") }} ↗</a>
+          {{ t("e baixe o arquivo pelo botão de download da própria página.") }}
+          {% if dataset.acesso == 'restrito' %}<span class="text-amber-200">{{ t("Restrito: entre com o seu login de associado.") }}</span>{% endif %}</li>
+        <li>2. {{ t("Solte o arquivo abaixo, com a data a que ele se refere.") }}</li>
+      </ol>
+      <div class="mt-4 grid gap-4 lg:grid-cols-[1fr_minmax(0,14rem)_auto] lg:items-end">
+        <div>
+          <label class="rotulo" for="arquivo">{{ t("Arquivo (.xlsx, .csv, .tsv)") }}</label>
+          <input class="campo" id="arquivo" name="arquivo" type="file" accept=".xlsx,.csv,.tsv,.txt" required/>
+        </div>
+        <div>
+          <label class="rotulo" for="data_importacao">{{ t("Data de referência") }}</label>
+          <input class="campo" id="data_importacao" name="data" type="date" value="{{ form.data }}" max="{{ hoje }}" required/>
+        </div>
+        <div>{{ botao(t('Importar e salvar'), 'solar:upload-minimalistic-linear') }}</div>
+      </div>
+      <p class="mt-3 text-xs leading-5 text-slate-600 font-geist">
+        {{ t("O ANBIMA Data não se lê por fora: os números vêm com um token que a própria página gera, protegido por reCAPTCHA. Por isso este passo é seu, no navegador — o PriceEdge lê, salva e mostra o arquivo.") }}
+      </p>
+    </form>
+    {% endif %}
+
+    {% if aviso %}{{ alerta(aviso, 'aviso') }}{% endif %}
     {% if erro %}{{ alerta(erro) }}{% endif %}
 
+    {% if salvos %}
+    <div class="sem-reveal mt-6 rounded-[2rem] border border-white/[0.09] bg-slate-950/40 backdrop-blur-xl">
+      <div class="border-b border-white/[0.07] px-6 py-4">
+        <p class="text-sm font-medium text-white font-geist">{{ t("Salvos nesta máquina") }}</p>
+        <p class="mt-0.5 text-xs text-slate-500 font-geist">{{ t("Abrir não usa rede: a cópia é a que foi baixada.") }}</p>
+      </div>
+      <div class="rolagem px-2">
+        <table class="tabela-dados">
+          <thead><tr><th>{{ t("Data de referência") }}</th><th>{{ t("Origem") }}</th><th>{{ t("Arquivo") }}</th><th>{{ t("Tamanho") }}</th><th>{{ t("Salvo em") }}</th><th></th></tr></thead>
+          <tbody>
+          {% for s in salvos %}
+            <tr>
+              <td class="text-white">{{ s.referencia | data_br }}</td>
+              <td class="text-slate-300">{{ t({'diario': 'arquivo diário', 'cms': 'ANBIMA Data', 'importacao': 'importado'}.get(s.origem, s.origem)) }}</td>
+              <td class="text-slate-400">{{ s.nome_original }}</td>
+              <td class="text-slate-400">{{ (s.tamanho / 1024) | numero(0) }} KB</td>
+              <td class="text-slate-500">{{ s.salvo_em | replace('T', ' ') }}</td>
+              <td>
+                <a class="text-cyan-200 hover:text-cyan-100" href="{{ url_for('principal.anbima_datasets_pagina', dataset=s.dataset.slug, ver=s.referencia.isoformat()) }}">{{ t("Abrir") }}</a>
+                · <a class="text-cyan-200 hover:text-cyan-100" href="{{ url_for('principal.anbima_datasets_csv', dataset=s.dataset.slug, data=s.referencia.isoformat()) }}">CSV</a>
+              </td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% endif %}
+
     {% if tabela %}
-    <div class="sem-reveal mt-8 grid gap-3 sm:grid-cols-3">
+    <div class="sem-reveal mt-6 grid gap-3 sm:grid-cols-3">
       {{ estatistica(t('Dataset'), t(tabela.dataset.nome), t(tabela.dataset.grupo), destaque=true) }}
-      {{ estatistica(t('Data de referência'), tabela.referencia | data_br, t('arquivo aberto da ANBIMA')) }}
+      {{ estatistica(t('Data de referência'), tabela.referencia | data_br, t('salvo nesta máquina')) }}
       {{ estatistica(t('Linhas'), tabela.linhas | length | numero, (tabela.colunas | length) ~ ' ' ~ t('colunas')) }}
     </div>
 
     <div class="sem-reveal mt-6 rounded-[2rem] border border-white/[0.09] bg-slate-950/40 backdrop-blur-xl">
-      <div class="flex flex-wrap items-center justify-between gap-3 border-b border-white/[0.07] px-6 py-4">
+      <form method="get" class="flex flex-wrap items-center justify-between gap-3 border-b border-white/[0.07] px-6 py-4">
+        <input type="hidden" name="dataset" value="{{ tabela.dataset.slug }}"/>
+        <input type="hidden" name="ver" value="{{ tabela.referencia.isoformat() }}"/>
         <div class="min-w-[16rem] flex-1">
-          <label class="sr-only" for="filtro-dataset">{{ t("Filtrar linhas") }}</label>
-          <input class="campo" id="filtro-dataset" type="search" autocomplete="off"
-                 placeholder="{{ t('Filtrar por qualquer coluna — código, emissor, índice…') }}"/>
+          <label class="sr-only" for="filtro">{{ t("Filtrar linhas") }}</label>
+          <input class="campo" id="filtro" name="filtro" type="search" autocomplete="off" value="{{ form.filtro }}"
+                 placeholder="{{ t('Filtrar por qualquer coluna — código, emissor, CNPJ… e Enter') }}"/>
         </div>
-        <span id="contagem-dataset" class="text-xs text-slate-500 font-geist tabular-nums"
-              data-total="{{ tabela.linhas | length }}">{{ tabela.linhas | length | numero }} {{ t("linhas") }}</span>
+        <span class="text-xs text-slate-500 font-geist tabular-nums">
+          {{ total_filtrado | numero }} {{ t("linhas") }}{% if total_filtrado > limite %} · {{ t("mostrando") }} {{ limite | numero }}{% endif %}
+        </span>
         {{ link_secundario(t('Baixar CSV'),
              url_for('principal.anbima_datasets_csv', dataset=tabela.dataset.slug, data=tabela.referencia.isoformat()),
              'solar:file-download-linear') }}
-      </div>
+      </form>
       <div class="rolagem max-h-[42rem] px-2">
         <table class="tabela-dados" id="tabela-dataset">
           <thead>
             <tr>{% for c in tabela.colunas %}<th>{{ c }}</th>{% endfor %}</tr>
           </thead>
           <tbody>
-          {#- sem classe por célula: são ~19 mil células no arquivo de debêntures, e
-              a mesma classe repetida em cada uma levava a página a 1,8 MB -#}
-          {% for linha in tabela.linhas %}
+          {#- sem classe por célula: são dezenas de milhares de células nos maiores
+              datasets, e a mesma classe repetida em cada uma levava a página a MB -#}
+          {% for linha in linhas %}
             <tr>{% for celula in linha %}<td>{{ celula or '—' }}</td>{% endfor %}</tr>
           {% endfor %}
           </tbody>
@@ -76,7 +185,7 @@
       </div>
       <div class="border-t border-white/[0.07] px-6 py-4">
         <p class="text-xs leading-6 text-slate-400 font-geist">
-          {{ t("Valores como a ANBIMA os publica: taxas em percentual, vírgula decimal, e \"--\" ou \"N/D\" onde ela não apurou. Nada é recalculado aqui.") }}
+          {{ t("Valores como a ANBIMA os publica. A tela desenha até 2.000 linhas — filtre, ou baixe o CSV, que leva todas.") }}
         </p>
       </div>
     </div>
@@ -84,56 +193,20 @@
 
     <div class="sem-reveal mt-10">
       <p class="text-sm font-medium text-slate-400 font-geist">{{ t("Catálogo do ANBIMA Data") }}</p>
-      <p class="mt-2 max-w-3xl text-sm leading-6 text-slate-500 font-geist">
-        {{ t("A grade do ANBIMA Data vem de uma API que exige o token de sessão que a própria página gera, protegido por reCAPTCHA — ela não se lê por fora. O que vem para cá é o que a ANBIMA também publica como arquivo aberto. Para os restritos, a rota oficial é a API ANBIMA Feed, com credencial de associado.") }}
-      </p>
       <div class="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         {% for d in catalogo %}
-        <div class="rounded-2xl border border-white/[0.08] bg-white/[0.02] p-4">
+        <a href="{{ url_for('principal.anbima_datasets_pagina', dataset=d.slug) }}"
+           class="block rounded-2xl border {{ 'border-cyan-200/30' if dataset and d.slug == dataset.slug else 'border-white/[0.08]' }} bg-white/[0.02] p-4 transition hover:border-white/[0.18]">
           <div class="flex items-start justify-between gap-3">
             <p class="text-sm font-medium text-slate-100 font-geist">{{ t(d.nome) }}</p>
-            {% if d.disponivel %}
-            <span class="shrink-0 rounded-full border border-emerald-300/20 bg-emerald-400/10 px-2 py-0.5 text-[10px] font-medium text-emerald-200 font-geist">{{ t("puxado aqui") }}</span>
-            {% elif d.acesso == 'restrito' %}
-            <span class="shrink-0 rounded-full border border-amber-300/20 bg-amber-400/10 px-2 py-0.5 text-[10px] font-medium text-amber-200 font-geist">{{ t("restrito a associados") }}</span>
-            {% else %}
-            <span class="shrink-0 rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] font-medium text-slate-400 font-geist">{{ t("só no ANBIMA Data") }}</span>
-            {% endif %}
+            {{ selo(d) }}
           </div>
           <p class="mt-1 text-xs text-slate-500 font-geist">{{ t(d.grupo) }}</p>
           <p class="mt-2 text-xs leading-5 text-slate-400 font-geist">{{ t(d.descricao) }}</p>
-          <a class="mt-3 inline-block text-xs text-cyan-200/80 hover:text-cyan-100 font-geist"
-             href="{{ d.endereco }}" target="_blank" rel="noopener">{{ t("Abrir no ANBIMA Data") }} ↗</a>
-        </div>
+        </a>
         {% endfor %}
       </div>
     </div>
   </div>
 </section>
-{% endblock %}
-
-{% block scripts %}
-<script>
-// Filtro das linhas na própria tela: o arquivo de debêntures tem mais de mil
-// linhas, e uma ida ao servidor por tecla não faria sentido para um texto.
-(function () {
-  var campo = document.getElementById("filtro-dataset");
-  var tabela = document.getElementById("tabela-dataset");
-  var contagem = document.getElementById("contagem-dataset");
-  if (!campo || !tabela) return;
-  var linhas = Array.prototype.slice.call(tabela.tBodies[0].rows);
-  var textos = linhas.map(function (l) { return l.innerText.toUpperCase(); });
-  var rotulo = contagem ? contagem.textContent.replace(/^[\d.]+\s*/, "") : "";
-  campo.addEventListener("input", function () {
-    var termo = campo.value.trim().toUpperCase();
-    var vistas = 0;
-    linhas.forEach(function (l, i) {
-      var mostra = !termo || textos[i].indexOf(termo) > -1;
-      l.hidden = !mostra;
-      if (mostra) vistas += 1;
-    });
-    if (contagem) contagem.textContent = vistas.toLocaleString("pt-BR") + " " + rotulo;
-  });
-})();
-</script>
 {% endblock %}
