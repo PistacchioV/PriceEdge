@@ -877,11 +877,13 @@ def _exercitar_aplicacao(app):
     """Passa por todas as telas e pelos formulários, para o audit ver tudo."""
     gets = ["/", "/curvas", "/precificar", "/ndf", "/sofr", "/term-sofr", "/euribor",
             "/renda-fixa", "/liquidacao", "/cotacoes", "/interpolar",
-            "/ni-pro-rata", "/metodologia", "/inflacao-implicita"]
+            "/ni-pro-rata", "/metodologia", "/inflacao-implicita", "/anbima-datasets"]
     for rota in gets:
         app.test_client().get(rota + "?idioma=en")
     # o caminho de erro também tem frase: domingo não tem boletim da ANBIMA
     app.test_client().get("/inflacao-implicita?idioma=en&data=2026-10-04")
+    app.test_client().get("/anbima-datasets?idioma=en&dataset="
+                          "data-debentures-precificacao-anbima&data=2026-10-04")
 
     from precificador import b3
     from webapp.servicos import DERIVADAS
@@ -3013,6 +3015,65 @@ def test_a_inflacao_implicita_usa_a_pre_do_mesmo_prazo():
     # sem curva, a coluna principal fica vazia e a do CDI continua
     sem_curva = I.calcular(_boletim_anbima_de_referencia(), cdi=0.1365)
     assert sem_curva[0].implicita is None and sem_curva[0].implicita_cdi is not None
+
+
+def test_o_leitor_de_datasets_le_o_boletim_como_ele_veio():
+    """O arquivo aberto da ANBIMA, lido sem reinterpretação.
+
+    É o mesmo leitor para todos os datasets abertos: cabeçalho na linha com
+    mais campos, nome da associação e linha em branco fora, e os valores como
+    a ANBIMA os escreveu.
+    """
+    from pathlib import Path
+    from precificador import anbima_datasets as A
+
+    bruto = (Path(__file__).resolve().parent / "anbima_ms261007.txt").read_bytes()
+    colunas, linhas = A.ler(bruto.decode("latin-1"))
+    assert colunas[:5] == ["Titulo", "Data Referencia", "Codigo SELIC",
+                           "Data Base/Emissao", "Data Vencimento"]
+    assert len(linhas) == 50
+    assert linhas[0][:8] == ["LTN", "20261007", "100000", "20250110", "20270401",
+                             "13,112", "13,0721", "13,091"]
+    # e todas as linhas com a largura do cabeçalho
+    assert {len(l) for l in linhas} == {len(colunas)}
+
+
+def test_o_catalogo_de_datasets_so_promete_o_que_tem_arquivo():
+    """Um dataset "puxado aqui" precisa saber baixar; os outros, dizer por que não."""
+    from datetime import date
+    from precificador import anbima_datasets as A
+
+    assert [d.slug for d in A.DISPONIVEIS] == [
+        "titulos-publicos-precificacao-anbima", "data-debentures-precificacao-anbima"]
+    for d in A.DISPONIVEIS:
+        assert "{data:%y%m%d}" in d.arquivo
+    # o endereço de cada um é o do ANBIMA Data
+    assert all(d.endereco.startswith(A.PAGINA_DATASETS + "/") for d in A.CATALOGO)
+
+    sem_arquivo = next(d for d in A.CATALOGO if not d.disponivel)
+    with pytest.raises(A.ErroDataset) as erro:
+        A.baixar(sem_arquivo.slug, date(2026, 10, 7))
+    assert "ANBIMA Data" in str(erro.value)
+
+
+def test_o_csv_do_dataset_abre_no_excel_em_portugues(monkeypatch):
+    """Separador ``;`` e BOM: sem o BOM o Excel lê UTF-8 como latin-1."""
+    from datetime import date
+    from pathlib import Path
+    from precificador import anbima_datasets as A
+    from webapp import create_app
+
+    bruto = (Path(__file__).resolve().parent / "anbima_ms261007.txt").read_bytes()
+    colunas, linhas = A.ler(bruto.decode("latin-1"))
+    monkeypatch.setattr(A, "baixar", lambda slug, ref, **k: A.Tabela(
+        A.POR_SLUG[slug], date(2026, 10, 7), colunas, linhas))
+
+    r = create_app().test_client().get(
+        "/anbima-datasets/csv?dataset=titulos-publicos-precificacao-anbima&data=2026-10-07")
+    assert r.status_code == 200
+    texto = r.data.decode("utf-8")
+    assert texto.startswith("\ufeffTitulo;Data Referencia;")
+    assert "20261007.csv" in r.headers["Content-Disposition"]
 
 
 def test_nenhuma_chave_de_traducao_tem_dois_sentidos():

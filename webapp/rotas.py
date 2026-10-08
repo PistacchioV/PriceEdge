@@ -9,7 +9,8 @@ from datetime import date, timedelta
 from flask import (Blueprint, Response, jsonify, redirect, render_template,
                    request, url_for)
 
-from precificador import (anbima, b3, cambio, cdi, contagem, cotacoes, euribor,
+from precificador import (anbima, anbima_datasets, b3, cambio, cdi, contagem,
+                          cotacoes, euribor,
                           fontes, glossario, inflacao_implicita, ipca, liquidacao,
                           montador, rede, renda_fixa, sofr, term_sofr as term)
 from precificador.calendario import (CALENDARIOS_DISPONIVEIS, CONVENCOES_DIA_UTIL,
@@ -1028,6 +1029,50 @@ def inflacao_implicita_pagina():
                     if l.implicita is not None]},
     ]))
     return render_template("inflacao_implicita.html", **contexto)
+
+
+# ------------------------------------------------------ ANBIMA datasets ---
+
+def _dataset_do_pedido():
+    slug = request.args.get("dataset") or anbima_datasets.DISPONIVEIS[0].slug
+    referencia = request.args.get("data") or servicos.data_sugerida().isoformat()
+    return slug, referencia
+
+
+@bp.route("/anbima-datasets")
+def anbima_datasets_pagina():
+    """Os datasets do ANBIMA Data que têm arquivo aberto, por data.
+
+    Abre com o formulário preenchido mas sem buscar: o arquivo de debêntures
+    tem mais de mil linhas, e baixá-lo a cada visita à tela seria pagar por
+    uma consulta que ninguém pediu.
+    """
+    slug, referencia = _dataset_do_pedido()
+    contexto = {
+        "form": {"dataset": slug, "data": referencia}, "hoje": date.today().isoformat(),
+        "disponiveis": anbima_datasets.DISPONIVEIS, "catalogo": anbima_datasets.CATALOGO,
+        "pagina_datasets": anbima_datasets.PAGINA_DATASETS,
+        "tabela": None, "erro": None,
+    }
+    if request.args.get("dataset"):
+        try:
+            contexto["tabela"] = anbima_datasets.baixar(slug, para_data(referencia))
+        except (ErroDeFonte, ValueError) as exc:
+            contexto["erro"] = idiomas.mensagem(exc)
+    return render_template("anbima_datasets.html", **contexto)
+
+
+@bp.route("/anbima-datasets/csv")
+def anbima_datasets_csv():
+    slug, referencia = _dataset_do_pedido()
+    try:
+        tabela = anbima_datasets.baixar(slug, para_data(referencia))
+    except (ErroDeFonte, ValueError) as exc:
+        return Response(idiomas.mensagem(exc), status=404, mimetype="text/plain")
+    nome = f"{slug}_{tabela.referencia:%Y%m%d}.csv"
+    # BOM: sem ele o Excel abre o UTF-8 como latin-1 e estraga os acentos
+    return Response("\ufeff" + anbima_datasets.para_csv(tabela), mimetype="text/csv",
+                    headers={"Content-Disposition": f'attachment; filename="{nome}"'})
 
 
 # --------------------------------------------------------------- liquidação

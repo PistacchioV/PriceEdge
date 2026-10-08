@@ -250,3 +250,9 @@ select.campo option { background: #0b1220; color: #e2e8f0; }
 /* abas do boletim de títulos públicos */
 .aba-titulo.aba-ativa { border-color: rgba(165, 243, 252, 0.3); background: #cffafe; color: #0f172a; }
 .aba-titulo.aba-ativa span { color: #334155; }
+
+/* tabela do dataset: o estilo mora aqui e não em cada célula */
+#tabela-dataset td { white-space: nowrap; color: #cbd5e1; }
+#tabela-dataset td:first-child { color: #ffffff; }
+/* dataset é texto da fonte, não só número: alinhado à esquerda, como na ANBIMA */
+#tabela-dataset th, #tabela-dataset td { text-align: left; }

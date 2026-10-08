@@ -23,6 +23,92 @@ TRADUCOES: Dict[str, str] = {
 
     # inflação implícita e boletim de títulos públicos
     "Inflação implícita": "Implied inflation",
+
+    # ANBIMA Datasets
+    "ANBIMA Datasets": "ANBIMA Datasets",
+    "Datasets da ANBIMA, por data.": "ANBIMA datasets, by date.",
+    "Os datasets que a ANBIMA publica como arquivo aberto, com os mesmos números do "
+    "ANBIMA Data. Os demais aparecem no catálogo abaixo, com o motivo de não virem "
+    "para cá.":
+        "The datasets ANBIMA publishes as open files, with the same numbers as ANBIMA "
+        "Data. The others are listed in the catalogue below, with the reason they "
+        "are not pulled here.",
+    "Dataset": "Dataset",
+    "A ANBIMA mantém algumas semanas de arquivos; fim de semana e feriado não têm "
+    "publicação.":
+        "ANBIMA keeps a few weeks of files; weekends and holidays have no publication.",
+    "arquivo aberto da ANBIMA": "ANBIMA open file",
+    "colunas": "columns",
+    "Filtrar linhas": "Filter rows",
+    "Filtrar por qualquer coluna — código, emissor, índice…":
+        "Filter by any column — code, issuer, index…",
+    "Valores como a ANBIMA os publica: taxas em percentual, vírgula decimal, e \"--\" "
+    "ou \"N/D\" onde ela não apurou. Nada é recalculado aqui.":
+        "Values as ANBIMA publishes them: rates in percent, comma as the decimal mark, "
+        "and \"--\" or \"N/D\" where it did not price. Nothing is recalculated here.",
+    "Catálogo do ANBIMA Data": "ANBIMA Data catalogue",
+    "A grade do ANBIMA Data vem de uma API que exige o token de sessão que a própria "
+    "página gera, protegido por reCAPTCHA — ela não se lê por fora. O que vem para cá "
+    "é o que a ANBIMA também publica como arquivo aberto. Para os restritos, a rota "
+    "oficial é a API ANBIMA Feed, com credencial de associado.":
+        "The ANBIMA Data grid comes from an API that requires the session token the "
+        "page itself generates, protected by reCAPTCHA — it cannot be read from "
+        "outside. What comes here is what ANBIMA also publishes as an open file. For "
+        "the restricted ones, the official route is the ANBIMA Feed API, with member "
+        "credentials.",
+    "puxado aqui": "pulled here",
+    "restrito a associados": "members only",
+    "só no ANBIMA Data": "ANBIMA Data only",
+    "Abrir no ANBIMA Data": "Open on ANBIMA Data",
+    "Mercado Primário": "Primary market",
+    "Mercado Secundário": "Secondary market",
+    "Fundos de Investimento": "Investment funds",
+    "Índices": "Indices",
+    "Títulos Públicos - Precificação ANBIMA": "Government Bonds - ANBIMA Pricing",
+    "Debêntures - Precificação ANBIMA": "Debentures - ANBIMA Pricing",
+    "CRIs e CRAs - Precificação ANBIMA": "CRIs and CRAs - ANBIMA Pricing",
+    "Títulos públicos - Dados de negociação (público)": "Government bonds - Trading data (public)",
+    "Títulos Privados - Negociações (Prévias do REUNE)": "Private bonds - Trades (REUNE previews)",
+    "Ofertas públicas - Boletim consolidado": "Public offerings - Consolidated bulletin",
+    "Fundos 175 - Características (público)": "Funds 175 - Characteristics (public)",
+    "Fundos 175 - Dados periódicos (público)": "Funds 175 - Periodic data (public)",
+    "Carteira Teórica - IHFA (público)": "Theoretical Portfolio - IHFA (public)",
+    "Títulos Privados - Características (restrito)": "Private bonds - Characteristics (restricted)",
+    "Títulos Privados - Agenda de Eventos (restrito)": "Private bonds - Event schedule (restricted)",
+    "Ofertas públicas - Séries (restrito)": "Public offerings - Series (restricted)",
+    "Títulos públicos - Dados de negociação (restrito)": "Government bonds - Trading data (restricted)",
+    "Títulos públicos - Dados de negociação SELIC (restrito)":
+        "Government bonds - SELIC trading data (restricted)",
+    "Taxas indicativas, PU e intervalos de LTN, NTN-F, NTN-B, NTN-C e LFT.":
+        "Indicative rates, prices and ranges for LTN, NTN-F, NTN-B, NTN-C and LFT.",
+    "Taxas de compra, venda e indicativa, PU, % do PU par, duration e NTN-B de "
+    "referência das debêntures.":
+        "Bid, ask and indicative rates, price, % of par, duration and reference NTN-B "
+        "for debentures.",
+    "Taxas indicativas de CRIs e CRAs.": "Indicative rates for CRIs and CRAs.",
+    "Pré e pós-trade consolidados de títulos públicos federais.":
+        "Consolidated pre- and post-trade data on federal government bonds.",
+    "Negociações de debêntures, CRIs, CRAs e CFFs por ticker.":
+        "Trades in debentures, CRIs, CRAs and CFFs by ticker.",
+    "Estatísticas de operações de mercado de capitais.": "Capital markets deal statistics.",
+    "Cadastro da base de Fundos 175.": "Registry of the Funds 175 database.",
+    "Dados periódicos dos Fundos 175.": "Periodic data for Funds 175.",
+    "Composição teórica do IHFA nos dois últimos trimestres.":
+        "IHFA theoretical composition over the last two quarters.",
+    "Cadastro de debêntures, CRIs e CRAs.": "Registry of debentures, CRIs and CRAs.",
+    "Eventos de debêntures, CRIs e CRAs.": "Events for debentures, CRIs and CRAs.",
+    "Características das séries emitidas.": "Characteristics of the issued series.",
+    "Pré e pós-trade de títulos públicos, detalhado.": "Detailed pre- and post-trade data on government bonds.",
+    "Operações registradas no SELIC.": "Trades registered in SELIC.",
+    "a ANBIMA não publicou {nome} para {data}. Ou não foi dia útil, ou a data é "
+    "antiga demais — ela mantém só algumas semanas de arquivos.":
+        "ANBIMA did not publish {nome} for {data}. Either it was not a business day, "
+        "or the date is too old — it keeps only a few weeks of files.",
+    "{nome} não tem arquivo aberto na ANBIMA — ele só se consulta no ANBIMA Data.":
+        "{nome} has no open file at ANBIMA — it can only be looked up on ANBIMA Data.",
+    "não foi possível obter {nome}: {motivo}": "could not fetch {nome}: {motivo}",
+    "{nome} de {data} veio sem linhas": "{nome} for {data} came with no rows",
+    "dataset desconhecido: {slug}": "unknown dataset: {slug}",
     "Títulos públicos · ANBIMA": "Government bonds · ANBIMA",
     "O IPCA que o mercado precifica.": "The IPCA the market is pricing.",
     "Juro real das NTN-B no boletim da ANBIMA contra a taxa pré da curva DI no "

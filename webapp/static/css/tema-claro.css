@@ -237,3 +237,5 @@ html[data-tema="claro"] .combo-selo-ok {
 html[data-tema="claro"] .combo-aviso { color: #475569; }
 html[data-tema="claro"] .aba-titulo.aba-ativa { background: #0e7490; color: #ffffff; border-color: #0e7490; }
 html[data-tema="claro"] .aba-titulo.aba-ativa span { color: #cffafe; }
+html[data-tema="claro"] #tabela-dataset td { color: #334155; }
+html[data-tema="claro"] #tabela-dataset td:first-child { color: #0f172a; }
