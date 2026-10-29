@@ -24,6 +24,17 @@ def bps(valor, casas: int = 1) -> str:
     return moeda(float(valor) * 10000.0, casas) + " bp"
 
 
+def variacao_bps(valor, casas: int = 0) -> str:
+    """Variação já em bps, com sinal: "+12 bp", "−3 bp"."""
+    if valor is None:
+        return "—"
+    arredondado = round(float(valor), casas)
+    if arredondado == 0:
+        return moeda(0, casas) + " bp"
+    sinal = "+" if arredondado > 0 else "−"
+    return sinal + moeda(abs(arredondado), casas) + " bp"
+
+
 def numero(valor, casas: int = 0) -> str:
     if valor is None:
         return "—"
@@ -55,7 +66,7 @@ def convencao_nome(codigo) -> str:
 
 
 def registrar(app) -> None:
-    for funcao in (moeda, percentual, bps, numero, data_br):
+    for funcao in (moeda, percentual, bps, variacao_bps, numero, data_br):
         app.jinja_env.filters[funcao.__name__] = funcao
     app.jinja_env.globals["hoje"] = date.today
     app.jinja_env.globals["indexador_nome"] = indexador_nome

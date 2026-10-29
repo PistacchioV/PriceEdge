@@ -2340,6 +2340,105 @@ TRADUCOES: Dict[str, str] = {
     "data inicial": "start date",
     "data final": "end date",
 
+    # boletim do mercado e análise da curva DI
+    "Boletim": "Market wrap",
+    "Boletim do mercado": "Market wrap",
+    "Juros e câmbio · B3, ANBIMA, BCB": "Rates and FX · B3, ANBIMA, BCB",
+    "Como fechou o mercado.": "How the market closed.",
+    "Curva DI com as variações do dia e da semana, dólar a termo e cupom cambial, "
+    "juro real e inflação implícita das NTN-B, PTAX, CDI e SOFR — numa página só.":
+        "The DI curve with the day's and the week's changes, USD forwards and the "
+        "onshore USD rate, NTN-B real yields and implied inflation, PTAX, CDI and SOFR — "
+        "on one page.",
+    "Cada bloco vem de uma fonte e cai sozinho: se uma delas não responder, o "
+    "boletim sai sem aquele bloco e diz por quê.":
+        "Each block comes from one source and fails on its own: if a source does not "
+        "answer, the wrap comes out without that block and says why.",
+    "DI 1 ano": "DI 1 year",
+    "DI 5 anos": "DI 5 years",
+    "DI de 3 meses": "DI 3 months",
+    "no dia": "1-day change",
+    "No dia": "1-day change",
+    "Em 5 dias úteis": "5-business-day change",
+    "venda": "offer",
+    "Curva DI x Pré": "DI x Pré curve",
+    "Análise completa": "Full analysis",
+    "Câmbio": "FX",
+    "Dólar a termo (PTX) e cupom cambial limpo (DOC) da B3":
+        "USD forward (PTX) and clean onshore USD rate (DOC) from B3",
+    "Pontos: dólar a termo menos a PTAX, em milésimos de real.":
+        "Points: USD forward minus PTAX, in thousandths of a real.",
+    "Juro real e inflação implícita — NTN-B": "Real yield and implied inflation — NTN-B",
+    "Boletim informativo, montado com dados públicos — não é recomendação de investimento.":
+        "Informational wrap built from public data — not an investment recommendation.",
+    "Análise da curva DI": "DI curve analysis",
+    "Curva DI x Pré · B3": "DI x Pré curve · B3",
+    "O que a curva de juros está precificando.": "What the rates curve is pricing.",
+    "Taxas nos prazos de referência, inclinação, a termo entre os prazos e o quanto a "
+    "curva andou desde outra data. Com as datas das reuniões, o CDI que o mercado "
+    "precifica para cada Copom.":
+        "Rates at the benchmark tenors, slope, forwards between tenors and how far the "
+        "curve has moved since another date. With the meeting dates, the CDI the market "
+        "prices for each Copom.",
+    "Data da curva": "Curve date",
+    "Comparar com": "Compare with",
+    "Reuniões do Copom (datas da decisão)": "Copom meetings (decision dates)",
+    "ex.: 09/12/2026, 27/01/2027, 17/03/2027": "e.g. 09/12/2026, 27/01/2027, 17/03/2027",
+    "Analisar": "Analyze",
+    "Sem data de comparação, a tela compara com cinco dias úteis antes. As datas do "
+    "Copom estão no calendário de reuniões do Banco Central; cada decisão passa a valer "
+    "no dia útil seguinte.":
+        "Without a comparison date, the page compares with five business days earlier. "
+        "The Copom dates are in the Central Bank's meeting calendar; each decision takes "
+        "effect on the next business day.",
+    "Calendário do Copom": "Copom calendar",
+    "Inclinação": "Slope",
+    "longo menos curto": "long minus short",
+    "Movimento desde": "Move since",
+    "pela variação do 1A e do 5A": "from the 1Y and 5Y changes",
+    "Estável": "Unchanged",
+    "Paralelo para cima": "Parallel up",
+    "Paralelo para baixo": "Parallel down",
+    "Bear steepening": "Bear steepening",
+    "Bear flattening": "Bear flattening",
+    "Bull steepening": "Bull steepening",
+    "Bull flattening": "Bull flattening",
+    "Curva DI x Pré até dez anos": "DI x Pré curve up to ten years",
+    "Vértices publicados pela B3. Eixo horizontal: prazo em anos (dias úteis ÷ 252).":
+        "Vertices published by B3. Horizontal axis: tenor in years (business days ÷ 252).",
+    "Prazos de referência": "Benchmark tenors",
+    "Data-base mais o prazo, no dia útil seguinte. A termo: a taxa do período entre o "
+    "prazo anterior e este.":
+        "Base date plus the tenor, on the next business day. Forward: the rate for the "
+        "period between the previous tenor and this one.",
+    "Taxa": "Rate",
+    "A termo desde o anterior": "Forward from previous",
+    "Taxa em": "Rate on",
+    "Variação": "Change",
+    "depois do último vértice publicado: extrapolado.":
+        "beyond the last published vertex: extrapolated.",
+    "Copom implícito na curva": "Copom priced into the curve",
+    "CDI a termo entre a vigência de uma decisão e a da seguinte. Antes da primeira "
+    "reunião:":
+        "Forward CDI from one decision taking effect to the next. Before the first "
+        "meeting:",
+    "Decisão": "Decision",
+    "Período": "Period",
+    "CDI implícito": "Implied CDI",
+    "Movimento na reunião": "Move at the meeting",
+    "Acumulado desde hoje": "Cumulative from today",
+    "A taxa a termo carrega prêmio de risco: é o que está precificado, não uma previsão "
+    "do Copom. Entre vértices a curva é interpolada, e períodos curtos ficam mais "
+    "sensíveis a isso.":
+        "The forward rate carries a risk premium: it is what is priced, not a forecast "
+        "of the Copom. Between vertices the curve is interpolated, and short periods are "
+        "more sensitive to that.",
+    "Nenhuma das reuniões informadas é posterior à data da curva.":
+        "None of the meetings entered is after the curve date.",
+    "o segundo prazo precisa ser mais longo que o primeiro":
+        "the second tenor must be longer than the first",
+    "1M": "1M", "3M": "3M", "6M": "6M",
+    "1A": "1Y", "2A": "2Y", "3A": "3Y", "5A": "5Y", "10A": "10Y",
 }
 
 

@@ -1,0 +1,164 @@
+{% extends "base.html" %}
+{% from "_componentes.html" import alerta, estatistica, botao, link_secundario %}
+{% block titulo %}{{ t("Boletim do mercado") }}{% endblock %}
+
+{% macro cor_delta(valor) -%}
+{{ 'text-slate-500' if valor is none else ('text-rose-200' if valor > 0.5 else ('text-emerald-200' if valor < -0.5 else 'text-slate-300')) }}
+{%- endmacro %}
+
+{% block conteudo %}
+<section class="sm:px-6 lg:px-8 pt-16 pr-5 pb-10 pl-5">
+  <div class="w-full max-w-[1600px] mr-auto ml-auto">
+    <div class="reveal grid gap-8 lg:grid-cols-[1fr_0.72fr] lg:items-end">
+      <div class="max-w-3xl">
+        <p class="text-sm font-medium text-cyan-100 font-geist">{{ t("Juros e câmbio · B3, ANBIMA, BCB") }}</p>
+        <h1 class="mt-4 text-4xl text-white sm:text-5xl tracking-tighter leading-[1.05] font-jakarta font-medium">{{ t("Como fechou o mercado.") }}</h1>
+      </div>
+      <div class="lg:ml-auto lg:max-w-md">
+        <p class="text-base leading-7 text-slate-400 font-geist">
+          {{ t("Curva DI com as variações do dia e da semana, dólar a termo e cupom cambial, juro real e inflação implícita das NTN-B, PTAX, CDI e SOFR — numa página só.") }}
+        </p>
+      </div>
+    </div>
+
+    <form method="get" class="mt-10 rounded-[2rem] border border-white/[0.09] bg-gradient-to-b from-white/[0.05] to-transparent p-6 backdrop-blur-xl sm:p-8">
+      <div class="grid gap-5 sm:grid-cols-[minmax(0,18rem)_auto] sm:items-end">
+        <div>
+          <label class="rotulo" for="data">{{ t("Data de referência") }}</label>
+          <input class="campo" id="data" name="data" type="date" value="{{ form.data }}" max="{{ hoje }}" required/>
+        </div>
+        <div>{{ botao(t('Consultar'), 'solar:magnifer-linear') }}</div>
+      </div>
+      <p class="mt-4 text-xs leading-5 text-slate-600 font-geist">
+        {{ t("Cada bloco vem de uma fonte e cai sozinho: se uma delas não responder, o boletim sai sem aquele bloco e diz por quê.") }}
+      </p>
+    </form>
+
+    {% if erro %}{{ alerta(erro) }}{% endif %}
+    {% for aviso in avisos %}{{ alerta(aviso, 'aviso') }}{% endfor %}
+
+    {% if di %}
+    {% set um_ano = di[2] %}{% set cinco_anos = di[5] %}
+    <div class="sem-reveal mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      {{ estatistica('CDI', cdi.taxa | percentual(2) if cdi else '—', (cdi.data | data_br) if cdi else t('indisponível'), destaque=true) }}
+      {{ estatistica(t('DI 1 ano'), um_ano.ponto.taxa | percentual(2), t('no dia') ~ ': ' ~ (um_ano.d1 | variacao_bps)) }}
+      {{ estatistica(t('DI 5 anos'), cinco_anos.ponto.taxa | percentual(2), t('no dia') ~ ': ' ~ (cinco_anos.d1 | variacao_bps)) }}
+      {{ estatistica('PTAX USD', ptax.USD.venda | numero(4) if ptax.USD else '—', (t('venda') ~ ' · ' ~ (ptax.USD.data | data_br)) if ptax.USD else t('indisponível')) }}
+    </div>
+
+    <div class="sem-reveal mt-6 grid gap-6 xl:grid-cols-[1.25fr_1fr]">
+      <div class="rounded-[2rem] border border-white/[0.09] bg-slate-950/40 backdrop-blur-xl">
+        <div class="flex flex-wrap items-start justify-between gap-3 border-b border-white/[0.07] px-6 py-4">
+          <div>
+            <p class="text-sm font-medium text-white font-geist">{{ t("Curva DI x Pré") }}</p>
+            <p class="mt-0.5 text-xs text-slate-500 font-geist">B3 · {{ base | data_br }}{% if movimento %} · {{ t("no dia") }}: <span class="text-white">{{ t(movimento) }}</span>{% endif %}</p>
+          </div>
+          <a class="text-xs text-cyan-200/80 hover:text-cyan-100 font-geist" href="{{ url_for('principal.curva_di', data=form.data) }}">{{ t("Análise completa") }} →</a>
+        </div>
+        <div class="rolagem px-2">
+          <table class="tabela-dados">
+            <thead>
+              <tr>
+                <th>{{ t("Prazo") }}</th><th>{{ t("Vencimento") }}</th><th>{{ t("Taxa") }}</th>
+                <th>{{ t("No dia") }}{% if d1 %} <span class="text-slate-600">({{ d1 | data_br }})</span>{% endif %}</th>
+                <th>{{ t("Em 5 dias úteis") }}{% if d5 %} <span class="text-slate-600">({{ d5 | data_br }})</span>{% endif %}</th>
+              </tr>
+            </thead>
+            <tbody>
+            {% for linha in di %}
+              <tr>
+                <td class="text-white">{{ t(linha.ponto.rotulo) }}</td>
+                <td class="text-slate-400">{{ linha.ponto.data | data_br }}</td>
+                <td class="font-medium text-cyan-100">{{ linha.ponto.taxa | percentual(2) }}</td>
+                <td class="{{ cor_delta(linha.d1) }}">{{ linha.d1 | variacao_bps }}</td>
+                <td class="{{ cor_delta(linha.d5) }}">{{ linha.d5 | variacao_bps }}</td>
+              </tr>
+            {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <div class="border-t border-white/[0.07] px-6 py-4">
+          <p class="text-xs leading-6 text-slate-400 font-geist">
+            {% for curto, longo, valor in inclinacoes %}<span class="mr-4">{{ t("Inclinação") }} {{ t(curto) }}–{{ t(longo) }}: <span class="text-white">{{ valor | variacao_bps }}</span></span>{% endfor %}
+          </p>
+        </div>
+      </div>
+
+      <div class="rounded-[2rem] border border-white/[0.09] bg-slate-950/40 backdrop-blur-xl">
+        <div class="flex flex-wrap items-start justify-between gap-3 border-b border-white/[0.07] px-6 py-4">
+          <div>
+            <p class="text-sm font-medium text-white font-geist">{{ t("Câmbio") }}</p>
+            <p class="mt-0.5 text-xs text-slate-500 font-geist">{{ t("Dólar a termo (PTX) e cupom cambial limpo (DOC) da B3") }}</p>
+          </div>
+          <a class="text-xs text-cyan-200/80 hover:text-cyan-100 font-geist" href="{{ url_for('principal.ndf') }}">NDF →</a>
+        </div>
+        {% if cambio %}
+        <div class="rolagem px-2">
+          <table class="tabela-dados">
+            <thead>
+              <tr><th>{{ t("Prazo") }}</th><th>{{ t("Vencimento") }}</th><th>{{ t("Dólar a termo") }}</th><th>{{ t("Pontos") }}</th><th>{{ t("Cupom cambial") }}</th></tr>
+            </thead>
+            <tbody>
+            {% set spot = ptax.USD.venda if ptax.USD else none %}
+            {% for termo_usd, cupom in cambio %}
+              <tr>
+                <td class="text-white">{{ t(termo_usd.rotulo) }}</td>
+                <td class="text-slate-400">{{ termo_usd.data | data_br }}</td>
+                <td class="font-medium text-cyan-100">{{ termo_usd.taxa | numero(4) }}</td>
+                <td class="text-slate-300">{{ ((termo_usd.taxa - spot) * 1000) | numero(1) if spot else '—' }}</td>
+                <td class="text-slate-300">{{ cupom.taxa | percentual(2) }}</td>
+              </tr>
+            {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% endif %}
+        <div class="grid gap-3 border-t border-white/[0.07] px-6 py-4 sm:grid-cols-2">
+          {% for moeda in ('USD', 'EUR') %}
+          <p class="text-xs text-slate-400 font-geist">PTAX {{ moeda }}:
+            {% if ptax[moeda] %}<span class="text-white">{{ ptax[moeda].venda | numero(4) }}</span> <span class="text-slate-600">({{ ptax[moeda].data | data_br }})</span>{% else %}—{% endif %}
+          </p>
+          {% endfor %}
+          <p class="text-xs text-slate-400 font-geist">SOFR:
+            {% if sofr %}<span class="text-white">{{ sofr.taxa | percentual(2) }}</span> <span class="text-slate-600">({{ sofr.data | data_br }})</span>{% else %}—{% endif %}
+          </p>
+          <p class="text-xs text-slate-600 font-geist">{{ t("Pontos: dólar a termo menos a PTAX, em milésimos de real.") }}</p>
+        </div>
+      </div>
+    </div>
+
+    {% if ntnb %}
+    <div class="sem-reveal mt-6 rounded-[2rem] border border-white/[0.09] bg-slate-950/40 backdrop-blur-xl">
+      <div class="flex flex-wrap items-start justify-between gap-3 border-b border-white/[0.07] px-6 py-4">
+        <div>
+          <p class="text-sm font-medium text-white font-geist">{{ t("Juro real e inflação implícita — NTN-B") }}</p>
+          <p class="mt-0.5 text-xs text-slate-500 font-geist">{{ t("Boletim ANBIMA") }} · {{ anbima_data | data_br }}</p>
+        </div>
+        <a class="text-xs text-cyan-200/80 hover:text-cyan-100 font-geist" href="{{ url_for('principal.inflacao_implicita_pagina', data=form.data) }}">{{ t("Análise completa") }} →</a>
+      </div>
+      <div class="rolagem px-2">
+        <table class="tabela-dados">
+          <thead>
+            <tr><th>{{ t("Vencimento") }}</th><th>{{ t("Duration (anos)") }}</th><th>{{ t("Juro real") }}</th><th>{{ t("Pré DI no prazo") }}</th><th>{{ t("Inflação implícita") }}</th></tr>
+          </thead>
+          <tbody>
+          {% for l in ntnb %}
+            <tr>
+              <td class="text-white">{{ l.vencimento | data_br }}</td>
+              <td class="text-slate-400">{{ l.duration_anos | numero(2) }}</td>
+              <td class="text-cyan-100">{{ l.juro_real | percentual(2) }}</td>
+              <td class="text-slate-300">{{ l.pre | percentual(2) }}</td>
+              <td class="font-medium text-amber-200">{{ l.implicita | percentual(2) }}</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% endif %}
+
+    <p class="mt-6 text-xs text-slate-600 font-geist">{{ t("Boletim informativo, montado com dados públicos — não é recomendação de investimento.") }}</p>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}

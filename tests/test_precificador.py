@@ -975,9 +975,11 @@ def _exercitar_aplicacao(app):
     """Passa por todas as telas e pelos formulários, para o audit ver tudo."""
     gets = ["/", "/curvas", "/precificar", "/ndf", "/sofr", "/term-sofr", "/euribor",
             "/renda-fixa", "/liquidacao", "/cotacoes", "/interpolar",
-            "/ni-pro-rata", "/metodologia", "/inflacao-implicita", "/anbima-datasets"]
+            "/ni-pro-rata", "/metodologia", "/inflacao-implicita", "/anbima-datasets",
+            "/boletim", "/curva-di?copom=09/12/2026,27/01/2027,01/01/2020",
+            "/curva-di?copom=01/01/2020"]
     for rota in gets:
-        app.test_client().get(rota + "?idioma=en")
+        app.test_client().get(rota + ("&" if "?" in rota else "?") + "idioma=en")
     # o caminho de erro também tem frase: domingo não tem boletim da ANBIMA
     app.test_client().get("/inflacao-implicita?idioma=en&data=2026-10-04")
     app.test_client().get("/anbima-datasets?idioma=en&dataset="
@@ -1076,7 +1078,8 @@ def test_nenhum_texto_em_portugues_sobra_na_tela_em_ingles():
                "/renda-fixa", "/liquidacao", "/cotacoes", "/interpolar",
             "/ni-pro-rata", "/metodologia", "/precificar?template=ipca_cdi_string",
                "/opcoes-fx", "/opcoes-fx?modelo=collar", "/opcoes-fx?modelo=box",
-               "/opcoes-fx?modelo=four_way"]
+               "/opcoes-fx?modelo=four_way", "/boletim",
+               "/curva-di?copom=09/12/2026,27/01/2027"]
     def varrer(rotulo, html):
         for texto in _texto_visivel(html):
             achados = {p.lower() for p in _MARCADORES_PT.findall(texto)}
@@ -1651,7 +1654,8 @@ def test_nenhum_select_da_aplicacao_chega_vazio_a_tela():
                "/euribor", "/renda-fixa", "/liquidacao", "/interpolar",
                "/ni-pro-rata", "/metodologia", "/precificar?template=ipca_cdi_string",
                "/opcoes-fx", "/opcoes-fx?modelo=collar", "/opcoes-fx?modelo=box",
-               "/opcoes-fx?modelo=four_way"]
+               "/opcoes-fx?modelo=four_way", "/boletim",
+               "/curva-di?copom=09/12/2026,27/01/2027"]
     for rota in paginas:
         varrer(rota, app.test_client().get(rota).data.decode())
     for chave, dados in FORMULARIOS.items():

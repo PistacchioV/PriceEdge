@@ -9,8 +9,8 @@ from datetime import date, timedelta
 from flask import (Blueprint, Response, jsonify, redirect, render_template,
                    request, url_for)
 
-from precificador import (anbima, anbima_datasets, b3, cambio, cdi, contagem,
-                          cotacoes, euribor,
+from precificador import (analise_curva, anbima, anbima_datasets, b3, cambio, cdi,
+                          contagem, cotacoes, euribor,
                           fontes, glossario, inflacao_implicita, ipca, liquidacao,
                           montador, opcoes_fx, rede, renda_fixa, sofr,
                           term_sofr as term)
@@ -1073,6 +1073,173 @@ def inflacao_implicita_pagina():
                     if l.implicita is not None]},
     ]))
     return render_template("inflacao_implicita.html", **contexto)
+
+
+# ------------------------------------------------------------ curva DI ---
+
+def _pontos_em(codigo: str, data, prazos=analise_curva.PRAZOS_PADRAO):
+    """A curva da B3 nos prazos de referência, na data pedida."""
+    d = para_data(data)
+    return analise_curva.pontos(servicos.curva(codigo, d.isoformat()), d,
+                                calendario_anbima(), prazos)
+
+
+def _grafico_comparado(base, hoje, antes, curva_antes):
+    """As duas curvas por vértice da B3, até dez anos, num mesmo par de eixos."""
+    cores = servicos.CORES_IMPLICITA
+
+    def serie(curva_obj, rotulo, cor):
+        return {"rotulo": rotulo, "cor": cor,
+                "pontos": [(v.dias_uteis / 252, v.taxa) for v in curva_obj.vertices
+                           if 0 < v.dias_uteis <= 2520]}
+    series = [serie(hoje, f"{base:%d/%m/%Y}", cores["real"])]
+    if curva_antes is not None:
+        series.append(serie(curva_antes, f"{antes:%d/%m/%Y}", cores["pre"]))
+    return servicos.series_xy(series)
+
+
+@bp.route("/curva-di")
+def curva_di():
+    """Formato da curva DI x Pré, a termo entre prazos, comparação e Copom."""
+    cal = calendario_anbima()
+    data_txt = request.args.get("data") or servicos.data_sugerida().isoformat()
+    contexto = {
+        "form": {"data": data_txt, "comparar": request.args.get("comparar") or "",
+                 "copom": request.args.get("copom") or ""},
+        "hoje": date.today().isoformat(), "erro": None, "avisos": [],
+        "base": None, "antes": None, "pontos": [], "variacoes": [],
+        "inclinacoes": [], "movimento": None, "copom": None,
+        "series": [], "escala_x": [], "escala_y": [],
+    }
+    try:
+        base = para_data(data_txt)
+        antes = para_data(contexto["form"]["comparar"] or cal.workday(base, -5))
+        contexto["form"]["comparar"] = antes.isoformat()
+        curva_hoje = servicos.curva("PRE", base.isoformat())
+    except (ErroDeFonte, ValueError) as exc:
+        contexto["erro"] = idiomas.mensagem(exc)
+        return render_template("curva_di.html", **contexto)
+
+    pontos = analise_curva.pontos(curva_hoje, base, cal)
+    contexto.update({"base": base, "pontos": pontos})
+    contexto["inclinacoes"] = [
+        (curto, longo, analise_curva.inclinacao_bps(pontos, curto, longo))
+        for curto, longo in (("1A", "2A"), ("2A", "5A"), ("1A", "5A"), ("5A", "10A"))]
+
+    curva_antes = None
+    try:
+        curva_antes = servicos.curva("PRE", antes.isoformat())
+        anteriores = analise_curva.pontos(curva_antes, antes, cal)
+        variacoes = analise_curva.variacoes(pontos, anteriores)
+        por_rotulo = {v.rotulo: v.bps for v in variacoes}
+        contexto.update({"antes": antes, "variacoes": variacoes,
+                         "movimento": analise_curva.classificar(por_rotulo["1A"],
+                                                                por_rotulo["5A"])})
+    except (ErroDeFonte, ValueError) as exc:
+        contexto["avisos"].append(idiomas.mensagem(exc))
+    contexto.update(_grafico_comparado(base, curva_hoje, antes, curva_antes))
+
+    if contexto["form"]["copom"].strip():
+        try:
+            decisoes = analise_curva.ler_datas(contexto["form"]["copom"])
+            contexto["copom"] = analise_curva.copom(curva_hoje, base, cal, decisoes)
+            if contexto["copom"] is None:
+                contexto["avisos"].append(idiomas.traduzir(
+                    "Nenhuma das reuniões informadas é posterior à data da curva.",
+                    idiomas.do_pedido()))
+        except ValueError as exc:
+            contexto["avisos"].append(idiomas.mensagem(exc))
+    return render_template("curva_di.html", **contexto)
+
+
+# ------------------------------------------------------ boletim do mercado
+
+PRAZOS_CAMBIO = [("1M", 1), ("3M", 3), ("6M", 6), ("1A", 12), ("2A", 24)]
+
+
+def _ultimo_fixing(serie, referencia):
+    validos = [f for f in serie if f.data <= referencia]
+    return validos[-1] if validos else None
+
+
+@bp.route("/boletim")
+def boletim():
+    """Uma página com o fechamento de juros e câmbio de uma data.
+
+    Cada bloco vem de uma fonte e cai sozinho: sem a ANBIMA, o boletim sai sem
+    as NTN-B; sem o BCB, sem PTAX e CDI. Só a curva DI do próprio dia derruba
+    a página, porque é dela que saem as variações e a inflação implícita.
+    """
+    cal = calendario_anbima()
+    data_txt = request.args.get("data") or servicos.data_sugerida().isoformat()
+    contexto = {
+        "form": {"data": data_txt}, "hoje": date.today().isoformat(),
+        "erro": None, "avisos": [], "base": None,
+        "di": [], "inclinacoes": [], "movimento": None, "d1": None, "d5": None,
+        "cambio": [], "ptax": {}, "cdi": None, "sofr": None, "ntnb": [],
+        "anbima_data": None,
+    }
+    try:
+        base = para_data(data_txt)
+        curva_pre = servicos.curva("PRE", base.isoformat())
+    except (ErroDeFonte, ValueError) as exc:
+        contexto["erro"] = idiomas.mensagem(exc)
+        return render_template("boletim.html", **contexto)
+
+    pontos = analise_curva.pontos(curva_pre, base, cal)
+    d1, d5 = cal.workday(base, -1), cal.workday(base, -5)
+    deltas = {}
+    for chave, data_antes in (("d1", d1), ("d5", d5)):
+        try:
+            anteriores = _pontos_em("PRE", data_antes)
+            deltas[chave] = {v.rotulo: v.bps
+                             for v in analise_curva.variacoes(pontos, anteriores)}
+            contexto[chave] = data_antes
+        except (ErroDeFonte, ValueError) as exc:
+            deltas[chave] = {}
+            contexto["avisos"].append(idiomas.mensagem(exc))
+    contexto.update({
+        "base": base,
+        "di": [{"ponto": p, "d1": deltas["d1"].get(p.rotulo),
+                "d5": deltas["d5"].get(p.rotulo)} for p in pontos],
+        "inclinacoes": [(c, l, analise_curva.inclinacao_bps(pontos, c, l))
+                        for c, l in (("1A", "2A"), ("2A", "5A"), ("5A", "10A"))]})
+    if deltas["d1"].get("1A") is not None and deltas["d1"].get("5A") is not None:
+        contexto["movimento"] = analise_curva.classificar(deltas["d1"]["1A"],
+                                                          deltas["d1"]["5A"])
+
+    # câmbio: dólar a termo (PTX) e cupom cambial limpo (DOC) nos mesmos prazos
+    try:
+        termo_usd = _pontos_em("PTX", base, PRAZOS_CAMBIO)
+        cupom = _pontos_em("DOC", base, PRAZOS_CAMBIO)
+        contexto["cambio"] = list(zip(termo_usd, cupom))
+    except (ErroDeFonte, ValueError) as exc:
+        contexto["avisos"].append(idiomas.mensagem(exc))
+    for moeda in ("USD", "EUR"):
+        try:
+            contexto["ptax"][moeda] = cambio.ptax_moeda(moeda, base)
+        except (ErroDeFonte, ValueError) as exc:
+            contexto["avisos"].append(idiomas.mensagem(exc))
+
+    try:
+        contexto["cdi"] = _ultimo_fixing(cdi.serie(base - timedelta(days=10), base), base)
+    except (ErroDeFonte, ValueError) as exc:
+        contexto["avisos"].append(idiomas.mensagem(exc))
+    try:
+        contexto["sofr"] = _ultimo_fixing(
+            sofr.serie_sofr(base - timedelta(days=10), base), base)
+    except (ErroDeFonte, ValueError) as exc:
+        contexto["avisos"].append(idiomas.mensagem(exc))
+
+    try:
+        titulos = anbima.baixar(base)
+        contexto["ntnb"] = inflacao_implicita.calcular(
+            titulos, taxa_pre=curva_pre.taxa_para,
+            cdi=contexto["cdi"].taxa if contexto["cdi"] else None)
+        contexto["anbima_data"] = base
+    except (ErroDeFonte, ValueError) as exc:
+        contexto["avisos"].append(idiomas.mensagem(exc))
+    return render_template("boletim.html", **contexto)
 
 
 # ------------------------------------------------------ ANBIMA datasets ---

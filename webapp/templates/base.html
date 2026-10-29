@@ -55,6 +55,7 @@
   <div class="hidden min-w-0 items-center gap-5 xl:flex">
     {% set principais = [
       ('principal.painel', 'Início'),
+      ('principal.boletim', 'Boletim'),
       ('principal.curvas', 'Curvas B3'),
       ('principal.precificar', 'Swap'),
       ('principal.opcoes_fx_pagina', 'Opção'),
@@ -66,6 +67,7 @@
     ] %}
     {% set ferramentas = [
       ('principal.cotacoes_pagina', 'Cotações'),
+      ('principal.curva_di', 'Análise da curva DI'),
       ('principal.inflacao_implicita_pagina', 'Inflação implícita'),
       ('principal.anbima_datasets_pagina', 'ANBIMA Datasets'),
       ('principal.liquidacao_swap', 'Liquidação'),
@@ -116,7 +118,9 @@
       <div>
         <p class="text-sm font-medium text-slate-500 font-geist">{{ t("Ferramentas") }}</p>
         <nav class="mt-5 flex flex-col gap-3">
+          <a class="text-sm text-slate-300 transition hover:text-cyan-100 font-geist" href="{{ url_for('principal.boletim') }}">{{ t("Boletim do mercado") }}</a>
           <a class="text-sm text-slate-300 transition hover:text-cyan-100 font-geist" href="{{ url_for('principal.curvas') }}">{{ t("Curvas B3") }}</a>
+          <a class="text-sm text-slate-300 transition hover:text-cyan-100 font-geist" href="{{ url_for('principal.curva_di') }}">{{ t("Análise da curva DI") }}</a>
           <a class="text-sm text-slate-300 transition hover:text-cyan-100 font-geist" href="{{ url_for('principal.precificar') }}">{{ t("Precificar swap") }}</a>
           <a class="text-sm text-slate-300 transition hover:text-cyan-100 font-geist" href="{{ url_for('principal.ndf') }}">NDF</a>
           <a class="text-sm text-slate-300 transition hover:text-cyan-100 font-geist" href="{{ url_for('principal.opcoes_fx_pagina') }}">{{ t("Precificar opção") }}</a>
