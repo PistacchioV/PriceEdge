@@ -83,6 +83,12 @@ webapp/                  a aplicação Flask
   templates/             Jinja, sobre o design system Pulsedesk
   static/                CSS de formulários, tema claro, JS de formatação e tema
   static/vendor/         Tailwind, Iconify, fontes e JS copiados do design system
+
+mcp_priceedge/           servidor MCP (stdio) — as ferramentas para o Claude Code
+  protocolo.py           JSON-RPC 2.0 em stdio, só biblioteca padrão (roda no 3.9)
+  ferramentas.py         as 9 ferramentas: montam o formulário e chamam a rota
+.claude/skills/          /boletim-mercado, /curva-di, /ntnb-breakeven,
+                         /cotar-swap, /hedge-cambial
 ```
 
 O pacote é usável sozinho:
@@ -97,6 +103,49 @@ params = ParametrosSwap(inicio=date(2026, 9, 4), vencimento=date(2031, 9, 4),
                         nocional=100_000_000, meses_periodo=6)
 print(spread_par_cdi(params, taxa_pre=0.17, curva_di=di))   # 0.025577...
 ```
+
+---
+
+## Claude Code: servidor MCP e skills
+
+O PriceEdge também roda como **servidor MCP**: o Claude Code chama as curvas e
+os precificadores como ferramentas, e as skills em `.claude/skills/` montam
+análises em cima delas. A ideia é a mesma de pacotes como o *ai-trading-claude*,
+mas os números vêm das fontes oficiais (B3, ANBIMA, BCB) e do mesmo código
+das telas, não de busca na web.
+
+| Ferramenta | O que devolve |
+|---|---|
+| `curva_b3` | vértices de qualquer curva referencial da B3 (PRE, DIC, DOC…) |
+| `taxa_na_curva` | taxa em datas, com DU/DC e a taxa a termo entre elas (Copom) |
+| `dias_uteis` | DU/DC e fração de ano em cada convenção |
+| `ptax` | PTAX do BCB |
+| `cdi_acumulado` | CDI realizado acumulado a um % do CDI |
+| `precificar_swap` | taxa par e MtM de qualquer par de pernas; vanilla × string |
+| `curva_ndf` | dólar (ou outra moeda) a termo, pontos e carry |
+| `precificar_opcao_fx` | Garman-Kohlhagen até 4 pernas, strike de custo zero |
+| `inflacao_implicita_ntnb` | juro real, implícita e VNA das NTN-B (ANBIMA) |
+
+Entradas em % a.a. (`14.5`), saídas em decimal (`0.145`).
+
+**Dentro do repositório**, o `.mcp.json` já registra o servidor — abra o
+Claude Code nesta pasta e aprove o `priceedge`. **De qualquer pasta**, registre
+em escopo de usuário com o caminho absoluto:
+
+```bash
+claude mcp add --scope user priceedge -- \
+  "/caminho/precificador-app/.venv/bin/python" "/caminho/precificador-app/run_mcp.py"
+```
+
+No Windows, troque por `.venv\Scripts\python.exe`. As skills:
+
+| Skill | Faz |
+|---|---|
+| `/boletim-mercado [data]` | boletim do dia: DI, Copom, NTN-B, PTAX, NDF |
+| `/curva-di` | formato, inclinação, comparação entre datas, forwards, Copom |
+| `/ntnb-breakeven` | juro real e inflação implícita por vencimento |
+| `/cotar-swap` | pedido em português → term sheet com taxa par |
+| `/hedge-cambial` | NDF × call × collar custo zero × call spread × three-way |
 
 ---
 
