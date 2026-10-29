@@ -1189,6 +1189,28 @@ def test_camada_de_rede_exige_handler_quando_sso_ligado():
 
 # ------------------------------------------------------- NDF multi-moeda ----
 
+@pytest.fixture
+def b3_offline(monkeypatch):
+    """Curvas sintéticas no lugar das da B3, para testes com data fixa.
+
+    O histórico público da B3 cobre só o último mês útil: um teste que pede a
+    curva de uma data fixa passa no dia em que é escrito e quebra semanas
+    depois, sem que o código tenha mudado. Quando o que se testa é a tela (o
+    casado, os rótulos), não o nível das taxas, a curva vem daqui.
+    """
+    from precificador import b3
+    from webapp import servicos
+
+    def vertices(codigo, data):
+        codigo = codigo.upper()
+        nivel = (5.40 if codigo in b3.CODIGOS_DE_PRECO
+                 else 14.0 if codigo == "PRE" else 5.0)
+        return [b3.VerticeB3(du, dc, nivel + 0.001 * du)
+                for du, dc in ((1, 1), (21, 30), (63, 91), (126, 182),
+                               (252, 365), (504, 730), (1260, 1826))]
+
+    monkeypatch.setattr(servicos, "vertices", vertices)
+
 def _curva_plana(taxa, convencao, metodo="linear"):
     from precificador.curvas import Curva, Vertice
     return Curva(nome="teste", data_referencia=date(2026, 9, 4),
@@ -1845,14 +1867,32 @@ def test_defasagem_do_sofr_tem_teto():
         assert "dias úteis" in str(exc.value)
 
 
-def test_fixings_das_duas_fontes_chegam_na_mesma_forma():
+def test_fixings_das_duas_fontes_chegam_na_mesma_forma(monkeypatch):
     """CDI e SOFR têm formatos próprios; a tela recebe um só.
 
     Enquanto a tela leu o objeto cru, uma ponta de SOFR derrubava a página
     inteira: a tabela pedia ``.data`` num ``DiaComposicao``, que tem
     ``data_juros``. Um 500 em vez de um resultado.
+
+    O que se testa é a forma, não o nível: as séries são sintéticas, porque a
+    API do BCB às vezes responde HTML no lugar de JSON e o teste caía junto.
     """
+    from datetime import timedelta
+    from precificador import cdi, sofr
+    from precificador.calendario import para_data
     from precificador import liquidacao as L
+
+    def dias(inicio, fim):
+        d = para_data(inicio)
+        while d <= para_data(fim):
+            if d.weekday() < 5:
+                yield d
+            d += timedelta(days=1)
+
+    monkeypatch.setattr(cdi, "serie", lambda inicio, fim, *a, **k: [
+        cdi.FixingCDI(d, 0.149) for d in dias(inicio, fim)])
+    monkeypatch.setattr(sofr, "serie_sofr", lambda inicio, fim: [
+        sofr.FixingSOFR(d, 0.0366) for d in dias(inicio, fim)])
     comum = dict(data_operacao="2025-09-08", inicio="2025-09-08", fim="2026-09-04",
                  nocional=30e6, ponta_passiva=L.Ponta(L.PRE, 0.14), reter_ir=False)
     de_cdi = L.liquidar(ponta_ativa=L.Ponta(L.CDI, percentual=1.0), **comum).ativa
@@ -1899,7 +1939,7 @@ def test_sem_casado_o_spot_passa_direto():
         assert spot_com_casado(5.95, 0.0, direcao) == 5.95
 
 
-def test_direcao_do_fluxo_muda_a_curva_de_ndf_inteira():
+def test_direcao_do_fluxo_muda_a_curva_de_ndf_inteira(b3_offline):
     """O ajuste é no spot, então ele atravessa todos os vencimentos."""
     from webapp import create_app
     app = create_app()
@@ -3729,7 +3769,7 @@ def test_a_data_digitada_no_fixing_volta_da_liquidacao():
     assert 'data-padrao="2024-12-20"' not in campo
 
 
-def test_dias_uteis_em_ingles_sao_bd_e_corridos_sao_cd():
+def test_dias_uteis_em_ingles_sao_bd_e_corridos_sao_cd(b3_offline):
     """DU, DC, dup e dut são siglas do português: em inglês, BD, CD, bdp e bdt."""
     from webapp import create_app
     cliente = create_app().test_client()
