@@ -1,8 +1,8 @@
-"""Gera start-uat.bat e start-prod.bat a partir de um molde comum.
+"""Gera o iniciar.bat (produção) a partir do molde.
 
-Os dois .bat são autocontidos de propósito — quem copia um launcher para outra
-pasta copia um arquivo, não dois — e o localizador de Python é idêntico nos
-dois. Para não corrigir a mesma coisa duas vezes, eles saem daqui.
+O .bat é autocontido de propósito — quem copia o launcher para outra pasta
+copia um arquivo só — e por isso o localizador de Python mora aqui, num lugar
+fácil de editar, e não espalhado no .bat.
 """
 import pathlib
 
@@ -303,26 +303,6 @@ exit /b
 {SUBROTINA}{NAVEGADOR}'''
 
 
-UAT = montar(
-    "uat", 5051, "127.0.0.1", 1,
-    """REM  PriceEdge - UAT  (Windows)
-REM
-REM  Werkzeug com auto-reload, porta 5051, so em localhost.
-REM  Abre  http://127.0.0.1:5051/  no navegador sozinho.
-REM
-REM  Uso:  duplo clique.
-REM        start-uat.bat noinstall   ... pula a instalacao (util offline)
-REM
-REM  Nao instala Python. Se o desta estacao estiver num lugar que o script nao
-REM  procura, aponte:   set PRICEEDGE_PYTHON=C:\\caminho\\para\\python.exe""",
-    '''echo.
-echo [UAT] PriceEdge em %URL%  ^(Werkzeug, auto-reload^)
-echo       Feche esta janela ou Ctrl+C para parar.
-echo.
-"%PY%" "%BASE%run.py"
-''',
-    "PriceEdge UAT - navegador")
-
 PROD = montar(
     "prod", 5050, "0.0.0.0", 0,
     """REM  PriceEdge - PRODUCAO  (Windows)
@@ -332,7 +312,7 @@ REM  Abre  http://127.0.0.1:5050/  no navegador sozinho; a rede chega pelo
 REM  http://IP-da-maquina:5050/
 REM
 REM  Uso:  duplo clique.
-REM        start-prod.bat noinstall   ... pula a instalacao (util offline)
+REM        iniciar.bat noinstall   ... pula a instalacao (util offline)
 REM
 REM  Nao instala Python. Se o desta estacao estiver num lugar que o script nao
 REM  procura, aponte:   set PRICEEDGE_PYTHON=C:\\caminho\\para\\python.exe""",
@@ -359,7 +339,7 @@ if errorlevel 1 (
 ''',
     "PriceEdge - navegador")
 
-for nome, conteudo in (("start-uat.bat", UAT), ("start-prod.bat", PROD)):
+for nome, conteudo in (("iniciar.bat", PROD),):
     crlf = conteudo.replace("\r\n", "\n").replace("\n", "\r\n")
     pathlib.Path(nome).write_bytes(crlf.encode("cp1252"))
     print(f"{nome}: {len(crlf.splitlines())} linhas")

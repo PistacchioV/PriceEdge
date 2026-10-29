@@ -1,19 +1,20 @@
 @echo off
 REM ============================================================================
-REM  PriceEdge - UAT  (Windows)
+REM  PriceEdge - PRODUCAO  (Windows)
 REM
-REM  Werkzeug com auto-reload, porta 5051, so em localhost.
-REM  Abre  http://127.0.0.1:5051/  no navegador sozinho.
+REM  Waitress (servidor WSGI), porta 5050, em todas as interfaces.
+REM  Abre  http://127.0.0.1:5050/  no navegador sozinho; a rede chega pelo
+REM  http://IP-da-maquina:5050/
 REM
 REM  Uso:  duplo clique.
-REM        start-uat.bat noinstall   ... pula a instalacao (util offline)
+REM        iniciar.bat noinstall   ... pula a instalacao (util offline)
 REM
 REM  Nao instala Python. Se o desta estacao estiver num lugar que o script nao
 REM  procura, aponte:   set PRICEEDGE_PYTHON=C:\caminho\para\python.exe
 REM ============================================================================
 
 setlocal
-set "PORTA=5051"
+set "PORTA=5050"
 set "URL=http://127.0.0.1:%PORTA%/"
 REM  porta do agente de proxy local da estacao (localproxy-cfg)
 set "PROXY_LOCAL_PORTA=9443"
@@ -199,7 +200,7 @@ REM ---------------------------------------------------------------------------
 if not defined PYTHONPYCACHEPREFIX set "PYTHONPYCACHEPREFIX=%LOCALAPPDATA%\PriceEdge\pycache"
 
 set "PRECIFICADOR_PORTA=%PORTA%"
-set "PRECIFICADOR_HOST=127.0.0.1"
+set "PRECIFICADOR_HOST=0.0.0.0"
 REM ---------------------------------------------------------------------------
 REM  SSO Kerberos. No ambiente do JP toda chamada externa sai autenticada, e o
 REM  Negotiate depende do requests-negotiate-sspi (ja nos requirements, com
@@ -211,16 +212,31 @@ REM  Para desligar numa maquina fora do banco:  set PRICEEDGE_SEM_SSO=1
 REM ---------------------------------------------------------------------------
 if not defined PRICEEDGE_SEM_SSO set "PRECIFICADOR_SSO=1"
 if defined PRICEEDGE_SEM_SSO echo [INFO] SSO Kerberos desligado por PRICEEDGE_SEM_SSO.
-set "PRECIFICADOR_DEBUG=1"
+set "PRECIFICADOR_DEBUG=0"
 
 REM abre o navegador numa janela propria, que espera o servidor responder
-start "PriceEdge UAT - navegador" /min "%~f0" --abrir
+start "PriceEdge - navegador" /min "%~f0" --abrir
 
 echo.
-echo [UAT] PriceEdge em %URL%  ^(Werkzeug, auto-reload^)
-echo       Feche esta janela ou Ctrl+C para parar.
+echo [PRODUCAO] PriceEdge em http://0.0.0.0:%PORTA%  ^(waitress^)
+echo            Feche esta janela ou Ctrl+C para parar.
 echo.
-"%PY%" "%BASE%run.py"
+REM ---------------------------------------------------------------------------
+REM  Waitress e nao gunicorn: gunicorn nao roda no Windows.
+REM
+REM  Escale com THREADS, nunca com processos. O cache de curvas da B3 vive na
+REM  memoria do processo -- com dois processos, cada um baixa e guarda a sua
+REM  copia, e duas telas abertas lado a lado podem mostrar curvas de momentos
+REM  diferentes. Alem disso a maior parte do tempo de um request aqui e espera
+REM  de rede (B3, BCB, NY Fed, Banco da Finlandia): a thread fica parada
+REM  segurando a vaga, e com as quatro vagas padrao do waitress quatro esperas
+REM  dessas param o servidor inteiro, inclusive para quem so pediu um CSS.
+REM ---------------------------------------------------------------------------
+"%PY%" -m waitress --host=0.0.0.0 --port=%PORTA% --threads=16 run:app
+if errorlevel 1 (
+    echo.
+    echo [ERRO] waitress nao subiu. Instale com:  "%PY%" -m pip install waitress
+)
 
 echo.
 echo [INFO] O servidor parou.
